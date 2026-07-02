@@ -664,9 +664,18 @@ export default function App() {
             );
           })}
         </div>
-      </aside>
-
-      <main className={active ? 'panel open' : 'panel'}>
+      <aside
+  className="side"
+  style={
+    active
+      ? {
+          display: 'none'
+        }
+      : {
+          display: 'flex'
+        }
+  }
+>
         {!active ? (
           <div className="emptyChat">
             <Lock />
