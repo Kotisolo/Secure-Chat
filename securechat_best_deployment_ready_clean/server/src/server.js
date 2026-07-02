@@ -11,7 +11,9 @@ app.use(helmet({contentSecurityPolicy:false,crossOriginEmbedderPolicy:false})); 
 app.use('/uploads',express.static(path.join(__dirname,'..','uploads')));
 const upload=multer({storage:multer.diskStorage({destination:(r,f,cb)=>cb(null,path.join(__dirname,'..','uploads')),filename:(r,f,cb)=>cb(null,Date.now()+'_'+f.originalname.replace(/[^a-zA-Z0-9._-]/g,'_'))}),limits:{fileSize:25*1024*1024}});
 const online=new Map(); const {Server}=require('socket.io'); const io=new Server(server,{cors:corsOptions,pingTimeout:60000,maxHttpBufferSize:25e6});
-function clean(v){return typeof v==='string'?v.trim().replace(/[<>]/g,''):''} function cid(a,b){return [String(a),String(b)].sort().join('-')}
+function clean(v){return typeof v==='string'?v.trim().replace(/[<>]/g,''):''} function cid(a,b){
+  return [String(a),String(b)].sort().join('__')
+}
 function sign(u){return jwt.sign({id:String(u.id),username:u.username},process.env.JWT_SECRET,{expiresIn:'30d'})}
 function auth(req,res,next){const h=req.headers.authorization||''; if(!h.startsWith('Bearer '))return res.status(401).json({error:'Authentication required.'}); try{req.user=jwt.verify(h.slice(7),process.env.JWT_SECRET); req.user.id=String(req.user.id); next()}catch{return res.status(401).json({error:'Invalid session.'})}}
 function user(u){return {id:String(u.id),username:u.username,phone:u.phone,about:u.about||'',avatarUrl:u.avatar_url||null,online:online.has(String(u.id)),lastSeen:u.last_seen}}
