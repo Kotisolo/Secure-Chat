@@ -1,35 +1,460 @@
 require('dotenv').config();
-const fs=require('fs'), path=require('path'), http=require('http'), express=require('express'), helmet=require('helmet'), cors=require('cors'), bcrypt=require('bcryptjs'), jwt=require('jsonwebtoken'), multer=require('multer');
-const {Pool}=require('pg');
-const PORT=process.env.PORT||8080, CLIENT_ORIGINS=(process.env.CLIENT_ORIGIN||process.env.CLIENT_URL||'http://localhost:5173').split(',').map(x=>x.trim()).filter(Boolean);
-const app=express(), server=http.createServer(app);
-if(!process.env.JWT_SECRET||process.env.JWT_SECRET.length<32){console.warn('WARNING: JWT_SECRET should be at least 32 characters in production.')}
-fs.mkdirSync(path.join(__dirname,'..','uploads'),{recursive:true});
-const corsOptions={origin:(origin,cb)=>{if(!origin||CLIENT_ORIGINS.includes(origin))return cb(null,true);return cb(new Error('Not allowed by CORS'));},credentials:true};
-const pool=new Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_URL&&process.env.DATABASE_URL.includes('railway')?{rejectUnauthorized:false}:false});
-app.use(helmet({contentSecurityPolicy:false,crossOriginEmbedderPolicy:false})); app.use(cors(corsOptions)); app.use(express.json({limit:'20mb'}));
-app.use('/uploads',express.static(path.join(__dirname,'..','uploads')));
-const upload=multer({storage:multer.diskStorage({destination:(r,f,cb)=>cb(null,path.join(__dirname,'..','uploads')),filename:(r,f,cb)=>cb(null,Date.now()+'_'+f.originalname.replace(/[^a-zA-Z0-9._-]/g,'_'))}),limits:{fileSize:25*1024*1024}});
-const online=new Map(); const {Server}=require('socket.io'); const io=new Server(server,{cors:corsOptions,pingTimeout:60000,maxHttpBufferSize:25e6});
-function clean(v){return typeof v==='string'?v.trim().replace(/[<>]/g,''):''} function cid(a,b){
-  return [String(a),String(b)].sort().join('__')
+
+const fs = require('fs');
+const path = require('path');
+const http = require('http');
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const { Pool } = require('pg');
+
+const PORT = process.env.PORT || 8080;
+const CLIENT_ORIGINS = (
+  process.env.CLIENT_ORIGIN ||
+  process.env.CLIENT_URL ||
+  'http://localhost:5173'
+)
+  .split(',')
+  .map(x => x.trim())
+  .filter(Boolean);
+
+const app = express();
+const server = http.createServer(app);
+
+if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
+  console.warn('WARNING: JWT_SECRET should be at least 32 characters in production.');
 }
-function sign(u){return jwt.sign({id:String(u.id),username:u.username},process.env.JWT_SECRET,{expiresIn:'30d'})}
-function auth(req,res,next){const h=req.headers.authorization||''; if(!h.startsWith('Bearer '))return res.status(401).json({error:'Authentication required.'}); try{req.user=jwt.verify(h.slice(7),process.env.JWT_SECRET); req.user.id=String(req.user.id); next()}catch{return res.status(401).json({error:'Invalid session.'})}}
-function user(u){return {id:String(u.id),username:u.username,phone:u.phone,about:u.about||'',avatarUrl:u.avatar_url||null,online:online.has(String(u.id)),lastSeen:u.last_seen}}
-function msg(m){return {id:String(m.id),conversationId:m.conversation_id,senderId:String(m.sender_id),recipientId:String(m.recipient_id),body:m.body,kind:m.kind,fileUrl:m.file_url,fileName:m.file_name,fileMime:m.file_mime,deliveredAt:m.delivered_at,readAt:m.read_at,createdAt:m.created_at}}
-async function init(){await pool.query(fs.readFileSync(path.join(__dirname,'schema.sql'),'utf8'))}
-app.get('/api/health',(req,res)=>res.json({ok:true,time:new Date().toISOString()}));
-app.post('/api/auth/register',async(req,res)=>{const username=clean(req.body.username), phone=clean(req.body.phone), password=String(req.body.password||''); if(username.length<2)return res.status(400).json({error:'Name must be at least 2 characters.'}); if(phone.length<6)return res.status(400).json({error:'Enter a valid phone number.'}); if(password.length<6)return res.status(400).json({error:'Password must be at least 6 characters.'}); try{if((await pool.query('SELECT id FROM users WHERE phone=$1',[phone])).rows.length)return res.status(409).json({error:'Phone already registered.'}); const hash=await bcrypt.hash(password,12); const r=await pool.query('INSERT INTO users(username,phone,password_hash) VALUES($1,$2,$3) RETURNING id,username,phone,about,avatar_url,last_seen',[username,phone,hash]); const u=user(r.rows[0]); res.status(201).json({token:sign(u),user:u})}catch(e){console.error('register',e.message);res.status(500).json({error:'Registration failed.'})}});
-app.post('/api/auth/login',async(req,res)=>{const phone=clean(req.body.phone), password=String(req.body.password||''); try{const r=await pool.query('SELECT * FROM users WHERE phone=$1',[phone]); const u=r.rows[0]; if(!u||!(await bcrypt.compare(password,u.password_hash)))return res.status(401).json({error:'Invalid phone or password.'}); await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1',[u.id]); const out=user(u); res.json({token:sign(out),user:out})}catch(e){console.error('login',e.message);res.status(500).json({error:'Login failed.'})}});
-app.post('/api/auth/reset-password',async(req,res)=>{const phone=clean(req.body.phone), password=String(req.body.password||''); if(phone.length<6)return res.status(400).json({error:'Enter registered phone number.'}); if(password.length<6)return res.status(400).json({error:'Password must be at least 6 characters.'}); const hash=await bcrypt.hash(password,12); const r=await pool.query('UPDATE users SET password_hash=$1 WHERE phone=$2 RETURNING id',[hash,phone]); if(!r.rows.length)return res.status(404).json({error:'Phone number not registered.'}); res.json({ok:true})});
-app.get('/api/users',auth,async(req,res)=>{const q=clean(req.query.q||''); if(q.length<2)return res.json([]); const r=await pool.query('SELECT id,username,phone,about,avatar_url,last_seen FROM users WHERE id<>$1 AND (LOWER(username) LIKE LOWER($2) OR phone LIKE $2) ORDER BY username LIMIT 30',[req.user.id,'%'+q+'%']); res.json(r.rows.map(user))});
-app.get('/api/chats',auth,async(req,res)=>{const r=await pool.query(`SELECT DISTINCT ON(m.conversation_id) m.*, CASE WHEN m.sender_id=$1 THEN ru.id ELSE su.id END contact_id, CASE WHEN m.sender_id=$1 THEN ru.username ELSE su.username END contact_username, CASE WHEN m.sender_id=$1 THEN ru.phone ELSE su.phone END contact_phone, CASE WHEN m.sender_id=$1 THEN ru.about ELSE su.about END contact_about, CASE WHEN m.sender_id=$1 THEN ru.avatar_url ELSE su.avatar_url END contact_avatar_url, CASE WHEN m.sender_id=$1 THEN ru.last_seen ELSE su.last_seen END contact_last_seen FROM messages m JOIN users su ON su.id=m.sender_id JOIN users ru ON ru.id=m.recipient_id WHERE (m.sender_id=$1 OR m.recipient_id=$1) AND m.deleted_at IS NULL ORDER BY m.conversation_id,m.created_at DESC`,[req.user.id]); res.json(r.rows.map(x=>({conversationId:x.conversation_id,contact:user({id:x.contact_id,username:x.contact_username,phone:x.contact_phone,about:x.contact_about,avatar_url:x.contact_avatar_url,last_seen:x.contact_last_seen}),lastMessage:msg(x)})).sort((a,b)=>new Date(b.lastMessage.createdAt)-new Date(a.lastMessage.createdAt))) });
-app.get('/api/messages/:conversationId',auth,async(req,res)=>{const c = req.params.conversationId;
-const ids = c.split('__'); if(!ids.includes(req.user.id))return res.status(403).json({error:'Access denied.'}); const r=await pool.query('SELECT * FROM messages WHERE conversation_id=$1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 500',[c]); res.json(r.rows.map(msg))});
-app.post('/api/messages',auth,async(req,res)=>{const recipientId=clean(req.body.recipientId), body=String(req.body.body||''), kind=clean(req.body.kind||'text'), fileUrl=req.body.fileUrl||null, fileName=req.body.fileName||null, fileMime=req.body.fileMime||null; if(!recipientId)return res.status(400).json({error:'Recipient required.'}); if(!body.trim()&&!fileUrl)return res.status(400).json({error:'Message cannot be empty.'}); const c=cid(req.user.id,recipientId); try{await pool.query('INSERT INTO conversations(id,user_a,user_b,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(id) DO UPDATE SET updated_at=NOW()',[c,req.user.id,recipientId]); const delivered=online.has(recipientId)?new Date():null; const r=await pool.query('INSERT INTO messages(conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,delivered_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',[c,req.user.id,recipientId,body||fileName||kind,kind,fileUrl,fileName,fileMime,delivered]); const m=msg(r.rows[0]); const target=online.get(recipientId); if(target)io.to(target).emit('message:new',m); res.status(201).json(m)}catch(e){console.error('message',e.message);res.status(500).json({error:'Could not send message: '+e.message})}});
-app.post('/api/messages/:conversationId/read',auth,async(req,res)=>{const c=req.params.conversationId;const ids=c.split('-');if(!ids.includes(req.user.id))return res.status(403).json({error:'Access denied.'}); await pool.query('UPDATE messages SET read_at=NOW() WHERE conversation_id=$1 AND recipient_id=$2 AND read_at IS NULL',[c,req.user.id]); res.json({ok:true})});
-app.post('/api/upload',auth,upload.single('file'),(req,res)=>{if(!req.file)return res.status(400).json({error:'File required.'}); res.json({url:'/uploads/'+req.file.filename,name:req.file.originalname,mime:req.file.mimetype,size:req.file.size})});
-io.use((socket,next)=>{try{const token=socket.handshake.auth?.token;if(!token)return next(new Error('Auth required')); socket.user=jwt.verify(token,process.env.JWT_SECRET); socket.user.id=String(socket.user.id); next()}catch{return next(new Error('Invalid token'))}});
-io.on('connection',async socket=>{const userId=String(socket.user.id); const old=online.get(userId); if(old)io.to(old).emit('session:replaced'); online.set(userId,socket.id); await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1',[userId]).catch(()=>{}); socket.broadcast.emit('user:online',{userId}); socket.on('typing:start',({recipientId,conversationId})=>{const t=online.get(String(recipientId)); if(t)io.to(t).emit('typing:start',{userId,conversationId})}); socket.on('typing:stop',({recipientId})=>{const t=online.get(String(recipientId)); if(t)io.to(t).emit('typing:stop',{userId})}); socket.on('call:offer',({recipientId,offer,callType})=>{const t=online.get(String(recipientId)); if(!t)return socket.emit('call:unavailable'); io.to(t).emit('call:incoming',{callerId:userId,callerName:socket.user.username,offer,callType})}); socket.on('call:answer',({callerId,answer})=>{const t=online.get(String(callerId)); if(t)io.to(t).emit('call:answer',{answer})}); socket.on('call:ice-candidate',({recipientId,candidate})=>{const t=online.get(String(recipientId)); if(t)io.to(t).emit('call:ice-candidate',{candidate})}); socket.on('call:end',({recipientId})=>{const t=online.get(String(recipientId)); if(t)io.to(t).emit('call:ended')}); socket.on('disconnect',async()=>{if(online.get(userId)===socket.id){online.delete(userId); await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1',[userId]).catch(()=>{}); socket.broadcast.emit('user:offline',{userId})}})});
-init().then(()=>server.listen(PORT,()=>console.log('SecureChat server running on '+PORT))).catch(e=>{console.error('DB init failed',e);process.exit(1)});
+
+fs.mkdirSync(path.join(__dirname, '..', 'uploads'), { recursive: true });
+
+const corsOptions = {
+  origin: (origin, cb) => {
+    if (!origin || CLIENT_ORIGINS.includes(origin)) return cb(null, true);
+    return cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true
+};
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
+
+app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+app.use(cors(corsOptions));
+app.use(express.json({ limit: '20mb' }));
+
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (r, f, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
+    filename: (r, f, cb) =>
+      cb(null, Date.now() + '_' + f.originalname.replace(/[^a-zA-Z0-9._-]/g, '_'))
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 }
+});
+
+const online = new Map();
+const { Server } = require('socket.io');
+
+const io = new Server(server, {
+  cors: corsOptions,
+  pingTimeout: 60000,
+  maxHttpBufferSize: 25e6
+});
+
+function clean(v) {
+  return typeof v === 'string' ? v.trim().replace(/[<>]/g, '') : '';
+}
+
+function cid(a, b) {
+  return [String(a), String(b)].sort().join('-');
+}
+
+function sign(u) {
+  return jwt.sign(
+    { id: String(u.id), username: u.username },
+    process.env.JWT_SECRET,
+    { expiresIn: '30d' }
+  );
+}
+
+function auth(req, res, next) {
+  const h = req.headers.authorization || '';
+
+  if (!h.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authentication required.' });
+  }
+
+  try {
+    req.user = jwt.verify(h.slice(7), process.env.JWT_SECRET);
+    req.user.id = String(req.user.id);
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid session.' });
+  }
+}
+
+function user(u) {
+  return {
+    id: String(u.id),
+    username: u.username,
+    phone: u.phone,
+    about: u.about || '',
+    avatarUrl: u.avatar_url || null,
+    online: online.has(String(u.id)),
+    lastSeen: u.last_seen
+  };
+}
+
+function msg(m) {
+  return {
+    id: String(m.id),
+    conversationId: m.conversation_id,
+    senderId: String(m.sender_id),
+    recipientId: String(m.recipient_id),
+    body: m.body,
+    kind: m.kind,
+    fileUrl: m.file_url,
+    fileName: m.file_name,
+    fileMime: m.file_mime,
+    deliveredAt: m.delivered_at,
+    readAt: m.read_at,
+    createdAt: m.created_at
+  };
+}
+
+async function init() {
+  await pool.query(fs.readFileSync(path.join(__dirname, 'schema.sql'), 'utf8'));
+}
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, time: new Date().toISOString() });
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  const username = clean(req.body.username);
+  const phone = clean(req.body.phone);
+  const password = String(req.body.password || '');
+
+  if (username.length < 2) return res.status(400).json({ error: 'Name must be at least 2 characters.' });
+  if (phone.length < 6) return res.status(400).json({ error: 'Enter a valid phone number.' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+
+  try {
+    if ((await pool.query('SELECT id FROM users WHERE phone=$1', [phone])).rows.length) {
+      return res.status(409).json({ error: 'Phone already registered.' });
+    }
+
+    const hash = await bcrypt.hash(password, 12);
+
+    const r = await pool.query(
+      'INSERT INTO users(username,phone,password_hash) VALUES($1,$2,$3) RETURNING id,username,phone,about,avatar_url,last_seen',
+      [username, phone, hash]
+    );
+
+    const u = user(r.rows[0]);
+    res.status(201).json({ token: sign(u), user: u });
+  } catch (e) {
+    console.error('register', e.message);
+    res.status(500).json({ error: 'Registration failed.' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  const phone = clean(req.body.phone);
+  const password = String(req.body.password || '');
+
+  try {
+    const r = await pool.query('SELECT * FROM users WHERE phone=$1', [phone]);
+    const u = r.rows[0];
+
+    if (!u || !(await bcrypt.compare(password, u.password_hash))) {
+      return res.status(401).json({ error: 'Invalid phone or password.' });
+    }
+
+    await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [u.id]);
+
+    const out = user(u);
+    res.json({ token: sign(out), user: out });
+  } catch (e) {
+    console.error('login', e.message);
+    res.status(500).json({ error: 'Login failed.' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  const phone = clean(req.body.phone);
+  const password = String(req.body.password || '');
+
+  if (phone.length < 6) return res.status(400).json({ error: 'Enter registered phone number.' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+
+  const hash = await bcrypt.hash(password, 12);
+
+  const r = await pool.query(
+    'UPDATE users SET password_hash=$1 WHERE phone=$2 RETURNING id',
+    [hash, phone]
+  );
+
+  if (!r.rows.length) return res.status(404).json({ error: 'Phone number not registered.' });
+
+  res.json({ ok: true });
+});
+
+app.get('/api/users', auth, async (req, res) => {
+  const q = clean(req.query.q || '');
+
+  if (q.length < 2) return res.json([]);
+
+  const r = await pool.query(
+    'SELECT id,username,phone,about,avatar_url,last_seen FROM users WHERE id<>$1 AND (LOWER(username) LIKE LOWER($2) OR phone LIKE $2) ORDER BY username LIMIT 30',
+    [req.user.id, '%' + q + '%']
+  );
+
+  res.json(r.rows.map(user));
+});
+
+app.get('/api/chats', auth, async (req, res) => {
+  const r = await pool.query(
+    `SELECT DISTINCT ON(m.conversation_id) 
+      m.*, 
+      CASE WHEN m.sender_id=$1 THEN ru.id ELSE su.id END contact_id,
+      CASE WHEN m.sender_id=$1 THEN ru.username ELSE su.username END contact_username,
+      CASE WHEN m.sender_id=$1 THEN ru.phone ELSE su.phone END contact_phone,
+      CASE WHEN m.sender_id=$1 THEN ru.about ELSE su.about END contact_about,
+      CASE WHEN m.sender_id=$1 THEN ru.avatar_url ELSE su.avatar_url END contact_avatar_url,
+      CASE WHEN m.sender_id=$1 THEN ru.last_seen ELSE su.last_seen END contact_last_seen
+    FROM messages m
+    JOIN users su ON su.id=m.sender_id
+    JOIN users ru ON ru.id=m.recipient_id
+    WHERE (m.sender_id=$1 OR m.recipient_id=$1) AND m.deleted_at IS NULL
+    ORDER BY m.conversation_id,m.created_at DESC`,
+    [req.user.id]
+  );
+
+  res.json(
+    r.rows
+      .map(x => ({
+        conversationId: x.conversation_id,
+        contact: user({
+          id: x.contact_id,
+          username: x.contact_username,
+          phone: x.contact_phone,
+          about: x.contact_about,
+          avatar_url: x.contact_avatar_url,
+          last_seen: x.contact_last_seen
+        }),
+        lastMessage: msg(x)
+      }))
+      .sort((a, b) => new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt))
+  );
+});
+
+app.get('/api/messages/:conversationId', auth, async (req, res) => {
+  const c = req.params.conversationId;
+
+  try {
+    const conv = await pool.query(
+      'SELECT user_a, user_b FROM conversations WHERE id=$1',
+      [c]
+    );
+
+    if (!conv.rows.length) {
+      return res.json([]);
+    }
+
+    const row = conv.rows[0];
+
+    if (
+      String(row.user_a) !== String(req.user.id) &&
+      String(row.user_b) !== String(req.user.id)
+    ) {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    const r = await pool.query(
+      'SELECT * FROM messages WHERE conversation_id=$1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 500',
+      [c]
+    );
+
+    res.json(r.rows.map(msg));
+  } catch (e) {
+    console.error('messages history', e.message);
+    res.status(500).json({ error: 'Could not load messages.' });
+  }
+});
+
+app.post('/api/messages', auth, async (req, res) => {
+  const recipientId = clean(req.body.recipientId);
+  const body = String(req.body.body || '');
+  const kind = clean(req.body.kind || 'text');
+  const fileUrl = req.body.fileUrl || null;
+  const fileName = req.body.fileName || null;
+  const fileMime = req.body.fileMime || null;
+
+  if (!recipientId) return res.status(400).json({ error: 'Recipient required.' });
+  if (!body.trim() && !fileUrl) return res.status(400).json({ error: 'Message cannot be empty.' });
+
+  const c = cid(req.user.id, recipientId);
+
+  try {
+    await pool.query(
+      'INSERT INTO conversations(id,user_a,user_b,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(id) DO UPDATE SET updated_at=NOW()',
+      [c, req.user.id, recipientId]
+    );
+
+    const delivered = online.has(recipientId) ? new Date() : null;
+
+    const r = await pool.query(
+      'INSERT INTO messages(conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,delivered_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
+      [c, req.user.id, recipientId, body || fileName || kind, kind, fileUrl, fileName, fileMime, delivered]
+    );
+
+    const m = msg(r.rows[0]);
+    const target = online.get(recipientId);
+
+    if (target) io.to(target).emit('message:new', m);
+
+    res.status(201).json(m);
+  } catch (e) {
+    console.error('message', e.message);
+    res.status(500).json({ error: 'Could not send message: ' + e.message });
+  }
+});
+
+app.post('/api/messages/:conversationId/read', auth, async (req, res) => {
+  const c = req.params.conversationId;
+
+  try {
+    const conv = await pool.query(
+      'SELECT user_a, user_b FROM conversations WHERE id=$1',
+      [c]
+    );
+
+    if (!conv.rows.length) {
+      return res.json({ ok: true });
+    }
+
+    const row = conv.rows[0];
+
+    if (
+      String(row.user_a) !== String(req.user.id) &&
+      String(row.user_b) !== String(req.user.id)
+    ) {
+      return res.status(403).json({ error: 'Access denied.' });
+    }
+
+    await pool.query(
+      'UPDATE messages SET read_at=NOW() WHERE conversation_id=$1 AND recipient_id=$2 AND read_at IS NULL',
+      [c, req.user.id]
+    );
+
+    res.json({ ok: true });
+  } catch (e) {
+    console.error('read messages', e.message);
+    res.status(500).json({ error: 'Could not mark messages as read.' });
+  }
+});
+
+app.post('/api/upload', auth, upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'File required.' });
+
+  res.json({
+    url: '/uploads/' + req.file.filename,
+    name: req.file.originalname,
+    mime: req.file.mimetype,
+    size: req.file.size
+  });
+});
+
+io.use((socket, next) => {
+  try {
+    const token = socket.handshake.auth?.token;
+
+    if (!token) return next(new Error('Auth required'));
+
+    socket.user = jwt.verify(token, process.env.JWT_SECRET);
+    socket.user.id = String(socket.user.id);
+
+    next();
+  } catch {
+    return next(new Error('Invalid token'));
+  }
+});
+
+io.on('connection', async socket => {
+  const userId = String(socket.user.id);
+
+  const old = online.get(userId);
+  if (old) io.to(old).emit('session:replaced');
+
+  online.set(userId, socket.id);
+
+  await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [userId]).catch(() => {});
+
+  socket.broadcast.emit('user:online', { userId });
+
+  socket.on('typing:start', ({ recipientId, conversationId }) => {
+    const t = online.get(String(recipientId));
+    if (t) io.to(t).emit('typing:start', { userId, conversationId });
+  });
+
+  socket.on('typing:stop', ({ recipientId }) => {
+    const t = online.get(String(recipientId));
+    if (t) io.to(t).emit('typing:stop', { userId });
+  });
+
+  socket.on('call:offer', ({ recipientId, offer, callType }) => {
+    const t = online.get(String(recipientId));
+
+    if (!t) return socket.emit('call:unavailable');
+
+    io.to(t).emit('call:incoming', {
+      callerId: userId,
+      callerName: socket.user.username,
+      offer,
+      callType
+    });
+  });
+
+  socket.on('call:answer', ({ callerId, answer }) => {
+    const t = online.get(String(callerId));
+    if (t) io.to(t).emit('call:answer', { answer });
+  });
+
+  socket.on('call:ice-candidate', ({ recipientId, candidate }) => {
+    const t = online.get(String(recipientId));
+    if (t) io.to(t).emit('call:ice-candidate', { candidate });
+  });
+
+  socket.on('call:end', ({ recipientId }) => {
+    const t = online.get(String(recipientId));
+    if (t) io.to(t).emit('call:ended');
+  });
+
+  socket.on('disconnect', async () => {
+    if (online.get(userId) === socket.id) {
+      online.delete(userId);
+
+      await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [userId]).catch(() => {});
+
+      socket.broadcast.emit('user:offline', { userId });
+    }
+  });
+});
+
+init()
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log('SecureChat server running on ' + PORT);
+    });
+  })
+  .catch(e => {
+    console.error('DB init failed', e);
+    process.exit(1);
+  });
