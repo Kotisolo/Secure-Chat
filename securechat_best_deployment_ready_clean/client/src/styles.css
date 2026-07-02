@@ -19,3 +19,27 @@
   .bubble{max-width:85%}
   .bubble img{max-width:100%}
 }
+@media (max-width: 900px) {
+  .app {
+    display: block !important;
+  }
+
+  .side {
+    width: 100vw !important;
+    min-width: 100vw !important;
+  }
+
+  .side.hide {
+    display: none !important;
+  }
+
+  .panel {
+    display: none !important;
+    width: 100vw !important;
+    min-width: 100vw !important;
+  }
+
+  .panel.open {
+    display: flex !important;
+  }
+}
