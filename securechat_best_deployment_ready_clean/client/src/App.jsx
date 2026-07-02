@@ -10,7 +10,19 @@ export default function App(){
  const[me,setMe]=useState(getStoredUser()),[ready,setReady]=useState(false),[contacts,setContacts]=useState([]),[messages,setMessages]=useState({}),[active,setActive]=useState(null),[text,setText]=useState(''),[typing,setTyping]=useState(false),[emoji,setEmoji]=useState(false),[profile,setProfile]=useState(null);
  const[call,setCall]=useState({active:false,minimized:false,type:'audio',title:'',status:'',seconds:0});
  const pc=useRef(null),localStream=useRef(null),callPeer=useRef(null),timer=useRef(null),localVideo=useRef(null),remoteVideo=useRef(null),remoteAudio=useRef(null),endRef=useRef(null),typingTimer=useRef(null);
- useEffect(()=>{if(me)enterApp()},[]); useEffect(()=>endRef.current?.scrollIntoView({behavior:'smooth'}),[messages,active]);
+ useEffect(() => {
+  const stored = getStoredUser();
+
+  if (stored && stored.id) {
+    setMe(stored);
+    setScreen('app');
+    setTimeout(() => enterApp(), 0);
+  } else {
+    clearSession();
+    setMe(null);
+    setScreen('welcome');
+  }
+}, []); useEffect(()=>endRef.current?.scrollIntoView({behavior:'smooth'}),[messages,active]);
  const f=(k,v)=>setForm(p=>({...p,[k]:v}));
  async function register(e){e.preventDefault();setErr('');try{const d=await api('/api/auth/register',{method:'POST',body:JSON.stringify({username:form.username,phone:form.phone,password:form.password})});setSession(d.token,d.user);setMe(d.user);setScreen('app');setTimeout(enterApp,0)}catch(x){setErr(x.message)}}
  async function login(e){e.preventDefault();setErr('');try{const d=await api('/api/auth/login',{method:'POST',body:JSON.stringify({phone:form.phone,password:form.password})});setSession(d.token,d.user);setMe(d.user);setScreen('app');setTimeout(enterApp,0)}catch(x){setErr(x.message)}}
