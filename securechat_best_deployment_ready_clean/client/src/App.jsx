@@ -664,18 +664,9 @@ export default function App() {
             );
           })}
         </div>
-      <aside
-  className="side"
-  style={
-    active
-      ? {
-          display: 'none'
-        }
-      : {
-          display: 'flex'
-        }
-  }
->
+      </aside>
+
+      <main className="main">
         {!active ? (
           <div className="emptyChat">
             <Lock />
@@ -705,7 +696,7 @@ export default function App() {
               {rows.map(m => (
                 <div key={m.id} className={'bubble ' + (String(m.senderId) === String(me.id) ? 'mine' : 'theirs')}>
                   {m.kind === 'image' && m.fileUrl ? (
-                    <img src={API_URL + m.fileUrl} />
+                    <img src={API_URL + m.fileUrl} alt={m.fileName || 'Photo'} />
                   ) : m.kind === 'file' && m.fileUrl ? (
                     <a href={API_URL + m.fileUrl} target="_blank" rel="noreferrer">
                       📎 {m.fileName || m.body}
