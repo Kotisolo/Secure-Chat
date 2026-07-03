@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Phone, Video, Send, Search, LogOut, User, Paperclip, Image,
-  Smile, Mic, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle
+  Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
+  Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle
 } from 'lucide-react';
 import { api, uploadFile, setSession, getStoredUser, clearSession, API_URL } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
@@ -57,6 +57,13 @@ export default function App() {
     status: '',
     seconds: 0
   });
+
+  // Incoming call waiting for the user to accept/decline (non-blocking)
+  const [incoming, setIncoming] = useState(null);
+
+  // Media states shown on the call buttons
+  const [micOn, setMicOn] = useState(true);
+  const [camOn, setCamOn] = useState(true);
 
   const pc = useRef(null);
   const localStream = useRef(null);
@@ -193,7 +200,9 @@ export default function App() {
 
     s.on('user:online', loadChats);
     s.on('user:offline', loadChats);
-    s.on('call:incoming', incomingCall);
+
+    // Incoming call: show a non-blocking card instead of a popup
+    s.on('call:incoming', d => setIncoming(d));
 
     s.on('call:answer', async ({ answer }) => {
       if (!pc.current) return;
@@ -212,11 +221,14 @@ export default function App() {
       }
     });
 
-    s.on('call:ended', () => endCall(true));
+    s.on('call:ended', () => {
+      setIncoming(null);
+      endCall(true);
+    });
 
     s.on('call:unavailable', () => {
-      alert('User is not online');
-      endCall(true);
+      setCall(c => ({ ...c, status: 'User is not online' }));
+      setTimeout(() => endCall(true), 1500);
     });
 
     loadChats();
@@ -392,6 +404,8 @@ export default function App() {
     });
 
     localStream.current = stream;
+    setMicOn(true);
+    setCamOn(type === 'video');
 
     stream.getTracks().forEach(tr => p.addTrack(tr, stream));
 
@@ -465,11 +479,12 @@ export default function App() {
     }
   }
 
-  async function incomingCall(d) {
-    if (!confirm(`Incoming ${d.callType} call from ${d.callerName}. Accept?`)) {
-      getSocket()?.emit('call:end', { recipientId: d.callerId });
-      return;
-    }
+  // Accept the pending incoming call (from the non-blocking card)
+  async function acceptCall() {
+    const d = incoming;
+    if (!d) return;
+
+    setIncoming(null);
 
     setCall({
       active: true,
@@ -497,6 +512,15 @@ export default function App() {
       alert('Could not answer call: ' + e.message);
       endCall(true);
     }
+  }
+
+  // Decline the pending incoming call
+  function declineCall() {
+    const d = incoming;
+    if (!d) return;
+
+    setIncoming(null);
+    getSocket()?.emit('call:end', { recipientId: d.callerId });
   }
 
   function startTimer() {
@@ -533,6 +557,8 @@ export default function App() {
     cleanupPeer();
 
     callPeer.current = null;
+    setMicOn(true);
+    setCamOn(true);
 
     setCall({
       active: false,
@@ -544,10 +570,28 @@ export default function App() {
     });
   }
 
-  function mute() {
-    localStream.current?.getAudioTracks().forEach(x => {
-      x.enabled = !x.enabled;
+  // Toggle microphone on/off (button reflects the state)
+  function toggleMic() {
+    const tracks = localStream.current?.getAudioTracks() || [];
+    if (!tracks.length) return;
+
+    const next = !micOn;
+    tracks.forEach(x => {
+      x.enabled = next;
     });
+    setMicOn(next);
+  }
+
+  // Toggle camera on/off during a video call
+  function toggleCamera() {
+    const tracks = localStream.current?.getVideoTracks() || [];
+    if (!tracks.length) return;
+
+    const next = !camOn;
+    tracks.forEach(x => {
+      x.enabled = next;
+    });
+    setCamOn(next);
   }
 
   function logout() {
@@ -559,6 +603,7 @@ export default function App() {
     setActive(null);
     setContacts([]);
     setMessages({});
+    setIncoming(null);
     setScreen('welcome');
   }
 
@@ -666,7 +711,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main">
+      <main className={active ? 'panel open' : 'panel'}>
         {!active ? (
           <div className="emptyChat">
             <Lock />
@@ -754,6 +799,22 @@ export default function App() {
         )}
       </main>
 
+      {incoming && !call.active && (
+        <div className="incoming">
+          <div className="avatar big">{initials(incoming.callerName)}</div>
+          <div className="who">
+            <b>{incoming.callerName}</b>
+            <small>Incoming {incoming.callType === 'video' ? 'video' : 'voice'} call...</small>
+          </div>
+          <div className="incomingBtns">
+            <button className="accept" onClick={acceptCall}>
+              {incoming.callType === 'video' ? <Video /> : <Phone />}
+            </button>
+            <button className="danger" onClick={declineCall}><PhoneOff /></button>
+          </div>
+        </div>
+      )}
+
       {call.active && !call.minimized && (
         <div className="call">
           <h2>{call.title}</h2>
@@ -774,9 +835,31 @@ export default function App() {
           <audio ref={remoteAudio} autoPlay />
 
           <div className="callBtns">
-            <button onClick={() => setCall(c => ({ ...c, minimized: true }))}><Minimize2 /></button>
-            <button onClick={mute}><Mic /></button>
-            <button className="danger" onClick={() => endCall()}><PhoneOff /></button>
+            <button onClick={() => setCall(c => ({ ...c, minimized: true }))} title="Minimize">
+              <Minimize2 />
+            </button>
+
+            <button
+              className={micOn ? '' : 'off'}
+              onClick={toggleMic}
+              title={micOn ? 'Mute microphone' : 'Unmute microphone'}
+            >
+              {micOn ? <Mic /> : <MicOff />}
+            </button>
+
+            {call.type === 'video' && (
+              <button
+                className={camOn ? '' : 'off'}
+                onClick={toggleCamera}
+                title={camOn ? 'Turn camera off' : 'Turn camera on'}
+              >
+                {camOn ? <Video /> : <VideoOff />}
+              </button>
+            )}
+
+            <button className="danger" onClick={() => endCall()} title="End call">
+              <PhoneOff />
+            </button>
           </div>
         </div>
       )}
