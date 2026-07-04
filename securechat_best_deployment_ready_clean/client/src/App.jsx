@@ -5,6 +5,9 @@ import {
 } from 'lucide-react';
 import { api, uploadFile, setSession, getStoredUser, clearSession, API_URL } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
+import {
+  E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage
+} from './e2ee';
 
 const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢 😭 😡 👍 👎 🙏 🔥 ❤️ 🎉 ✅ 💯'.split(' ');
 
@@ -92,6 +95,7 @@ export default function App() {
   // Incoming call waiting for the user to accept/decline (non-blocking)
   const [incoming, setIncoming] = useState(null);
   const [callError, setCallError] = useState('');
+  const [encryptionReady, setEncryptionReady] = useState(false);
 
   // Media states shown on the call buttons
   const [micOn, setMicOn] = useState(true);
@@ -196,24 +200,43 @@ export default function App() {
 
     const s = connectSocket();
 
-    s.on('connect', () => setReady(true));
+    s.on('connect', () => {
+      setReady(true);
+      if (E2EE_ENABLED) {
+        ensureE2EEIdentity()
+          .then(() => setEncryptionReady(true))
+          .catch(error => {
+            console.error('E2EE initialization failed', error);
+            setEncryptionReady(false);
+          });
+      }
+    });
     s.on('disconnect', () => setReady(false));
     s.on('connect_error', error => {
       setReady(false);
       if (/token|auth/i.test(error.message || '')) logout();
     });
 
-    s.on('message:new', m => {
+    s.on('message:new', async m => {
       const u = getStoredUser();
       if (!u || !u.id) return;
 
       const other = String(m.senderId) === String(u.id) ? m.recipientId : m.senderId;
       const c = cid(u.id, other);
+      let displayMessage = m;
+      if (E2EE_ENABLED && m.ciphertext) {
+        try {
+          displayMessage = await decryptMessage(m, c);
+        } catch (error) {
+          console.error('Could not decrypt message', error);
+          displayMessage = { ...m, body: 'Unable to decrypt this message.', decryptionFailed: true };
+        }
+      }
 
       setMessages(p => {
         const current = p[c] || [];
-        if (current.some(existing => existing.id === m.id)) return p;
-        return { ...p, [c]: [...current, m] };
+        if (current.some(existing => existing.id === displayMessage.id)) return p;
+        return { ...p, [c]: [...current, displayMessage] };
       });
 
       loadChats();
@@ -329,10 +352,21 @@ export default function App() {
 
     try {
       const history = await api('/api/messages/' + encodeURIComponent(c));
+      const displayHistory = E2EE_ENABLED
+        ? await Promise.all((Array.isArray(history) ? history : []).map(async message => {
+            if (!message.ciphertext) return message;
+            try {
+              return await decryptMessage(message, c);
+            } catch (error) {
+              console.error('Could not decrypt history message', error);
+              return { ...message, body: 'Unable to decrypt this message.', decryptionFailed: true };
+            }
+          }))
+        : history;
 
       setMessages(p => ({
         ...p,
-        [c]: Array.isArray(history) ? history : []
+        [c]: Array.isArray(displayHistory) ? displayHistory : []
       }));
 
       api('/api/messages/' + encodeURIComponent(c) + '/read', {
@@ -375,21 +409,29 @@ export default function App() {
     setText('');
 
     try {
+      const encryptedPayload = E2EE_ENABLED && tmp.kind === 'text'
+        ? await encryptMessage(active.id, c, tmp.body)
+        : {};
       const saved = await api('/api/messages', {
         method: 'POST',
         body: JSON.stringify({
           recipientId: active.id,
-          body: tmp.body,
+          body: encryptedPayload.ciphertext ? '[Encrypted message]' : tmp.body,
           kind: tmp.kind,
           fileUrl: tmp.fileUrl,
           fileName: tmp.fileName,
-          fileMime: tmp.fileMime
+          fileMime: tmp.fileMime,
+          ...encryptedPayload
         })
       });
 
       setMessages(p => ({
         ...p,
-        [c]: (p[c] || []).map(m => (m.id === tmp.id ? saved : m))
+        [c]: (p[c] || []).map(m => (
+          m.id === tmp.id
+            ? { ...saved, body: tmp.body, encrypted: Boolean(encryptedPayload.ciphertext) }
+            : m
+        ))
       }));
 
       loadChats();
@@ -408,6 +450,10 @@ export default function App() {
     e.target.value = '';
 
     if (!fl || !active) return;
+    if (E2EE_ENABLED) {
+      alert('Encrypted attachments are not enabled in this beta yet. Send text only.');
+      return;
+    }
 
     try {
       const up = await uploadFile(fl);
@@ -791,7 +837,13 @@ export default function App() {
 
               <div className="title">
                 <b>{active.username}</b>
-                <small>{typing ? 'typing...' : active.online ? 'Online' : 'Private conversation'}</small>
+                <small>
+                  {typing
+                    ? 'typing...'
+                    : E2EE_ENABLED
+                      ? encryptionReady ? 'End-to-end encrypted beta' : 'Preparing encryption...'
+                      : active.online ? 'Online' : 'Private conversation'}
+                </small>
               </div>
 
               <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
