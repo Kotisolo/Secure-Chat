@@ -10,7 +10,8 @@ import {
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import {
-  E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage
+  E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage,
+  encryptAttachment, decryptAttachment
 } from './e2ee';
 
 const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢 😭 😡 👍 👎 🙏 🔥 ❤️ 🎉 ✅ 💯'.split(' ');
@@ -110,6 +111,7 @@ export default function App() {
   const [showScheduler, setShowScheduler] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
   const [translations, setTranslations] = useState({});
+  const [attachmentUrls, setAttachmentUrls] = useState({});
 
   const [call, setCall] = useState({
     active: false,
@@ -524,6 +526,8 @@ export default function App() {
       fileUrl: payload.fileUrl,
       fileName: payload.fileName,
       fileMime: payload.fileMime,
+      fileEncryption: payload.fileEncryption,
+      senderDeviceId: payload.senderDeviceId,
       replyToId: payload.replyToId || replyTo?.id || null,
       scheduledAt: payload.scheduledAt || (scheduledAt ? new Date(scheduledAt).toISOString() : null),
       createdAt: new Date().toISOString(),
@@ -553,8 +557,10 @@ export default function App() {
           fileUrl: tmp.fileUrl,
           fileName: tmp.fileName,
           fileMime: tmp.fileMime,
+          fileEncryption: tmp.fileEncryption,
           replyToId: tmp.replyToId,
           scheduledAt: tmp.scheduledAt,
+          senderDeviceId: encryptedPayload.senderDeviceId || tmp.senderDeviceId,
           ...encryptedPayload
         })
       });
@@ -584,20 +590,22 @@ export default function App() {
     e.target.value = '';
 
     if (!fl || !active) return;
-    if (E2EE_ENABLED) {
-      alert('Encrypted attachments are not enabled in this beta yet. Send text only.');
-      return;
-    }
 
     try {
-      const up = await uploadFile(fl);
+      const conversationId = cid(me.id, active.id);
+      const encrypted = E2EE_ENABLED
+        ? await encryptAttachment(active.id, conversationId, fl)
+        : null;
+      const up = await uploadFile(encrypted?.file || fl);
 
       send({
-        body: kind === 'image' ? 'Photo' : up.name,
+        body: kind === 'image' ? 'Photo' : fl.name,
         kind: kind || (fl.type.startsWith('image/') ? 'image' : 'file'),
         fileUrl: up.url,
-        fileName: up.name,
-        fileMime: up.mime
+        fileName: fl.name,
+        fileMime: fl.type,
+        fileEncryption: encrypted?.fileEncryption,
+        senderDeviceId: encrypted?.senderDeviceId
       });
     } catch (e) {
       alert('Upload failed: ' + e.message);
@@ -694,13 +702,19 @@ export default function App() {
         if (!blob.size) return;
         try {
           const voiceFile = new File([blob], `voice-${Date.now()}.${extension}`, { type });
-          const uploaded = await uploadFile(voiceFile);
+          const conversationId = cid(me.id, active.id);
+          const encrypted = E2EE_ENABLED
+            ? await encryptAttachment(active.id, conversationId, voiceFile)
+            : null;
+          const uploaded = await uploadFile(encrypted?.file || voiceFile);
           await send({
             body: 'Voice message',
             kind: 'audio',
             fileUrl: uploaded.url,
-            fileName: uploaded.name,
-            fileMime: uploaded.mime
+            fileName: voiceFile.name,
+            fileMime: voiceFile.type,
+            fileEncryption: encrypted?.fileEncryption,
+            senderDeviceId: encrypted?.senderDeviceId
           });
         } catch (error) {
           alert('Voice message failed: ' + error.message);
@@ -1113,6 +1127,19 @@ export default function App() {
     ? rows.filter(message => (message.body || '').toLowerCase().includes(messageSearch.trim().toLowerCase()))
     : rows;
 
+  useEffect(() => {
+    if (!active || !me) return;
+    const conversationId = cid(me.id, active.id);
+    rows.filter(message => message.fileEncryption && !attachmentUrls[message.id]).forEach(async message => {
+      try {
+        const url = await decryptAttachment(message, conversationId);
+        setAttachmentUrls(current => ({ ...current, [message.id]: url }));
+      } catch (error) {
+        console.error('Attachment decryption failed', error);
+      }
+    });
+  }, [active, rows, me]);
+
   if (screen !== 'app') {
     return (
       <div className="auth">
@@ -1337,15 +1364,21 @@ export default function App() {
                     </div>
                   )}
                   {m.kind === 'image' && m.fileUrl ? (
-                    <img src={resolveFileUrl(m.fileUrl)} alt={m.fileName || 'Photo'} />
+                    <img src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))} alt={m.fileName || 'Photo'} />
                   ) : m.kind === 'file' && m.fileUrl ? (
-                    <a href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
+                    <a
+                      href={attachmentUrls[m.id] || (m.fileEncryption ? undefined : resolveFileUrl(m.fileUrl))}
+                      download={m.fileName}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                    >
                       📎 {m.fileName || m.body}
                     </a>
                   ) : m.kind === 'audio' && m.fileUrl ? (
                     <audio
                       className="voiceMessage"
-                      src={resolveFileUrl(m.fileUrl)}
+                      src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))}
                       controls
                       preload="metadata"
                       onClick={e => e.stopPropagation()}

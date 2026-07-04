@@ -73,6 +73,7 @@ const upload = multer({
     const allowed = new Set([
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
       'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
+      'application/octet-stream',
       'application/pdf', 'text/plain',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -197,6 +198,7 @@ function msg(m) {
     fileUrl: m.file_url,
     fileName: m.file_name,
     fileMime: m.file_mime,
+    fileEncryption: m.file_encryption || null,
     ciphertext: m.ciphertext || null,
     encryptionVersion: m.encryption_version || null,
     senderDeviceId: m.sender_device_id || null,
@@ -535,6 +537,7 @@ app.post('/api/messages', auth, async (req, res) => {
   const encryptionVersion = Number(req.body.encryptionVersion || 0) || null;
   const senderDeviceId = clean(req.body.senderDeviceId);
   const replyToId = clean(req.body.replyToId);
+  const fileEncryption = typeof req.body.fileEncryption === 'string' ? req.body.fileEncryption : null;
   const requestedSchedule = req.body.scheduledAt ? new Date(req.body.scheduledAt) : null;
 
   if (!recipientId) return res.status(400).json({ error: 'Recipient required.' });
@@ -550,6 +553,9 @@ app.post('/api/messages', auth, async (req, res) => {
   }
   if (fileUrl && (!String(fileUrl).startsWith('/uploads/') || !fileName)) {
     return res.status(400).json({ error: 'Invalid file attachment.' });
+  }
+  if (fileEncryption && (fileEncryption.length > 1000 || !senderDeviceId)) {
+    return res.status(400).json({ error: 'Invalid encrypted attachment.' });
   }
   if (replyToId && !validUuid(replyToId)) return res.status(400).json({ error: 'Invalid reply.' });
   if (requestedSchedule && (Number.isNaN(requestedSchedule.getTime()) || requestedSchedule <= new Date())) {
@@ -582,12 +588,12 @@ app.post('/api/messages', auth, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO messages(
         conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,delivered_at,
-        ciphertext,encryption_version,sender_device_id,reply_to_id,scheduled_at,sent_at,expires_at
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+        ciphertext,encryption_version,sender_device_id,reply_to_id,scheduled_at,sent_at,expires_at,file_encryption
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
       [
         c, req.user.id, recipientId, ciphertext ? '[Encrypted message]' : (body || fileName || kind),
         kind, fileUrl, fileName, fileMime, delivered, ciphertext, encryptionVersion,
-        senderDeviceId || null, replyToId || null, scheduledAt, sentAt, expiresAt
+        senderDeviceId || null, replyToId || null, scheduledAt, sentAt, expiresAt, fileEncryption
       ]
     );
 

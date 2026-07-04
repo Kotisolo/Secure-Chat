@@ -1,4 +1,4 @@
-import { api, getStoredUser } from './api';
+import { api, getStoredUser, resolveFileUrl } from './api';
 
 export const E2EE_ENABLED = import.meta.env.VITE_E2EE_ENABLED === 'true';
 
@@ -180,4 +180,44 @@ export async function decryptMessage(message, conversationId) {
     fromBase64(envelope.data)
   );
   return { ...message, body: decoder.decode(plaintext), encrypted: true };
+}
+
+export async function encryptAttachment(recipientId, conversationId, file) {
+  const identity = await ensureE2EEIdentity();
+  const peerDevice = await getPeerDevice(recipientId);
+  const key = await deriveMessageKey(identity, peerDevice, conversationId);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: encoder.encode(`${conversationId}:attachment`) },
+    key,
+    await file.arrayBuffer()
+  );
+  return {
+    file: new File([encrypted], `${file.name}.encrypted`, { type: 'application/octet-stream' }),
+    fileEncryption: JSON.stringify({ iv: toBase64(iv) }),
+    senderDeviceId: identity.deviceId
+  };
+}
+
+export async function decryptAttachment(message, conversationId) {
+  if (!message?.fileEncryption) return resolveFileUrl(message?.fileUrl);
+  const me = getStoredUser();
+  const identity = await ensureE2EEIdentity();
+  const sentByMe = String(message.senderId) === String(me?.id);
+  const peerId = sentByMe ? message.recipientId : message.senderId;
+  const peerDevice = await getPeerDevice(peerId, sentByMe ? null : message.senderDeviceId);
+  const key = await deriveMessageKey(identity, peerDevice, conversationId);
+  const response = await fetch(resolveFileUrl(message.fileUrl));
+  if (!response.ok) throw new Error('Encrypted attachment could not be downloaded.');
+  const envelope = JSON.parse(message.fileEncryption);
+  const decrypted = await crypto.subtle.decrypt(
+    {
+      name: 'AES-GCM',
+      iv: fromBase64(envelope.iv),
+      additionalData: encoder.encode(`${conversationId}:attachment`)
+    },
+    key,
+    await response.arrayBuffer()
+  );
+  return URL.createObjectURL(new Blob([decrypted], { type: message.fileMime || 'application/octet-stream' }));
 }
