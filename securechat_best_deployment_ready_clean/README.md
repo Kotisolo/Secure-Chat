@@ -20,7 +20,7 @@ SecureChat is a WhatsApp-style starter app using React, Node.js, Express, Socket
 - Backend: Node.js + Express
 - Realtime: Socket.IO
 - Database: PostgreSQL
-- Deployment: Railway backend/database + Vercel frontend
+- Deployment: Render backend + Neon PostgreSQL + Vercel frontend
 
 ## Local setup
 
@@ -42,4 +42,4 @@ cp .env.example .env
 npm run dev
 ```
 
-See `DEPLOYMENT.md` for GitHub, Railway, and Vercel deployment steps.
+See `DEPLOYMENT.md` for GitHub, Render, Neon, and Vercel deployment steps.

@@ -11,8 +11,16 @@ const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢
 const rtcConfig = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' }
-  ]
+    { urls: 'stun:stun1.l.google.com:19302' },
+    ...(import.meta.env.VITE_TURN_URL
+      ? [{
+          urls: import.meta.env.VITE_TURN_URL,
+          username: import.meta.env.VITE_TURN_USERNAME || '',
+          credential: import.meta.env.VITE_TURN_CREDENTIAL || ''
+        }]
+      : [])
+  ],
+  iceCandidatePoolSize: 10
 };
 
 const initials = n => (n || '?').slice(0, 2).toUpperCase();
@@ -24,6 +32,20 @@ const t = v => {
     return '';
   }
 };
+const updateReceipt = (state, conversationId, field, value) => {
+  const rows = state[conversationId];
+  if (!Array.isArray(rows)) return state;
+  return {
+    ...state,
+    [conversationId]: rows.map(message => ({ ...message, [field]: message[field] || value }))
+  };
+};
+const receipt = message => {
+  if (message.local) return 'sending…';
+  if (message.readAt) return '✓✓';
+  if (message.deliveredAt) return '✓✓';
+  return '✓';
+};
 
 export default function App() {
   const storedUser = getStoredUser();
@@ -31,12 +53,11 @@ export default function App() {
   const [screen, setScreen] = useState(storedUser && storedUser.id ? 'app' : 'welcome');
   const [authMode, setAuthMode] = useState('login');
   const [err, setErr] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
   const [form, setForm] = useState({
     username: '',
     phone: '',
-    password: '',
-    resetPhone: '',
-    resetPassword: ''
+    password: ''
   });
 
   const [me, setMe] = useState(storedUser && storedUser.id ? storedUser : null);
@@ -75,6 +96,8 @@ export default function App() {
   const endRef = useRef(null);
   const typingTimer = useRef(null);
   const socketReady = useRef(false);
+  const activeRef = useRef(null);
+  const pendingIce = useRef([]);
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -99,11 +122,16 @@ export default function App() {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, active]);
 
+  useEffect(() => {
+    activeRef.current = active;
+  }, [active]);
+
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   async function register(e) {
     e.preventDefault();
     setErr('');
+    setAuthLoading(true);
 
     try {
       const d = await api('/api/auth/register', {
@@ -121,12 +149,15 @@ export default function App() {
       setTimeout(() => enterApp(), 0);
     } catch (x) {
       setErr(x.message);
+    } finally {
+      setAuthLoading(false);
     }
   }
 
   async function login(e) {
     e.preventDefault();
     setErr('');
+    setAuthLoading(true);
 
     try {
       const d = await api('/api/auth/login', {
@@ -143,26 +174,8 @@ export default function App() {
       setTimeout(() => enterApp(), 0);
     } catch (x) {
       setErr(x.message);
-    }
-  }
-
-  async function resetPassword(e) {
-    e.preventDefault();
-    setErr('');
-
-    try {
-      await api('/api/auth/reset-password', {
-        method: 'POST',
-        body: JSON.stringify({
-          phone: form.resetPhone,
-          password: form.resetPassword
-        })
-      });
-
-      setAuthMode('login');
-      setErr('Password reset successful. Please login.');
-    } catch (x) {
-      setErr(x.message);
+    } finally {
+      setAuthLoading(false);
     }
   }
 
@@ -174,6 +187,10 @@ export default function App() {
 
     s.on('connect', () => setReady(true));
     s.on('disconnect', () => setReady(false));
+    s.on('connect_error', error => {
+      setReady(false);
+      if (/token|auth/i.test(error.message || '')) logout();
+    });
 
     s.on('message:new', m => {
       const u = getStoredUser();
@@ -182,20 +199,36 @@ export default function App() {
       const other = String(m.senderId) === String(u.id) ? m.recipientId : m.senderId;
       const c = cid(u.id, other);
 
-      setMessages(p => ({
-        ...p,
-        [c]: [...(p[c] || []), m]
-      }));
+      setMessages(p => {
+        const current = p[c] || [];
+        if (current.some(existing => existing.id === m.id)) return p;
+        return { ...p, [c]: [...current, m] };
+      });
 
       loadChats();
+
+      if (String(activeRef.current?.id) === String(other)) {
+        api('/api/messages/' + encodeURIComponent(c) + '/read', {
+          method: 'POST',
+          body: '{}'
+        }).catch(() => {});
+      }
     });
 
     s.on('typing:start', d => {
-      if (active && String(active.id) === String(d.userId)) setTyping(true);
+      if (String(activeRef.current?.id) === String(d.userId)) setTyping(true);
     });
 
     s.on('typing:stop', d => {
-      if (active && String(active.id) === String(d.userId)) setTyping(false);
+      if (String(activeRef.current?.id) === String(d.userId)) setTyping(false);
+    });
+
+    s.on('message:delivered', d => {
+      setMessages(p => updateReceipt(p, d.conversationId, 'deliveredAt', d.deliveredAt));
+    });
+
+    s.on('message:read', d => {
+      setMessages(p => updateReceipt(p, d.conversationId, 'readAt', d.readAt));
     });
 
     s.on('user:online', loadChats);
@@ -207,12 +240,18 @@ export default function App() {
     s.on('call:answer', async ({ answer }) => {
       if (!pc.current) return;
       await pc.current.setRemoteDescription(new RTCSessionDescription(answer));
+      await flushPendingIce();
       setCall(p => ({ ...p, status: 'Connected' }));
       startTimer();
     });
 
     s.on('call:ice-candidate', async ({ candidate }) => {
-      if (!pc.current || !candidate) return;
+      if (!candidate) return;
+
+      if (!pc.current || !pc.current.remoteDescription) {
+        pendingIce.current.push(candidate);
+        return;
+      }
 
       try {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
@@ -344,6 +383,11 @@ export default function App() {
 
       loadChats();
     } catch (e) {
+      setMessages(p => ({
+        ...p,
+        [c]: (p[c] || []).filter(message => message.id !== tmp.id)
+      }));
+      if (tmp.kind === 'text') setText(tmp.body);
       alert('Message failed: ' + e.message);
     }
   }
@@ -386,8 +430,10 @@ export default function App() {
     }, 900);
   }
 
-  async function createPeer(type, peerId) {
+  async function createPeer(type, peerId, preserveIce = false) {
+    const queuedIce = preserveIce ? [...pendingIce.current] : [];
     cleanupPeer();
+    if (preserveIce) pendingIce.current = queuedIce;
 
     callPeer.current = peerId;
 
@@ -450,6 +496,18 @@ export default function App() {
     return p;
   }
 
+  async function flushPendingIce() {
+    if (!pc.current?.remoteDescription) return;
+    const queued = pendingIce.current.splice(0);
+    for (const candidate of queued) {
+      try {
+        await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (error) {
+        console.warn('Could not add ICE candidate', error);
+      }
+    }
+  }
+
   async function startCall(type) {
     if (!active) return;
 
@@ -496,9 +554,10 @@ export default function App() {
     });
 
     try {
-      const p = await createPeer(d.callType, d.callerId);
+      const p = await createPeer(d.callType, d.callerId, true);
 
       await p.setRemoteDescription(new RTCSessionDescription(d.offer));
+      await flushPendingIce();
 
       const answer = await p.createAnswer();
 
@@ -533,6 +592,7 @@ export default function App() {
 
   function cleanupPeer() {
     clearInterval(timer.current);
+    pendingIce.current = [];
 
     if (pc.current) {
       pc.current.close();
@@ -627,21 +687,22 @@ export default function App() {
           ) : (
             <>
               <div className="tabs">
-                <button className={authMode === 'login' ? 'on' : ''} onClick={() => setAuthMode('login')}>
+                <button type="button" className={authMode === 'login' ? 'on' : ''} onClick={() => setAuthMode('login')}>
                   Login
                 </button>
-                <button className={authMode === 'register' ? 'on' : ''} onClick={() => setAuthMode('register')}>
+                <button type="button" className={authMode === 'register' ? 'on' : ''} onClick={() => setAuthMode('register')}>
                   Register
                 </button>
               </div>
+
+              {err && <div className="err" role="alert">{err}</div>}
 
               {authMode === 'login' && (
                 <form onSubmit={login}>
                   <input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} />
                   <input placeholder="Password" type="password" value={form.password} onChange={e => f('password', e.target.value)} />
-                  <button className="primary">Login</button>
-                  <button type="button" className="link" onClick={() => setAuthMode('reset')}>
-                    Forgot password?
+                  <button className="primary" disabled={authLoading}>
+                    {authLoading ? 'Signing in…' : 'Login'}
                   </button>
                 </form>
               )}
@@ -651,22 +712,11 @@ export default function App() {
                   <input placeholder="Full name" value={form.username} onChange={e => f('username', e.target.value)} />
                   <input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} />
                   <input placeholder="Password" type="password" value={form.password} onChange={e => f('password', e.target.value)} />
-                  <button className="primary">Create Account</button>
-                </form>
-              )}
-
-              {authMode === 'reset' && (
-                <form onSubmit={resetPassword}>
-                  <input placeholder="Registered phone" value={form.resetPhone} onChange={e => f('resetPhone', e.target.value)} />
-                  <input placeholder="New password" type="password" value={form.resetPassword} onChange={e => f('resetPassword', e.target.value)} />
-                  <button className="primary">Reset Password</button>
-                  <button type="button" className="link" onClick={() => setAuthMode('login')}>
-                    Back to login
+                  <button className="primary" disabled={authLoading}>
+                    {authLoading ? 'Creating account…' : 'Create Account'}
                   </button>
                 </form>
               )}
-
-              {err && <div className="err">{err}</div>}
             </>
           )}
         </div>
@@ -751,7 +801,7 @@ export default function App() {
                   )}
 
                   <small>
-                    {t(m.createdAt)} {String(m.senderId) === String(me.id) ? (m.local ? 'sending...' : '✓') : ''}
+                    {t(m.createdAt)} {String(m.senderId) === String(me.id) ? receipt(m) : ''}
                   </small>
                 </div>
               ))}
