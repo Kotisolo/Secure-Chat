@@ -46,6 +46,16 @@ const receipt = message => {
   if (message.deliveredAt) return '✓✓';
   return '✓';
 };
+const mediaErrorMessage = (error, type) => {
+  const denied = error?.name === 'NotAllowedError' || /permission denied|not allowed/i.test(error?.message || '');
+  if (denied) {
+    return `Microphone${type === 'video' ? ' and camera' : ''} access is blocked. Click the lock or crossed-out microphone icon beside the website address, choose Allow, then try the call again.`;
+  }
+  if (error?.name === 'NotFoundError') {
+    return `No ${type === 'video' ? 'camera or microphone' : 'microphone'} was found on this device.`;
+  }
+  return 'The call could not start. Check your device permissions and connection, then try again.';
+};
 
 export default function App() {
   const storedUser = getStoredUser();
@@ -81,6 +91,7 @@ export default function App() {
 
   // Incoming call waiting for the user to accept/decline (non-blocking)
   const [incoming, setIncoming] = useState(null);
+  const [callError, setCallError] = useState('');
 
   // Media states shown on the call buttons
   const [micOn, setMicOn] = useState(true);
@@ -510,6 +521,7 @@ export default function App() {
 
   async function startCall(type) {
     if (!active) return;
+    setCallError('');
 
     setCall({
       active: true,
@@ -532,8 +544,8 @@ export default function App() {
         callType: type
       });
     } catch (e) {
-      alert('Call failed: ' + e.message);
       endCall(true);
+      setCallError(mediaErrorMessage(e, type));
     }
   }
 
@@ -568,8 +580,8 @@ export default function App() {
         answer
       });
     } catch (e) {
-      alert('Could not answer call: ' + e.message);
       endCall(true);
+      setCallError(mediaErrorMessage(e, d.callType));
     }
   }
 
@@ -943,6 +955,17 @@ export default function App() {
             <h2>{profile.username}</h2>
             <p>{profile.phone}</p>
             <small>{profile.about}</small>
+          </div>
+        </div>
+      )}
+
+      {callError && (
+        <div className="modal">
+          <div className="permissionCard" role="alert">
+            <div className="badge small"><MicOff /></div>
+            <h2>Call permission needed</h2>
+            <p>{callError}</p>
+            <button className="primary" onClick={() => setCallError('')}>Got it</button>
           </div>
         </div>
       )}
