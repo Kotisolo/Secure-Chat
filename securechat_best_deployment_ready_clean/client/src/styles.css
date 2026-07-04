@@ -203,6 +203,12 @@
 .scheduleBar{display:flex;align-items:center;gap:9px;padding:8px 14px;background:var(--panel);border-top:1px solid var(--line)}
 .scheduleBar input{flex:1;height:40px;border:0;border-radius:12px;background:var(--panel3);color:white;padding:0 12px;color-scheme:dark}
 .scheduleBar button{width:36px;height:36px;border-radius:11px;background:var(--panel3);color:white;display:grid;place-items:center}
+.stickerMessage{font-size:52px;line-height:1.1}
+.translationText{display:flex;align-items:flex-start;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid rgba(255,255,255,.18);font-size:13px}
+.translationText svg{width:15px;height:15px;flex-shrink:0}
+.stickerDivider{width:100%;flex-basis:100%;color:var(--muted);font-size:12px;font-weight:800}
+.emoji .stickerChoice{font-size:26px}
+.gifUpload{height:38px;padding:0 12px;border-radius:12px;background:var(--secondary);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;cursor:pointer}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

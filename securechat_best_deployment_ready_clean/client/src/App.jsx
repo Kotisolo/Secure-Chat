@@ -3,7 +3,7 @@ import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
-  MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer
+  MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -14,6 +14,8 @@ import {
 } from './e2ee';
 
 const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢 😭 😡 👍 👎 🙏 🔥 ❤️ 🎉 ✅ 💯'.split(' ');
+
+const stickers = ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '👍', '🙏', '❤️', '🔥', '🎉'];
 
 const rtcConfig = {
   iceServers: [
@@ -107,6 +109,7 @@ export default function App() {
   const [searchingMessages, setSearchingMessages] = useState(false);
   const [showScheduler, setShowScheduler] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
+  const [translations, setTranslations] = useState({});
 
   const [call, setCall] = useState({
     active: false,
@@ -538,7 +541,7 @@ export default function App() {
     setShowScheduler(false);
 
     try {
-      const encryptedPayload = E2EE_ENABLED && tmp.kind === 'text'
+      const encryptedPayload = E2EE_ENABLED && ['text', 'sticker'].includes(tmp.kind)
         ? await encryptMessage(active.id, c, tmp.body)
         : {};
       const saved = await api('/api/messages', {
@@ -778,6 +781,35 @@ export default function App() {
     setEditingMessage(selectedMessage);
     setText(selectedMessage.body || '');
     setSelectedMessage(null);
+  }
+
+  async function translateSelectedMessage() {
+    if (!selectedMessage?.body) return;
+    if (!globalThis.LanguageDetector || !globalThis.Translator) {
+      alert('Private on-device translation is available in supported desktop Chrome versions. It is not available in this browser yet.');
+      return;
+    }
+    const targetLanguage = prompt(
+      'Translate to language code (for example: en, es, hi, te, fr):',
+      (navigator.language || 'en').split('-')[0]
+    );
+    if (!targetLanguage) return;
+    try {
+      const detector = await globalThis.LanguageDetector.create();
+      const detected = await detector.detect(selectedMessage.body);
+      const sourceLanguage = detected[0]?.detectedLanguage;
+      if (!sourceLanguage) throw new Error('Language could not be detected.');
+      if (sourceLanguage === targetLanguage) {
+        setTranslations(current => ({ ...current, [selectedMessage.id]: selectedMessage.body }));
+      } else {
+        const translator = await globalThis.Translator.create({ sourceLanguage, targetLanguage });
+        const translated = await translator.translate(selectedMessage.body);
+        setTranslations(current => ({ ...current, [selectedMessage.id]: translated }));
+      }
+      setSelectedMessage(null);
+    } catch (error) {
+      alert('Translation failed: ' + error.message);
+    }
   }
 
   async function saveEdit() {
@@ -1318,9 +1350,12 @@ export default function App() {
                       preload="metadata"
                       onClick={e => e.stopPropagation()}
                     />
+                  ) : m.kind === 'sticker' ? (
+                    <span className="stickerMessage">{m.body}</span>
                   ) : (
                     <span>{m.body}</span>
                   )}
+                  {translations[m.id] && <div className="translationText"><Languages /> {translations[m.id]}</div>}
 
                   <small>
                     {m.starred ? '★ ' : ''}{m.editedAt ? 'edited · ' : ''}
@@ -1430,6 +1465,23 @@ export default function App() {
                     {e}
                   </button>
                 ))}
+                <div className="stickerDivider">Stickers</div>
+                {stickers.map(value => (
+                  <button
+                    className="stickerChoice"
+                    key={'sticker-' + value}
+                    onClick={() => {
+                      send({ body: value, kind: 'sticker' });
+                      setEmoji(false);
+                    }}
+                  >
+                    {value}
+                  </button>
+                ))}
+                <label className="gifUpload">
+                  GIF
+                  <input hidden type="file" accept="image/gif" onChange={e => file(e, 'image')} />
+                </label>
               </div>
             )}
           </>
@@ -1582,6 +1634,9 @@ export default function App() {
               <button onClick={beginReply}><Reply /> Reply</button>
               <button onClick={copyMessage}><Copy /> Copy</button>
               <button onClick={toggleStar}><Star /> {selectedMessage.starred ? 'Unstar' : 'Star'}</button>
+              {selectedMessage.kind === 'text' && (
+                <button onClick={translateSelectedMessage}><Languages /> Translate</button>
+              )}
               {String(selectedMessage.senderId) === String(me?.id) && selectedMessage.kind === 'text' && (
                 <button onClick={beginEdit}><Pencil /> Edit</button>
               )}
