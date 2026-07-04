@@ -72,6 +72,8 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowed = new Set([
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
+      'application/octet-stream',
       'application/pdf', 'text/plain',
       'application/msword',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
@@ -140,6 +142,15 @@ function cid(a, b) {
   return [String(a), String(b)].sort().join('-');
 }
 
+async function usersBlocked(a, b) {
+  const result = await pool.query(
+    `SELECT 1 FROM user_blocks
+     WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1`,
+    [a, b]
+  );
+  return Boolean(result.rows.length);
+}
+
 function sign(u) {
   return jwt.sign(
     {
@@ -174,14 +185,17 @@ async function auth(req, res, next) {
 }
 
 function user(u) {
+  const hideProfile = u.profile_visibility === 'nobody';
+  const hideAbout = u.about_visibility === 'nobody';
+  const hidePresence = u.last_seen_visibility === 'nobody';
   return {
     id: String(u.id),
     username: u.username,
     phone: u.phone,
-    about: u.about || '',
-    avatarUrl: u.avatar_url || null,
-    online: isOnline(u.id),
-    lastSeen: u.last_seen
+    about: hideAbout ? '' : (u.about || ''),
+    avatarUrl: hideProfile ? null : (u.avatar_url || null),
+    online: hidePresence ? false : isOnline(u.id),
+    lastSeen: hidePresence ? null : u.last_seen
   };
 }
 
@@ -196,9 +210,17 @@ function msg(m) {
     fileUrl: m.file_url,
     fileName: m.file_name,
     fileMime: m.file_mime,
+    fileEncryption: m.file_encryption || null,
     ciphertext: m.ciphertext || null,
     encryptionVersion: m.encryption_version || null,
     senderDeviceId: m.sender_device_id || null,
+    replyToId: m.reply_to_id ? String(m.reply_to_id) : null,
+    editedAt: m.edited_at || null,
+    scheduledAt: m.scheduled_at || null,
+    sentAt: m.sent_at || null,
+    expiresAt: m.expires_at || null,
+    starred: Boolean(m.starred),
+    reactions: Array.isArray(m.reactions) ? m.reactions : [],
     deliveredAt: m.delivered_at,
     readAt: m.read_at,
     createdAt: m.created_at
@@ -328,11 +350,71 @@ app.get('/api/users', auth, asyncRoute(async (req, res) => {
   if (q.length < 2) return res.json([]);
 
   const r = await pool.query(
-    'SELECT id,username,phone,about,avatar_url,last_seen FROM users WHERE id<>$1 AND (LOWER(username) LIKE LOWER($2) OR phone LIKE $2) ORDER BY username LIMIT 30',
+    `SELECT u.id,u.username,u.phone,u.about,u.avatar_url,u.last_seen,
+      p.last_seen_visibility,p.profile_visibility,p.about_visibility
+     FROM users u LEFT JOIN user_privacy p ON p.user_id=u.id
+     WHERE u.id<>$1 AND (LOWER(u.username) LIKE LOWER($2) OR u.phone LIKE $2)
+     ORDER BY u.username LIMIT 30`,
     [req.user.id, '%' + q + '%']
   );
 
   res.json(r.rows.map(user));
+}));
+
+app.get('/api/privacy', auth, asyncRoute(async (req, res) => {
+  await pool.query('INSERT INTO user_privacy(user_id) VALUES($1) ON CONFLICT DO NOTHING', [req.user.id]);
+  const result = await pool.query('SELECT * FROM user_privacy WHERE user_id=$1', [req.user.id]);
+  const blocked = await pool.query(
+    `SELECT u.id,u.username FROM user_blocks b JOIN users u ON u.id=b.blocked_id
+     WHERE b.blocker_id=$1 ORDER BY b.created_at DESC`,
+    [req.user.id]
+  );
+  const p = result.rows[0];
+  res.json({
+    lastSeenVisibility: p.last_seen_visibility,
+    profileVisibility: p.profile_visibility,
+    aboutVisibility: p.about_visibility,
+    readReceipts: p.read_receipts,
+    silenceUnknownCalls: p.silence_unknown_calls,
+    blockedUsers: blocked.rows.map(row => ({ id: String(row.id), username: row.username }))
+  });
+}));
+
+app.patch('/api/privacy', auth, asyncRoute(async (req, res) => {
+  const allowed = new Set(['everyone', 'nobody']);
+  const lastSeen = allowed.has(req.body.lastSeenVisibility) ? req.body.lastSeenVisibility : 'everyone';
+  const profile = allowed.has(req.body.profileVisibility) ? req.body.profileVisibility : 'everyone';
+  const about = allowed.has(req.body.aboutVisibility) ? req.body.aboutVisibility : 'everyone';
+  await pool.query(
+    `INSERT INTO user_privacy(user_id,last_seen_visibility,profile_visibility,about_visibility,read_receipts,silence_unknown_calls)
+     VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(user_id) DO UPDATE SET
+       last_seen_visibility=$2,profile_visibility=$3,about_visibility=$4,
+       read_receipts=$5,silence_unknown_calls=$6,updated_at=NOW()`,
+    [req.user.id, lastSeen, profile, about, req.body.readReceipts !== false, Boolean(req.body.silenceUnknownCalls)]
+  );
+  res.json({ ok: true });
+}));
+
+app.post('/api/users/:userId/block', auth, asyncRoute(async (req, res) => {
+  const target = req.params.userId;
+  if (!validUuid(target) || target === String(req.user.id)) return res.status(400).json({ error: 'Invalid user.' });
+  await pool.query('INSERT INTO user_blocks(blocker_id,blocked_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [req.user.id, target]);
+  res.json({ blocked: true });
+}));
+
+app.delete('/api/users/:userId/block', auth, asyncRoute(async (req, res) => {
+  await pool.query('DELETE FROM user_blocks WHERE blocker_id=$1 AND blocked_id=$2', [req.user.id, req.params.userId]);
+  res.json({ blocked: false });
+}));
+
+app.post('/api/users/:userId/report', auth, asyncRoute(async (req, res) => {
+  const reason = clean(req.body.reason);
+  if (!validUuid(req.params.userId) || reason.length < 3) return res.status(400).json({ error: 'Add a report reason.' });
+  await pool.query(
+    'INSERT INTO user_reports(reporter_id,reported_id,message_id,reason) VALUES($1,$2,$3,$4)',
+    [req.user.id, req.params.userId, validUuid(req.body.messageId) ? req.body.messageId : null, reason.slice(0, 500)]
+  );
+  res.json({ ok: true });
 }));
 
 app.get('/api/chats', auth, asyncRoute(async (req, res) => {
@@ -344,15 +426,24 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
       CASE WHEN m.sender_id=$1 THEN ru.phone ELSE su.phone END contact_phone,
       CASE WHEN m.sender_id=$1 THEN ru.about ELSE su.about END contact_about,
       CASE WHEN m.sender_id=$1 THEN ru.avatar_url ELSE su.avatar_url END contact_avatar_url,
-      CASE WHEN m.sender_id=$1 THEN ru.last_seen ELSE su.last_seen END contact_last_seen
+      CASE WHEN m.sender_id=$1 THEN ru.last_seen ELSE su.last_seen END contact_last_seen,
+      COALESCE(cp.pinned,FALSE) pinned,
+      COALESCE(cp.archived,FALSE) archived,
+      cp.muted_until,
+      COALESCE(cp.disappearing_seconds,0) disappearing_seconds,
+      (SELECT COUNT(*)::int FROM messages unread
+       WHERE unread.conversation_id=m.conversation_id
+         AND unread.recipient_id=$1 AND unread.read_at IS NULL
+         AND unread.deleted_at IS NULL) unread_count
     FROM messages m
     JOIN users su ON su.id=m.sender_id
     JOIN users ru ON ru.id=m.recipient_id
+    LEFT JOIN chat_preferences cp ON cp.user_id=$1 AND cp.conversation_id=m.conversation_id
     WHERE (m.sender_id=$1 OR m.recipient_id=$1) AND m.deleted_at IS NULL
-      AND m.created_at > COALESCE(
-        (SELECT cd.deleted_before FROM conversation_deletions cd
-         WHERE cd.user_id=$1 AND cd.conversation_id=m.conversation_id),
-        '-infinity'::timestamptz)
+      AND m.sent_at IS NOT NULL AND (m.expires_at IS NULL OR m.expires_at>NOW())
+      AND NOT EXISTS (
+        SELECT 1 FROM message_deletions md
+        WHERE md.user_id=$1 AND md.message_id=m.id)
     ORDER BY m.conversation_id,m.created_at DESC`,
     [req.user.id]
   );
@@ -369,10 +460,75 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
           avatar_url: x.contact_avatar_url,
           last_seen: x.contact_last_seen
         }),
-        lastMessage: msg(x)
+        lastMessage: msg(x),
+        pinned: x.pinned,
+        archived: x.archived,
+        mutedUntil: x.muted_until,
+        disappearingSeconds: x.disappearing_seconds,
+        unreadCount: x.unread_count
       }))
-      .sort((a, b) => new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) ||
+        new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt))
   );
+}));
+
+app.get('/api/calls', auth, asyncRoute(async (req, res) => {
+  const result = await pool.query(
+    `SELECT c.*,
+      CASE WHEN c.caller_id=$1 THEN recipient.username ELSE caller.username END contact_name,
+      CASE WHEN c.caller_id=$1 THEN recipient.avatar_url ELSE caller.avatar_url END contact_avatar
+     FROM call_history c
+     JOIN users caller ON caller.id=c.caller_id
+     JOIN users recipient ON recipient.id=c.recipient_id
+     WHERE c.caller_id=$1 OR c.recipient_id=$1
+     ORDER BY c.started_at DESC LIMIT 100`,
+    [req.user.id]
+  );
+  res.json(result.rows.map(row => ({
+    id: String(row.id),
+    direction: String(row.caller_id) === String(req.user.id) ? 'outgoing' : 'incoming',
+    contactName: row.contact_name,
+    contactAvatar: row.contact_avatar,
+    type: row.call_type,
+    status: row.status,
+    startedAt: row.started_at,
+    answeredAt: row.answered_at,
+    endedAt: row.ended_at
+  })));
+}));
+
+app.patch('/api/chats/:conversationId/preferences', auth, asyncRoute(async (req, res) => {
+  const c = req.params.conversationId;
+  const conv = await pool.query('SELECT user_a,user_b FROM conversations WHERE id=$1', [c]);
+  if (!conv.rows.length) return res.status(404).json({ error: 'Chat not found.' });
+  const row = conv.rows[0];
+  if (String(row.user_a) !== String(req.user.id) && String(row.user_b) !== String(req.user.id)) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+  const pinned = Boolean(req.body.pinned);
+  const archived = Boolean(req.body.archived);
+  const mutedUntil = req.body.mutedUntil ? new Date(req.body.mutedUntil) : null;
+  const disappearingSeconds = [0, 86400, 604800, 7776000].includes(Number(req.body.disappearingSeconds))
+    ? Number(req.body.disappearingSeconds)
+    : 0;
+  if (mutedUntil && Number.isNaN(mutedUntil.getTime())) {
+    return res.status(400).json({ error: 'Invalid mute time.' });
+  }
+  const result = await pool.query(
+    `INSERT INTO chat_preferences(user_id,conversation_id,pinned,archived,muted_until,disappearing_seconds)
+     VALUES($1,$2,$3,$4,$5,$6)
+     ON CONFLICT(user_id,conversation_id) DO UPDATE
+     SET pinned=EXCLUDED.pinned,archived=EXCLUDED.archived,
+         muted_until=EXCLUDED.muted_until,disappearing_seconds=EXCLUDED.disappearing_seconds,updated_at=NOW()
+     RETURNING pinned,archived,muted_until,disappearing_seconds`,
+    [req.user.id, c, pinned, archived, mutedUntil, disappearingSeconds]
+  );
+  res.json({
+    pinned: result.rows[0].pinned,
+    archived: result.rows[0].archived,
+    mutedUntil: result.rows[0].muted_until,
+    disappearingSeconds: result.rows[0].disappearing_seconds
+  });
 }));
 
 app.post('/api/e2ee/devices', auth, asyncRoute(async (req, res) => {
@@ -444,13 +600,19 @@ app.get('/api/messages/:conversationId', auth, async (req, res) => {
     }
 
     const r = await pool.query(
-      `SELECT * FROM messages
-       WHERE conversation_id=$1 AND deleted_at IS NULL
-         AND created_at > COALESCE(
-           (SELECT deleted_before FROM conversation_deletions
-            WHERE user_id=$2 AND conversation_id=$1),
-           '-infinity'::timestamptz)
-       ORDER BY created_at ASC LIMIT 500`,
+      `SELECT m.*,
+         EXISTS(SELECT 1 FROM message_stars ms WHERE ms.user_id=$2 AND ms.message_id=m.id) starred,
+         COALESCE((SELECT json_agg(json_build_object(
+           'userId',mr.user_id::text,'emoji',mr.emoji))
+           FROM message_reactions mr WHERE mr.message_id=m.id),'[]'::json) reactions
+       FROM messages m
+       WHERE m.conversation_id=$1 AND m.deleted_at IS NULL
+         AND (m.expires_at IS NULL OR m.expires_at>NOW())
+         AND (m.sent_at IS NOT NULL OR m.sender_id=$2)
+         AND NOT EXISTS (
+           SELECT 1 FROM message_deletions md
+           WHERE md.user_id=$2 AND md.message_id=m.id)
+       ORDER BY m.created_at ASC LIMIT 500`,
       [c, req.user.id]
     );
 
@@ -471,13 +633,16 @@ app.post('/api/messages', auth, async (req, res) => {
   const ciphertext = typeof req.body.ciphertext === 'string' ? req.body.ciphertext : null;
   const encryptionVersion = Number(req.body.encryptionVersion || 0) || null;
   const senderDeviceId = clean(req.body.senderDeviceId);
+  const replyToId = clean(req.body.replyToId);
+  const fileEncryption = typeof req.body.fileEncryption === 'string' ? req.body.fileEncryption : null;
+  const requestedSchedule = req.body.scheduledAt ? new Date(req.body.scheduledAt) : null;
 
   if (!recipientId) return res.status(400).json({ error: 'Recipient required.' });
   if (!validUuid(recipientId)) return res.status(400).json({ error: 'Invalid recipient.' });
   if (recipientId === String(req.user.id)) return res.status(400).json({ error: 'You cannot message yourself.' });
   if (!body.trim() && !fileUrl) return res.status(400).json({ error: 'Message cannot be empty.' });
   if (body.length > 10000) return res.status(400).json({ error: 'Message is too long.' });
-  if (!['text', 'image', 'file'].includes(kind)) return res.status(400).json({ error: 'Invalid message type.' });
+  if (!['text', 'image', 'file', 'audio', 'sticker'].includes(kind)) return res.status(400).json({ error: 'Invalid message type.' });
   if (ciphertext) {
     if (encryptionVersion !== 1 || !senderDeviceId || ciphertext.length > 30000) {
       return res.status(400).json({ error: 'Invalid encrypted message.' });
@@ -486,10 +651,20 @@ app.post('/api/messages', auth, async (req, res) => {
   if (fileUrl && (!String(fileUrl).startsWith('/uploads/') || !fileName)) {
     return res.status(400).json({ error: 'Invalid file attachment.' });
   }
+  if (fileEncryption && (fileEncryption.length > 1000 || !senderDeviceId)) {
+    return res.status(400).json({ error: 'Invalid encrypted attachment.' });
+  }
+  if (replyToId && !validUuid(replyToId)) return res.status(400).json({ error: 'Invalid reply.' });
+  if (requestedSchedule && (Number.isNaN(requestedSchedule.getTime()) || requestedSchedule <= new Date())) {
+    return res.status(400).json({ error: 'Choose a future delivery time.' });
+  }
 
   const c = cid(req.user.id, recipientId);
 
   try {
+    if (await usersBlocked(req.user.id, recipientId)) {
+      return res.status(403).json({ error: 'Messaging is unavailable for this user.' });
+    }
     await pool.query(
       'INSERT INTO conversations(id,user_a,user_b,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(id) DO UPDATE SET updated_at=NOW()',
       [c, req.user.id, recipientId]
@@ -498,21 +673,32 @@ app.post('/api/messages', auth, async (req, res) => {
     const recipient = await pool.query('SELECT id FROM users WHERE id=$1', [recipientId]);
     if (!recipient.rows.length) return res.status(404).json({ error: 'Recipient not found.' });
 
-    const delivered = isOnline(recipientId) ? new Date() : null;
+    const scheduledAt = requestedSchedule || null;
+    const sentAt = scheduledAt ? null : new Date();
+    const delivered = !scheduledAt && isOnline(recipientId) ? new Date() : null;
+    const preference = await pool.query(
+      'SELECT disappearing_seconds FROM chat_preferences WHERE user_id=$1 AND conversation_id=$2',
+      [req.user.id, c]
+    );
+    const disappearingSeconds = Number(preference.rows[0]?.disappearing_seconds || 0);
+    const expiresAt = disappearingSeconds
+      ? new Date((scheduledAt || new Date()).getTime() + disappearingSeconds * 1000)
+      : null;
 
     const r = await pool.query(
       `INSERT INTO messages(
         conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,delivered_at,
-        ciphertext,encryption_version,sender_device_id
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        ciphertext,encryption_version,sender_device_id,reply_to_id,scheduled_at,sent_at,expires_at,file_encryption
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
       [
         c, req.user.id, recipientId, ciphertext ? '[Encrypted message]' : (body || fileName || kind),
-        kind, fileUrl, fileName, fileMime, delivered, ciphertext, encryptionVersion, senderDeviceId || null
+        kind, fileUrl, fileName, fileMime, delivered, ciphertext, encryptionVersion,
+        senderDeviceId || null, replyToId || null, scheduledAt, sentAt, expiresAt, fileEncryption
       ]
     );
 
     const m = msg(r.rows[0]);
-    if (isOnline(recipientId)) io.to(userRoom(recipientId)).emit('message:new', m);
+    if (!scheduledAt && isOnline(recipientId)) io.to(userRoom(recipientId)).emit('message:new', m);
 
     res.status(201).json(m);
   } catch (e) {
@@ -525,6 +711,8 @@ app.post('/api/messages/:conversationId/read', auth, async (req, res) => {
   const c = req.params.conversationId;
 
   try {
+    const privacy = await pool.query('SELECT read_receipts FROM user_privacy WHERE user_id=$1', [req.user.id]);
+    if (privacy.rows[0]?.read_receipts === false) return res.json({ ok: true });
     const conv = await pool.query(
       'SELECT user_a, user_b FROM conversations WHERE id=$1',
       [c]
@@ -564,25 +752,109 @@ app.post('/api/messages/:conversationId/read', auth, async (req, res) => {
   }
 });
 
-app.delete('/api/chats/:conversationId', auth, asyncRoute(async (req, res) => {
-  const c = req.params.conversationId;
-  const conv = await pool.query(
-    'SELECT user_a,user_b FROM conversations WHERE id=$1',
-    [c]
+app.delete('/api/messages/:messageId', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  if (!validUuid(messageId)) return res.status(400).json({ error: 'Invalid message.' });
+  const result = await pool.query(
+    'SELECT id,sender_id,recipient_id,conversation_id FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
+    [messageId, req.user.id]
   );
-  if (!conv.rows.length) return res.json({ ok: true });
-  const row = conv.rows[0];
-  if (String(row.user_a) !== String(req.user.id) && String(row.user_b) !== String(req.user.id)) {
-    return res.status(403).json({ error: 'Access denied.' });
+  if (!result.rows.length) return res.status(404).json({ error: 'Message not found.' });
+  const message = result.rows[0];
+  if (req.query.scope === 'everyone') {
+    if (String(message.sender_id) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'Only the sender can delete for everyone.' });
+    }
+    await pool.query('UPDATE messages SET deleted_at=NOW() WHERE id=$1', [messageId]);
+    io.to(userRoom(message.recipient_id)).emit('message:deleted', {
+      messageId,
+      conversationId: message.conversation_id
+    });
+    return res.json({ ok: true });
   }
   await pool.query(
-    `INSERT INTO conversation_deletions(user_id,conversation_id,deleted_before)
-     VALUES($1,$2,NOW())
-     ON CONFLICT(user_id,conversation_id)
-     DO UPDATE SET deleted_before=EXCLUDED.deleted_before`,
-    [req.user.id, c]
+    `INSERT INTO message_deletions(user_id,message_id)
+     VALUES($1,$2) ON CONFLICT(user_id,message_id) DO NOTHING`,
+    [req.user.id, messageId]
   );
   res.json({ ok: true });
+}));
+
+app.patch('/api/messages/:messageId', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  const body = String(req.body.body || '').trim();
+  const ciphertext = typeof req.body.ciphertext === 'string' ? req.body.ciphertext : null;
+  const encryptionVersion = Number(req.body.encryptionVersion || 0) || null;
+  const senderDeviceId = clean(req.body.senderDeviceId);
+  if (!validUuid(messageId) || !body || body.length > 10000 || ciphertext?.length > 30000) {
+    return res.status(400).json({ error: 'Enter a valid message.' });
+  }
+  const result = await pool.query(
+    `UPDATE messages SET body=$1,ciphertext=$2,encryption_version=$3,sender_device_id=$4,edited_at=NOW()
+     WHERE id=$5 AND sender_id=$6 AND kind='text' AND deleted_at IS NULL
+     RETURNING *`,
+    [
+      ciphertext ? '[Encrypted message]' : body,
+      ciphertext, encryptionVersion, senderDeviceId || null, messageId, req.user.id
+    ]
+  );
+  if (!result.rows.length) {
+    return res.status(400).json({ error: 'This message cannot be edited.' });
+  }
+  const updated = msg(result.rows[0]);
+  io.to(userRoom(updated.recipientId)).emit('message:updated', updated);
+  res.json(updated);
+}));
+
+app.post('/api/messages/:messageId/star', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  const found = await pool.query(
+    'SELECT id FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
+    [messageId, req.user.id]
+  );
+  if (!found.rows.length) return res.status(404).json({ error: 'Message not found.' });
+  const existing = await pool.query(
+    'DELETE FROM message_stars WHERE user_id=$1 AND message_id=$2 RETURNING message_id',
+    [req.user.id, messageId]
+  );
+  const starred = !existing.rows.length;
+  if (starred) {
+    await pool.query(
+      'INSERT INTO message_stars(user_id,message_id) VALUES($1,$2)',
+      [req.user.id, messageId]
+    );
+  }
+  res.json({ starred });
+}));
+
+app.post('/api/messages/:messageId/reaction', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  const emoji = clean(req.body.emoji);
+  if (!validUuid(messageId) || !emoji || emoji.length > 16) {
+    return res.status(400).json({ error: 'Invalid reaction.' });
+  }
+  const found = await pool.query(
+    'SELECT sender_id,recipient_id,conversation_id FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
+    [messageId, req.user.id]
+  );
+  if (!found.rows.length) return res.status(404).json({ error: 'Message not found.' });
+  await pool.query(
+    `INSERT INTO message_reactions(user_id,message_id,emoji) VALUES($1,$2,$3)
+     ON CONFLICT(user_id,message_id) DO UPDATE SET emoji=EXCLUDED.emoji,created_at=NOW()`,
+    [req.user.id, messageId, emoji]
+  );
+  const message = found.rows[0];
+  const peerId = String(message.sender_id) === String(req.user.id)
+    ? message.recipient_id
+    : message.sender_id;
+  const payload = {
+    messageId,
+    conversationId: message.conversation_id,
+    userId: String(req.user.id),
+    emoji
+  };
+  io.to(userRoom(peerId)).emit('message:reaction', payload);
+  res.json(payload);
 }));
 
 app.post('/api/profile/avatar', auth, uploadRateLimit, upload.single('file'), asyncRoute(async (req, res) => {
@@ -676,9 +948,25 @@ io.on('connection', async socket => {
     io.to(userRoom(recipientId)).emit('typing:stop', { userId });
   });
 
-  socket.on('call:offer', ({ recipientId, offer, callType } = {}) => {
+  socket.on('call:offer', async ({ recipientId, offer, callType } = {}) => {
     if (!validUuid(recipientId) || !offer || !['audio', 'video'].includes(callType)) return;
-    if (!isOnline(recipientId)) return socket.emit('call:unavailable');
+    if (await usersBlocked(userId, recipientId)) return socket.emit('call:unavailable');
+    const privacy = await pool.query(
+      `SELECT p.silence_unknown_calls,
+        EXISTS(SELECT 1 FROM conversations c WHERE c.id=$2) known
+       FROM user_privacy p WHERE p.user_id=$1`,
+      [recipientId, cid(userId, recipientId)]
+    ).catch(() => ({ rows: [] }));
+    if (privacy.rows[0]?.silence_unknown_calls && !privacy.rows[0]?.known) {
+      return socket.emit('call:unavailable');
+    }
+    const available = isOnline(recipientId);
+    await pool.query(
+      `INSERT INTO call_history(caller_id,recipient_id,call_type,status,ended_at)
+       VALUES($1,$2,$3,$4,$5)`,
+      [userId, recipientId, callType, available ? 'ringing' : 'missed', available ? null : new Date()]
+    ).catch(() => {});
+    if (!available) return socket.emit('call:unavailable');
 
     io.to(userRoom(recipientId)).emit('call:incoming', {
       callerId: userId,
@@ -688,8 +976,13 @@ io.on('connection', async socket => {
     });
   });
 
-  socket.on('call:answer', ({ callerId, answer } = {}) => {
+  socket.on('call:answer', async ({ callerId, answer } = {}) => {
     if (!validUuid(callerId) || !answer) return;
+    await pool.query(
+      `UPDATE call_history SET status='answered',answered_at=NOW()
+       WHERE id=(SELECT id FROM call_history WHERE caller_id=$1 AND recipient_id=$2 AND status='ringing' ORDER BY started_at DESC LIMIT 1)`,
+      [callerId, userId]
+    ).catch(() => {});
     io.to(userRoom(callerId)).emit('call:answer', { answer, peerId: userId });
   });
 
@@ -698,9 +991,26 @@ io.on('connection', async socket => {
     io.to(userRoom(recipientId)).emit('call:ice-candidate', { candidate, peerId: userId });
   });
 
-  socket.on('call:end', ({ recipientId } = {}) => {
+  socket.on('call:end', async ({ recipientId } = {}) => {
     if (!validUuid(recipientId)) return;
+    await pool.query(
+      `UPDATE call_history SET status=CASE WHEN status='ringing' THEN 'missed' ELSE 'completed' END,ended_at=NOW()
+       WHERE id=(SELECT id FROM call_history
+         WHERE ((caller_id=$1 AND recipient_id=$2) OR (caller_id=$2 AND recipient_id=$1))
+           AND status IN('ringing','answered') ORDER BY started_at DESC LIMIT 1)`,
+      [userId, recipientId]
+    ).catch(() => {});
     io.to(userRoom(recipientId)).emit('call:ended', { peerId: userId });
+  });
+
+  socket.on('call:decline', async ({ callerId } = {}) => {
+    if (!validUuid(callerId)) return;
+    await pool.query(
+      `UPDATE call_history SET status='declined',ended_at=NOW()
+       WHERE id=(SELECT id FROM call_history WHERE caller_id=$1 AND recipient_id=$2 AND status='ringing' ORDER BY started_at DESC LIMIT 1)`,
+      [callerId, userId]
+    ).catch(() => {});
+    io.to(userRoom(callerId)).emit('call:ended', { peerId: userId });
   });
 
   socket.on('disconnect', async () => {
@@ -717,11 +1027,27 @@ io.on('connection', async socket => {
   });
 });
 
+async function deliverScheduledMessages() {
+  const due = await pool.query(
+    `UPDATE messages SET sent_at=NOW()
+     WHERE id IN (
+       SELECT id FROM messages WHERE scheduled_at<=NOW() AND sent_at IS NULL AND deleted_at IS NULL
+       ORDER BY scheduled_at LIMIT 100 FOR UPDATE SKIP LOCKED)
+     RETURNING *`
+  );
+  due.rows.forEach(row => {
+    io.to(userRoom(row.recipient_id)).emit('message:new', msg(row));
+  });
+}
+
 init()
   .then(() => {
     server.listen(PORT, () => {
       console.log('SecureChat server running on ' + PORT);
     });
+    setInterval(() => deliverScheduledMessages().catch(error => {
+      console.error('scheduled delivery', error.message);
+    }), 15000);
   })
   .catch(e => {
     console.error('DB init failed', e);

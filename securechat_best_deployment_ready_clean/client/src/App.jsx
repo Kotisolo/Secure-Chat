@@ -2,17 +2,22 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
-  KeyRound, Copy, Camera, Trash2
+  KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
+  MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages, History, Bell,
+  Shield, Ban, Flag
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import {
-  E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage
+  E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage,
+  encryptAttachment, decryptAttachment
 } from './e2ee';
 
 const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢 😭 😡 👍 👎 🙏 🔥 ❤️ 🎉 ✅ 💯'.split(' ');
+
+const stickers = ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '👍', '🙏', '❤️', '🔥', '🎉'];
 
 const rtcConfig = {
   iceServers: [
@@ -97,6 +102,20 @@ export default function App() {
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [selectedMessage, setSelectedMessage] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [chatMenu, setChatMenu] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [messageSearch, setMessageSearch] = useState('');
+  const [searchingMessages, setSearchingMessages] = useState(false);
+  const [showScheduler, setShowScheduler] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState('');
+  const [translations, setTranslations] = useState({});
+  const [attachmentUrls, setAttachmentUrls] = useState({});
+  const [callHistory, setCallHistory] = useState([]);
+  const [showCallHistory, setShowCallHistory] = useState(false);
+  const [privacy, setPrivacy] = useState(null);
 
   const [call, setCall] = useState({
     active: false,
@@ -116,6 +135,10 @@ export default function App() {
   // Media states shown on the call buttons
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [speakerVolume, setSpeakerVolume] = useState(0.7);
+  const [speakerMuted, setSpeakerMuted] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const pc = useRef(null);
   const localStream = useRef(null);
@@ -132,6 +155,10 @@ export default function App() {
   const socketReady = useRef(false);
   const activeRef = useRef(null);
   const pendingIce = useRef([]);
+  const mediaRecorder = useRef(null);
+  const recordingStream = useRef(null);
+  const recordingChunks = useRef([]);
+  const recordingTimer = useRef(null);
 
   useEffect(() => {
     if (!call.active) return undefined;
@@ -139,6 +166,18 @@ export default function App() {
     const frame = requestAnimationFrame(attachCallMedia);
     return () => cancelAnimationFrame(frame);
   }, [call.active, call.minimized, call.type]);
+
+  useEffect(() => {
+    if (remoteAudio.current) {
+      remoteAudio.current.volume = speakerMuted ? 0 : speakerVolume;
+    }
+  }, [speakerMuted, speakerVolume, call.active]);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -303,6 +342,9 @@ export default function App() {
         if (current.some(existing => existing.id === displayMessage.id)) return p;
         return { ...p, [c]: [...current, displayMessage] };
       });
+      if (document.hidden || String(activeRef.current?.id) !== String(other)) {
+        showNotification('New SecureChat message', displayMessage.kind === 'text' ? displayMessage.body : `New ${displayMessage.kind}`);
+      }
 
       loadChats();
 
@@ -330,11 +372,40 @@ export default function App() {
       setMessages(p => updateReceipt(p, d.conversationId, 'readAt', d.readAt));
     });
 
+    s.on('message:deleted', d => {
+      setMessages(current => ({
+        ...current,
+        [d.conversationId]: (current[d.conversationId] || []).filter(message => message.id !== d.messageId)
+      }));
+    });
+
+    s.on('message:reaction', applyReaction);
+
+    s.on('message:updated', async message => {
+      let displayMessage = message;
+      if (E2EE_ENABLED && message.ciphertext) {
+        try {
+          displayMessage = await decryptMessage(message, message.conversationId);
+        } catch {
+          displayMessage = { ...message, body: 'Unable to decrypt this edited message.' };
+        }
+      }
+      setMessages(current => ({
+        ...current,
+        [message.conversationId]: (current[message.conversationId] || []).map(existing => (
+          existing.id === message.id ? { ...existing, ...displayMessage } : existing
+        ))
+      }));
+    });
+
     s.on('user:online', loadChats);
     s.on('user:offline', loadChats);
 
     // Incoming call: show a non-blocking card instead of a popup
-    s.on('call:incoming', d => setIncoming(d));
+    s.on('call:incoming', d => {
+      setIncoming(d);
+      showNotification(`Incoming ${d.callType} call`, d.callerName);
+    });
 
     s.on('call:answer', async ({ answer }) => {
       if (!pc.current) return;
@@ -376,7 +447,16 @@ export default function App() {
     try {
       const d = await api('/api/chats');
 
-      setContacts(d.map(x => x.contact));
+      setContacts(d.map(x => ({
+        ...x.contact,
+        chat: {
+          pinned: x.pinned,
+          archived: x.archived,
+          mutedUntil: x.mutedUntil,
+          unreadCount: x.unreadCount,
+          disappearingSeconds: x.disappearingSeconds
+        }
+      })));
 
       setMessages(p => {
         const c = { ...p };
@@ -437,7 +517,7 @@ export default function App() {
       api('/api/messages/' + encodeURIComponent(c) + '/read', {
         method: 'POST',
         body: '{}'
-      }).catch(() => {});
+      }).then(loadChats).catch(() => {});
     } catch (e) {
       console.error(e);
       alert('Could not load chat: ' + e.message);
@@ -462,6 +542,10 @@ export default function App() {
       fileUrl: payload.fileUrl,
       fileName: payload.fileName,
       fileMime: payload.fileMime,
+      fileEncryption: payload.fileEncryption,
+      senderDeviceId: payload.senderDeviceId,
+      replyToId: payload.replyToId || replyTo?.id || null,
+      scheduledAt: payload.scheduledAt || (scheduledAt ? new Date(scheduledAt).toISOString() : null),
       createdAt: new Date().toISOString(),
       local: true
     };
@@ -472,9 +556,12 @@ export default function App() {
     }));
 
     setText('');
+    setReplyTo(null);
+    setScheduledAt('');
+    setShowScheduler(false);
 
     try {
-      const encryptedPayload = E2EE_ENABLED && tmp.kind === 'text'
+      const encryptedPayload = E2EE_ENABLED && ['text', 'sticker'].includes(tmp.kind)
         ? await encryptMessage(active.id, c, tmp.body)
         : {};
       const saved = await api('/api/messages', {
@@ -486,6 +573,10 @@ export default function App() {
           fileUrl: tmp.fileUrl,
           fileName: tmp.fileName,
           fileMime: tmp.fileMime,
+          fileEncryption: tmp.fileEncryption,
+          replyToId: tmp.replyToId,
+          scheduledAt: tmp.scheduledAt,
+          senderDeviceId: encryptedPayload.senderDeviceId || tmp.senderDeviceId,
           ...encryptedPayload
         })
       });
@@ -515,20 +606,22 @@ export default function App() {
     e.target.value = '';
 
     if (!fl || !active) return;
-    if (E2EE_ENABLED) {
-      alert('Encrypted attachments are not enabled in this beta yet. Send text only.');
-      return;
-    }
 
     try {
-      const up = await uploadFile(fl);
+      const conversationId = cid(me.id, active.id);
+      const encrypted = E2EE_ENABLED
+        ? await encryptAttachment(active.id, conversationId, fl)
+        : null;
+      const up = await uploadFile(encrypted?.file || fl);
 
       send({
-        body: kind === 'image' ? 'Photo' : up.name,
+        body: kind === 'image' ? 'Photo' : fl.name,
         kind: kind || (fl.type.startsWith('image/') ? 'image' : 'file'),
         fileUrl: up.url,
-        fileName: up.name,
-        fileMime: up.mime
+        fileName: fl.name,
+        fileMime: fl.type,
+        fileEncryption: encrypted?.fileEncryption,
+        senderDeviceId: encrypted?.senderDeviceId
       });
     } catch (e) {
       alert('Upload failed: ' + e.message);
@@ -552,22 +645,298 @@ export default function App() {
     }
   }
 
-  async function deleteChat() {
-    if (!active || !me) return;
-    if (!confirm(`Delete your chat with ${active.username}? This will only remove it from your account.`)) return;
-
+  async function deleteMessage(scope = 'me') {
+    if (!selectedMessage || !active || !me) return;
     const conversationId = cid(me.id, active.id);
+    const messageId = selectedMessage.id;
     try {
-      await api('/api/chats/' + encodeURIComponent(conversationId), { method: 'DELETE' });
-      setMessages(current => {
-        const next = { ...current };
-        delete next[conversationId];
-        return next;
-      });
-      setContacts(current => current.filter(contact => String(contact.id) !== String(active.id)));
-      setActive(null);
+      if (!String(messageId).startsWith('tmp')) {
+        await api(
+          '/api/messages/' + encodeURIComponent(messageId) + (scope === 'everyone' ? '?scope=everyone' : ''),
+          { method: 'DELETE' }
+        );
+      }
+      setMessages(current => ({
+        ...current,
+        [conversationId]: (current[conversationId] || []).filter(message => message.id !== messageId)
+      }));
+      setSelectedMessage(null);
+      loadChats();
     } catch (error) {
-      alert('Could not delete chat: ' + error.message);
+      alert('Could not delete message: ' + error.message);
+    }
+  }
+
+  async function requestNotifications() {
+    if (!('Notification' in window)) return alert('Notifications are not supported by this browser.');
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') alert('Notifications remain disabled. You can enable them from the browser site settings.');
+  }
+
+  async function loadCallHistory() {
+    try {
+      setCallHistory(await api('/api/calls'));
+      setShowCallHistory(true);
+    } catch (error) {
+      alert('Could not load call history: ' + error.message);
+    }
+  }
+
+  async function openPrivacy() {
+    try {
+      setPrivacy(await api('/api/privacy'));
+    } catch (error) {
+      alert('Could not load privacy settings: ' + error.message);
+    }
+  }
+
+  async function savePrivacy(next) {
+    setPrivacy(next);
+    try {
+      await api('/api/privacy', { method: 'PATCH', body: JSON.stringify(next) });
+    } catch (error) {
+      alert('Could not save privacy settings: ' + error.message);
+    }
+  }
+
+  async function blockProfile() {
+    if (!profile || !confirm(`Block ${profile.username}? They will not be able to message or call you.`)) return;
+    await api(`/api/users/${profile.id}/block`, { method: 'POST', body: '{}' });
+    setProfile(null);
+    setActive(null);
+    loadChats();
+  }
+
+  async function reportProfile() {
+    if (!profile) return;
+    const reason = prompt('Why are you reporting this user?');
+    if (!reason) return;
+    await api(`/api/users/${profile.id}/report`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    });
+    alert('Report submitted.');
+  }
+
+  async function unblockUser(userId) {
+    await api(`/api/users/${userId}/block`, { method: 'DELETE' });
+    setPrivacy(current => ({
+      ...current,
+      blockedUsers: (current.blockedUsers || []).filter(user => user.id !== userId)
+    }));
+  }
+
+  function showNotification(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    navigator.serviceWorker?.ready
+      .then(registration => registration.showNotification(title, {
+        body,
+        tag: title
+      }))
+      .catch(() => new Notification(title, { body }));
+  }
+
+  async function updateChatPreference(contact, changes) {
+    const conversationId = cid(me.id, contact.id);
+    const current = contact.chat || {};
+    try {
+      await api(`/api/chats/${encodeURIComponent(conversationId)}/preferences`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          pinned: Boolean(current.pinned),
+          archived: Boolean(current.archived),
+          mutedUntil: current.mutedUntil || null,
+          disappearingSeconds: current.disappearingSeconds || 0,
+          ...changes
+        })
+      });
+      setChatMenu(null);
+      await loadChats();
+    } catch (error) {
+      alert('Could not update chat: ' + error.message);
+    }
+  }
+
+  async function startVoiceRecording() {
+    if (!active || recording) return;
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      alert('Voice recording is not supported by this browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      const preferredTypes = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'];
+      const mimeType = preferredTypes.find(type => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recordingStream.current = stream;
+      recordingChunks.current = [];
+      mediaRecorder.current = recorder;
+      recorder.ondataavailable = event => {
+        if (event.data.size) recordingChunks.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        clearInterval(recordingTimer.current);
+        stream.getTracks().forEach(track => track.stop());
+        const type = recorder.mimeType || 'audio/webm';
+        const extension = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+        const blob = new Blob(recordingChunks.current, { type });
+        recordingChunks.current = [];
+        recordingStream.current = null;
+        if (!blob.size) return;
+        try {
+          const voiceFile = new File([blob], `voice-${Date.now()}.${extension}`, { type });
+          const conversationId = cid(me.id, active.id);
+          const encrypted = E2EE_ENABLED
+            ? await encryptAttachment(active.id, conversationId, voiceFile)
+            : null;
+          const uploaded = await uploadFile(encrypted?.file || voiceFile);
+          await send({
+            body: 'Voice message',
+            kind: 'audio',
+            fileUrl: uploaded.url,
+            fileName: voiceFile.name,
+            fileMime: voiceFile.type,
+            fileEncryption: encrypted?.fileEncryption,
+            senderDeviceId: encrypted?.senderDeviceId
+          });
+        } catch (error) {
+          alert('Voice message failed: ' + error.message);
+        }
+      };
+      recorder.start(250);
+      setRecording(true);
+      setRecordingSeconds(0);
+      recordingTimer.current = setInterval(() => setRecordingSeconds(value => value + 1), 1000);
+    } catch (error) {
+      alert(mediaErrorMessage(error, 'audio'));
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (mediaRecorder.current?.state === 'recording') mediaRecorder.current.stop();
+    mediaRecorder.current = null;
+    setRecording(false);
+    setRecordingSeconds(0);
+  }
+
+  function beginReply() {
+    setReplyTo(selectedMessage);
+    setSelectedMessage(null);
+  }
+
+  async function copyMessage() {
+    await navigator.clipboard.writeText(selectedMessage?.body || '');
+    setSelectedMessage(null);
+  }
+
+  async function toggleStar() {
+    if (!selectedMessage || String(selectedMessage.id).startsWith('tmp')) return;
+    try {
+      const result = await api(`/api/messages/${encodeURIComponent(selectedMessage.id)}/star`, {
+        method: 'POST',
+        body: '{}'
+      });
+      const c = cid(me.id, active.id);
+      setMessages(current => ({
+        ...current,
+        [c]: (current[c] || []).map(message => (
+          message.id === selectedMessage.id ? { ...message, starred: result.starred } : message
+        ))
+      }));
+      setSelectedMessage(null);
+    } catch (error) {
+      alert('Could not star message: ' + error.message);
+    }
+  }
+
+  async function reactToMessage(emojiValue) {
+    if (!selectedMessage || String(selectedMessage.id).startsWith('tmp')) return;
+    try {
+      const result = await api(`/api/messages/${encodeURIComponent(selectedMessage.id)}/reaction`, {
+        method: 'POST',
+        body: JSON.stringify({ emoji: emojiValue })
+      });
+      applyReaction(result);
+      setSelectedMessage(null);
+    } catch (error) {
+      alert('Could not add reaction: ' + error.message);
+    }
+  }
+
+  function applyReaction({ conversationId, messageId, userId, emoji: emojiValue }) {
+    setMessages(current => ({
+      ...current,
+      [conversationId]: (current[conversationId] || []).map(message => {
+        if (message.id !== messageId) return message;
+        const reactions = (message.reactions || []).filter(reaction => String(reaction.userId) !== String(userId));
+        return { ...message, reactions: [...reactions, { userId, emoji: emojiValue }] };
+      })
+    }));
+  }
+
+  function beginEdit() {
+    setEditingMessage(selectedMessage);
+    setText(selectedMessage.body || '');
+    setSelectedMessage(null);
+  }
+
+  async function translateSelectedMessage() {
+    if (!selectedMessage?.body) return;
+    if (!globalThis.LanguageDetector || !globalThis.Translator) {
+      alert('Private on-device translation is available in supported desktop Chrome versions. It is not available in this browser yet.');
+      return;
+    }
+    const targetLanguage = prompt(
+      'Translate to language code (for example: en, es, hi, te, fr):',
+      (navigator.language || 'en').split('-')[0]
+    );
+    if (!targetLanguage) return;
+    try {
+      const detector = await globalThis.LanguageDetector.create();
+      const detected = await detector.detect(selectedMessage.body);
+      const sourceLanguage = detected[0]?.detectedLanguage;
+      if (!sourceLanguage) throw new Error('Language could not be detected.');
+      if (sourceLanguage === targetLanguage) {
+        setTranslations(current => ({ ...current, [selectedMessage.id]: selectedMessage.body }));
+      } else {
+        const translator = await globalThis.Translator.create({ sourceLanguage, targetLanguage });
+        const translated = await translator.translate(selectedMessage.body);
+        setTranslations(current => ({ ...current, [selectedMessage.id]: translated }));
+      }
+      setSelectedMessage(null);
+    } catch (error) {
+      alert('Translation failed: ' + error.message);
+    }
+  }
+
+  async function saveEdit() {
+    if (!editingMessage || !text.trim()) return;
+    const c = cid(me.id, active.id);
+    try {
+      const encryptedPayload = E2EE_ENABLED
+        ? await encryptMessage(active.id, c, text.trim())
+        : {};
+      const updated = await api(`/api/messages/${encodeURIComponent(editingMessage.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          body: text.trim(),
+          ...encryptedPayload
+        })
+      });
+      setMessages(current => ({
+        ...current,
+        [c]: (current[c] || []).map(message => (
+          message.id === editingMessage.id
+            ? { ...message, ...updated, body: text.trim() }
+            : message
+        ))
+      }));
+      setEditingMessage(null);
+      setText('');
+    } catch (error) {
+      alert('Could not edit message: ' + error.message);
     }
   }
 
@@ -730,7 +1099,7 @@ export default function App() {
     if (!d) return;
 
     setIncoming(null);
-    getSocket()?.emit('call:end', { recipientId: d.callerId });
+    getSocket()?.emit('call:decline', { callerId: d.callerId });
   }
 
   function startTimer() {
@@ -839,6 +1208,22 @@ export default function App() {
     active && me && active.id && me.id
       ? messages[cid(me.id, active.id)] || []
       : [];
+  const displayRows = messageSearch.trim()
+    ? rows.filter(message => (message.body || '').toLowerCase().includes(messageSearch.trim().toLowerCase()))
+    : rows;
+
+  useEffect(() => {
+    if (!active || !me) return;
+    const conversationId = cid(me.id, active.id);
+    rows.filter(message => message.fileEncryption && !attachmentUrls[message.id]).forEach(async message => {
+      try {
+        const url = await decryptAttachment(message, conversationId);
+        setAttachmentUrls(current => ({ ...current, [message.id]: url }));
+      } catch (error) {
+        console.error('Attachment decryption failed', error);
+      }
+    });
+  }, [active, rows, me]);
 
   if (screen !== 'app') {
     return (
@@ -943,28 +1328,62 @@ export default function App() {
           </div>
           <button className="icon" onClick={logout}><LogOut /></button>
           <button className="icon" onClick={createRecoveryCode} title="Create recovery code"><KeyRound /></button>
+          <button className="icon" onClick={requestNotifications} title="Enable notifications"><Bell /></button>
+          <button className="icon" onClick={loadCallHistory} title="Call history"><History /></button>
+          <button className="icon" onClick={openPrivacy} title="Privacy"><Shield /></button>
         </div>
 
         <div className="search">
           <Search />
           <input placeholder="Search name or phone" onChange={e => search(e.target.value)} />
         </div>
+        <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
+          <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
+        </button>
 
         <div className="list">
           {contacts.length === 0 && <p className="empty">Search a user to start chatting.</p>}
 
-          {contacts.map(u => {
+          {contacts.filter(u => Boolean(u.chat?.archived) === showArchived).map(u => {
             const c = me && u && u.id ? cid(me.id, u.id) : '';
             const p = messages[c]?.slice?.(-1)?.[0] || messages[c]?.preview || {};
 
             return (
-              <button className="chat" key={u.id} onClick={() => openChat(u)}>
+              <div className="chat" key={u.id}>
+                <button className="chatMain" onClick={() => openChat(u)}>
                 <Avatar user={u} />
                 <div>
-                  <b>{u.username}</b>
+                  <b>{u.chat?.pinned ? '📌 ' : ''}{u.username}</b>
                   <span>{p.body || u.phone}</span>
                 </div>
-              </button>
+                {u.chat?.unreadCount > 0 && <strong className="unreadBadge">{u.chat.unreadCount}</strong>}
+                </button>
+                <button className="chatMore" onClick={() => setChatMenu(chatMenu?.id === u.id ? null : u)}>
+                  <MoreVertical />
+                </button>
+                {chatMenu?.id === u.id && (
+                  <div className="chatMenu">
+                    <button onClick={() => updateChatPreference(u, { pinned: !u.chat?.pinned })}>
+                      <Pin /> {u.chat?.pinned ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button onClick={() => updateChatPreference(u, { archived: !u.chat?.archived })}>
+                      <Archive /> {u.chat?.archived ? 'Unarchive' : 'Archive'}
+                    </button>
+                    <button onClick={() => updateChatPreference(u, {
+                      mutedUntil: u.chat?.mutedUntil && new Date(u.chat.mutedUntil) > new Date()
+                        ? null
+                        : new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+                    })}>
+                      <BellOff /> {u.chat?.mutedUntil && new Date(u.chat.mutedUntil) > new Date() ? 'Unmute' : 'Mute 8 hours'}
+                    </button>
+                    <button onClick={() => updateChatPreference(u, {
+                      disappearingSeconds: u.chat?.disappearingSeconds ? 0 : 86400
+                    })}>
+                      <Timer /> {u.chat?.disappearingSeconds ? 'Turn off disappearing' : 'Disappear after 24h'}
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -999,30 +1418,114 @@ export default function App() {
 
               <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
               <button className="icon" onClick={() => startCall('video')}><Video /></button>
+              <button className="icon" onClick={() => setSearchingMessages(value => !value)}><Search /></button>
               <button className="icon" onClick={() => setProfile(active)}><User /></button>
-              <button className="icon deleteChat" onClick={deleteChat} title="Delete chat"><Trash2 /></button>
             </header>
 
+            {searchingMessages && (
+              <div className="messageSearch">
+                <Search />
+                <input autoFocus value={messageSearch} onChange={e => setMessageSearch(e.target.value)} placeholder="Search this chat" />
+                <button onClick={() => {
+                  setSearchingMessages(false);
+                  setMessageSearch('');
+                }}><X /></button>
+              </div>
+            )}
+
             <section className="msgs">
-              {rows.map(m => (
-                <div key={m.id} className={'bubble ' + (String(m.senderId) === String(me.id) ? 'mine' : 'theirs')}>
+              {displayRows.map(m => {
+                const repliedMessage = m.replyToId
+                  ? rows.find(row => row.id === m.replyToId)
+                  : null;
+                return (
+                <div
+                  key={m.id}
+                  className={'bubble messagePress ' + (String(m.senderId) === String(me.id) ? 'mine' : 'theirs')}
+                  onClick={() => setSelectedMessage(m)}
+                  title="Press to select this message"
+                >
+                  {repliedMessage && (
+                    <div className="replyPreview">
+                      <b>{String(repliedMessage.senderId) === String(me.id) ? 'You' : active.username}</b>
+                      <span>{repliedMessage.body}</span>
+                    </div>
+                  )}
                   {m.kind === 'image' && m.fileUrl ? (
-                    <img src={resolveFileUrl(m.fileUrl)} alt={m.fileName || 'Photo'} />
+                    <img src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))} alt={m.fileName || 'Photo'} />
                   ) : m.kind === 'file' && m.fileUrl ? (
-                    <a href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer">
+                    <a
+                      href={attachmentUrls[m.id] || (m.fileEncryption ? undefined : resolveFileUrl(m.fileUrl))}
+                      download={m.fileName}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={e => e.stopPropagation()}
+                    >
                       📎 {m.fileName || m.body}
                     </a>
+                  ) : m.kind === 'audio' && m.fileUrl ? (
+                    <audio
+                      className="voiceMessage"
+                      src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))}
+                      controls
+                      preload="metadata"
+                      onClick={e => e.stopPropagation()}
+                    />
+                  ) : m.kind === 'sticker' ? (
+                    <span className="stickerMessage">{m.body}</span>
                   ) : (
                     <span>{m.body}</span>
                   )}
+                  {translations[m.id] && <div className="translationText"><Languages /> {translations[m.id]}</div>}
 
                   <small>
+                    {m.starred ? '★ ' : ''}{m.editedAt ? 'edited · ' : ''}
+                    {m.scheduledAt && !m.sentAt ? `scheduled ${new Date(m.scheduledAt).toLocaleString()} · ` : ''}
+                    {m.expiresAt ? 'disappearing · ' : ''}
                     {t(m.createdAt)} {String(m.senderId) === String(me.id) ? receipt(m) : ''}
                   </small>
+                  {m.reactions?.length > 0 && (
+                    <div className="reactionRow">
+                      {m.reactions.map((reaction, index) => (
+                        <span key={`${reaction.userId}-${index}`}>{reaction.emoji}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
               <div ref={endRef} />
             </section>
+
+            {(replyTo || editingMessage) && (
+              <div className="composeContext">
+                <div>
+                  <b>{editingMessage ? 'Editing message' : `Replying to ${String(replyTo?.senderId) === String(me.id) ? 'yourself' : active.username}`}</b>
+                  <span>{editingMessage?.body || replyTo?.body}</span>
+                </div>
+                <button onClick={() => {
+                  setReplyTo(null);
+                  setEditingMessage(null);
+                  if (editingMessage) setText('');
+                }}><X /></button>
+              </div>
+            )}
+
+            {showScheduler && (
+              <div className="scheduleBar">
+                <CalendarClock />
+                <input
+                  type="datetime-local"
+                  min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                  value={scheduledAt}
+                  onChange={e => setScheduledAt(e.target.value)}
+                />
+                <button onClick={() => {
+                  setShowScheduler(false);
+                  setScheduledAt('');
+                }}><X /></button>
+              </div>
+            )}
 
             <footer className="compose">
               <button className="icon" onClick={() => setEmoji(!emoji)}><Smile /></button>
@@ -1042,19 +1545,38 @@ export default function App() {
                 <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
               </label>
 
-              <input
+              <button className="icon" onClick={() => setShowScheduler(value => !value)} title="Schedule message">
+                <CalendarClock />
+              </button>
+
+              {recording ? (
+                <div className="recordingStatus">
+                  <span />
+                  Recording {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
+                </div>
+              ) : <input
                 value={text}
                 onChange={e => {
                   setText(e.target.value);
                   emitTyping();
                 }}
                 onKeyDown={e => {
-                  if (e.key === 'Enter') send();
+                  if (e.key === 'Enter') editingMessage ? saveEdit() : send();
                 }}
-                placeholder="Message"
-              />
+                placeholder={editingMessage ? 'Edit message' : 'Message'}
+              />}
 
-              <button className="send" onClick={() => send()}><Send /></button>
+              <button
+                className={recording ? 'send recordingStop' : 'send'}
+                onClick={recording
+                  ? stopVoiceRecording
+                  : text.trim() || editingMessage
+                    ? editingMessage ? saveEdit : () => send()
+                    : startVoiceRecording}
+                title={recording ? 'Stop and send recording' : text.trim() || editingMessage ? 'Send message' : 'Record voice message'}
+              >
+                {recording ? <Square /> : text.trim() || editingMessage ? <Send /> : <Mic />}
+              </button>
             </footer>
 
             {emoji && (
@@ -1064,6 +1586,23 @@ export default function App() {
                     {e}
                   </button>
                 ))}
+                <div className="stickerDivider">Stickers</div>
+                {stickers.map(value => (
+                  <button
+                    className="stickerChoice"
+                    key={'sticker-' + value}
+                    onClick={() => {
+                      send({ body: value, kind: 'sticker' });
+                      setEmoji(false);
+                    }}
+                  >
+                    {value}
+                  </button>
+                ))}
+                <label className="gifUpload">
+                  GIF
+                  <input hidden type="file" accept="image/gif" onChange={e => file(e, 'image')} />
+                </label>
               </div>
             )}
           </>
@@ -1100,7 +1639,7 @@ export default function App() {
 
           {call.type === 'video' && (
             <div className="videoStage">
-              <video ref={remoteVideo} autoPlay playsInline />
+              <video ref={remoteVideo} autoPlay muted playsInline />
               <video ref={localVideo} autoPlay muted playsInline className="local" />
             </div>
           )}
@@ -1128,6 +1667,28 @@ export default function App() {
               </button>
             )}
 
+            <div className="speakerControl">
+              <button
+                className={speakerMuted ? 'off' : ''}
+                onClick={() => setSpeakerMuted(value => !value)}
+                title={speakerMuted ? 'Turn speaker on' : 'Mute speaker'}
+              >
+                {speakerMuted ? <VolumeX /> : <Volume2 />}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={speakerVolume}
+                aria-label="Speaker volume"
+                onChange={e => {
+                  setSpeakerVolume(Number(e.target.value));
+                  setSpeakerMuted(false);
+                }}
+              />
+            </div>
+
             <button className="danger" onClick={() => endCall()} title="End call">
               <PhoneOff />
             </button>
@@ -1140,7 +1701,7 @@ export default function App() {
       {call.active && call.minimized && (
         call.type === 'video' ? (
           <div className="mini videoMini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
-            <video ref={miniRemoteVideo} autoPlay playsInline />
+            <video ref={miniRemoteVideo} autoPlay muted playsInline />
             <video ref={miniLocalVideo} autoPlay muted playsInline className="miniLocalVideo" />
             <div className="miniOverlay">
               <b>{call.title}</b>
@@ -1181,6 +1742,99 @@ export default function App() {
         )
       )}
 
+      {selectedMessage && (
+        <div className="modal" onClick={() => setSelectedMessage(null)}>
+          <div className="messageMenu" onClick={e => e.stopPropagation()}>
+            <h3>Message actions</h3>
+            <div className="reactionPicker">
+              {['👍', '❤️', '😂', '😮', '😢', '🙏'].map(value => (
+                <button key={value} onClick={() => reactToMessage(value)}>{value}</button>
+              ))}
+            </div>
+            <div className="messageActionGrid">
+              <button onClick={beginReply}><Reply /> Reply</button>
+              <button onClick={copyMessage}><Copy /> Copy</button>
+              <button onClick={toggleStar}><Star /> {selectedMessage.starred ? 'Unstar' : 'Star'}</button>
+              {selectedMessage.kind === 'text' && (
+                <button onClick={translateSelectedMessage}><Languages /> Translate</button>
+              )}
+              {String(selectedMessage.senderId) === String(me?.id) && selectedMessage.kind === 'text' && (
+                <button onClick={beginEdit}><Pencil /> Edit</button>
+              )}
+              <button className="danger" onClick={() => deleteMessage('me')}><Trash2 /> Delete for me</button>
+              {String(selectedMessage.senderId) === String(me?.id) && (
+                <button className="danger" onClick={() => deleteMessage('everyone')}><Trash2 /> Delete for everyone</button>
+              )}
+            </div>
+            <button className="menuCancel" onClick={() => setSelectedMessage(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {showCallHistory && (
+        <div className="modal" onClick={() => setShowCallHistory(false)}>
+          <div className="historyCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => setShowCallHistory(false)}><X /></button>
+            <h2>Call history</h2>
+            <div className="historyList">
+              {callHistory.length === 0 && <p className="empty">No calls yet.</p>}
+              {callHistory.map(item => (
+                <div className="historyItem" key={item.id}>
+                  <div className="avatar">{initials(item.contactName)}</div>
+                  <div>
+                    <b>{item.contactName}</b>
+                    <small>{item.direction} · {item.type} · {item.status}</small>
+                    <small>{new Date(item.startedAt).toLocaleString()}</small>
+                  </div>
+                  {item.type === 'video' ? <Video /> : <Phone />}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {privacy && (
+        <div className="modal" onClick={() => setPrivacy(null)}>
+          <div className="privacyCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => setPrivacy(null)}><X /></button>
+            <h2>Privacy</h2>
+            {[
+              ['Last seen and online', 'lastSeenVisibility'],
+              ['Profile photo', 'profileVisibility'],
+              ['About', 'aboutVisibility']
+            ].map(([label, key]) => (
+              <label className="privacyRow" key={key}>
+                <span>{label}</span>
+                <select value={privacy[key]} onChange={e => savePrivacy({ ...privacy, [key]: e.target.value })}>
+                  <option value="everyone">Everyone</option>
+                  <option value="nobody">Nobody</option>
+                </select>
+              </label>
+            ))}
+            <label className="privacyRow">
+              <span>Read receipts</span>
+              <input type="checkbox" checked={privacy.readReceipts} onChange={e => savePrivacy({ ...privacy, readReceipts: e.target.checked })} />
+            </label>
+            <label className="privacyRow">
+              <span>Silence unknown calls</span>
+              <input type="checkbox" checked={privacy.silenceUnknownCalls} onChange={e => savePrivacy({ ...privacy, silenceUnknownCalls: e.target.checked })} />
+            </label>
+            {(privacy.blockedUsers || []).length > 0 && (
+              <div className="blockedList">
+                <b>Blocked users</b>
+                {privacy.blockedUsers.map(user => (
+                  <div key={user.id}>
+                    <span>{user.username}</span>
+                    <button onClick={() => unblockUser(user.id)}>Unblock</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {profile && (
         <div className="modal">
           <div className="profile">
@@ -1189,6 +1843,12 @@ export default function App() {
             <h2>{profile.username}</h2>
             <p>{profile.phone}</p>
             <small>{profile.about}</small>
+            {String(profile.id) !== String(me?.id) && (
+              <div className="profileSafety">
+                <button onClick={reportProfile}><Flag /> Report</button>
+                <button className="danger" onClick={blockProfile}><Ban /> Block</button>
+              </div>
+            )}
             {String(profile.id) === String(me?.id) && (
               <label className="profilePhoto">
                 <Camera />

@@ -161,13 +161,76 @@
 .copyRecovery{width:100%;height:48px;margin-bottom:10px;border-radius:14px;background:var(--panel3);color:white;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800}
 .avatar{background-size:cover;background-position:center;background-repeat:no-repeat}
 .avatarButton{cursor:pointer}
-.deleteChat{color:#ff9aae}
 .profilePhoto{position:static!important;width:100%;height:46px;margin-top:18px;border-radius:14px;background:var(--panel3);color:white;display:flex;align-items:center;justify-content:center;gap:8px;cursor:pointer;font-weight:800}
+.messagePress{cursor:pointer}
+.messagePress:active{filter:brightness(1.2)}
+.messageMenu{width:360px;max-width:92vw;padding:24px;border-radius:22px;background:var(--panel);border:1px solid var(--line);text-align:center}
+.messageMenu p{color:var(--muted)}
+.messageMenu>div{display:flex;gap:10px;margin-top:20px}
+.messageMenu button{flex:1;height:46px;border-radius:14px;background:var(--panel3);color:white;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px}
+.messageMenu .reactionPicker{display:flex;gap:6px;margin:14px 0}
+.messageMenu .reactionPicker button{height:42px;min-width:0;font-size:20px;padding:0}
+.messageMenu .messageActionGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}
+.messageMenu .messageActionGrid button{padding:0 8px}
+.messageMenu .menuCancel{width:100%;margin-top:10px}
+.replyPreview{margin:-4px -5px 8px;padding:7px 9px;border-left:3px solid var(--cyan);border-radius:8px;background:rgba(0,0,0,.2)}
+.replyPreview b,.replyPreview span{display:block;font-size:12px}
+.replyPreview span{opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reactionRow{display:flex;gap:3px;margin:5px 0 -7px}
+.reactionRow span{padding:2px 5px;border-radius:10px;background:var(--panel);font-size:14px}
+.composeContext{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-top:1px solid var(--line)}
+.composeContext>div{flex:1;min-width:0}
+.composeContext b,.composeContext span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.composeContext span{color:var(--muted);font-size:12px}
+.composeContext button{width:36px;height:36px;border-radius:11px;background:var(--panel3);color:white;display:grid;place-items:center}
+.voiceMessage{display:block;width:260px;max-width:62vw;height:42px}
+.recordingStatus{flex:1;height:48px;border-radius:24px;background:var(--panel3);display:flex;align-items:center;gap:9px;padding:0 16px;color:#ffb4c0;font-weight:800}
+.recordingStatus span{width:10px;height:10px;border-radius:50%;background:var(--red);animation:recordPulse 1s infinite}
+.recordingStop{background:var(--red)}
+@keyframes recordPulse{50%{opacity:.3}}
+.archiveToggle{margin:0 14px 8px;padding:9px 12px;border-radius:12px;background:transparent;color:var(--muted);display:flex;align-items:center;gap:8px}
+.chat{position:relative;padding:0}
+.chatMain{flex:1;min-width:0;display:flex;gap:12px;align-items:center;text-align:left;padding:13px;background:transparent;color:white}
+.chatMain>div:nth-child(2){flex:1;min-width:0}
+.chatMore{width:38px;height:38px;margin-right:6px;border-radius:12px;background:transparent;color:var(--muted);display:grid;place-items:center}
+.chatMenu{position:absolute;right:8px;top:48px;z-index:30;width:170px;padding:7px!important;border-radius:14px;background:var(--panel3);box-shadow:0 12px 35px rgba(0,0,0,.5)}
+.chatMenu button{width:100%;padding:9px;border-radius:9px;background:transparent;color:white;display:flex;align-items:center;gap:8px;text-align:left}
+.chatMenu button:hover{background:rgba(255,255,255,.08)}
+.unreadBadge{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--secondary);display:grid;place-items:center;font-size:12px}
+.messageSearch{display:flex;align-items:center;gap:9px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.messageSearch input{flex:1;height:42px;border:0;outline:0;border-radius:20px;background:var(--panel3);color:white;padding:0 14px}
+.messageSearch button{width:36px;height:36px;border-radius:11px;background:var(--panel3);color:white;display:grid;place-items:center}
+.scheduleBar{display:flex;align-items:center;gap:9px;padding:8px 14px;background:var(--panel);border-top:1px solid var(--line)}
+.scheduleBar input{flex:1;height:40px;border:0;border-radius:12px;background:var(--panel3);color:white;padding:0 12px;color-scheme:dark}
+.scheduleBar button{width:36px;height:36px;border-radius:11px;background:var(--panel3);color:white;display:grid;place-items:center}
+.stickerMessage{font-size:52px;line-height:1.1}
+.translationText{display:flex;align-items:flex-start;gap:5px;margin-top:7px;padding-top:7px;border-top:1px solid rgba(255,255,255,.18);font-size:13px}
+.translationText svg{width:15px;height:15px;flex-shrink:0}
+.stickerDivider{width:100%;flex-basis:100%;color:var(--muted);font-size:12px;font-weight:800}
+.emoji .stickerChoice{font-size:26px}
+.gifUpload{height:38px;padding:0 12px;border-radius:12px;background:var(--secondary);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;cursor:pointer}
+.historyCard{position:relative;width:480px;max-width:94vw;max-height:82vh;padding:24px;border-radius:24px;background:var(--panel);border:1px solid var(--line)}
+.historyClose{position:absolute;right:14px;top:14px;width:38px;height:38px;border-radius:12px;background:var(--panel3);color:white;display:grid;place-items:center}
+.historyList{max-height:65vh;overflow:auto}
+.historyItem{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line)}
+.historyItem>div:nth-child(2){flex:1;min-width:0}
+.historyItem small{display:block;color:var(--muted);text-transform:capitalize}
+.privacyCard{position:relative;width:440px;max-width:94vw;padding:24px;border-radius:24px;background:var(--panel);border:1px solid var(--line)}
+.privacyRow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.privacyRow select{height:38px;border:0;border-radius:10px;background:var(--panel3);color:white;padding:0 10px}
+.privacyRow input{width:20px;height:20px;accent-color:var(--secondary)}
+.profileSafety{display:flex;gap:10px;margin-top:18px}
+.profileSafety button{position:static!important;flex:1;width:auto!important;height:44px!important;border-radius:12px!important;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--panel3);color:white}
+.blockedList{margin-top:18px}
+.blockedList>div{display:flex;align-items:center;justify-content:space-between;padding:9px 0}
+.blockedList button{padding:8px 12px;border-radius:10px;background:var(--panel3);color:white}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}
 .callInfo{position:relative;z-index:2;margin-top:clamp(34px,10vh,100px);text-align:center}
 .callBtns{position:absolute;left:50%;bottom:max(28px,env(safe-area-inset-bottom));z-index:5;transform:translateX(-50%)}
+.speakerControl{position:relative}
+.speakerControl input{position:absolute;left:50%;bottom:66px;width:100px;transform:translateX(-50%);accent-color:var(--secondary)}
 .local{bottom:112px}
 .callAudio{display:none}
 .videoMini{width:280px;height:190px;padding:0;display:block;overflow:hidden;background:#000;border-color:rgba(255,255,255,.25)}
