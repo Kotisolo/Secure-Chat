@@ -221,6 +221,9 @@
 .privacyRow input{width:20px;height:20px;accent-color:var(--secondary)}
 .profileSafety{display:flex;gap:10px;margin-top:18px}
 .profileSafety button{position:static!important;flex:1;width:auto!important;height:44px!important;border-radius:12px!important;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--panel3);color:white}
+.blockedList{margin-top:18px}
+.blockedList>div{display:flex;align-items:center;justify-content:space-between;padding:9px 0}
+.blockedList button{padding:8px 12px;border-radius:10px;background:var(--panel3);color:white}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

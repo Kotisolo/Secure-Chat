@@ -718,6 +718,14 @@ export default function App() {
     alert('Report submitted.');
   }
 
+  async function unblockUser(userId) {
+    await api(`/api/users/${userId}/block`, { method: 'DELETE' });
+    setPrivacy(current => ({
+      ...current,
+      blockedUsers: (current.blockedUsers || []).filter(user => user.id !== userId)
+    }));
+  }
+
   function showNotification(title, body) {
     if (!('Notification' in window) || Notification.permission !== 'granted') return;
     navigator.serviceWorker?.ready
@@ -1812,6 +1820,17 @@ export default function App() {
               <span>Silence unknown calls</span>
               <input type="checkbox" checked={privacy.silenceUnknownCalls} onChange={e => savePrivacy({ ...privacy, silenceUnknownCalls: e.target.checked })} />
             </label>
+            {(privacy.blockedUsers || []).length > 0 && (
+              <div className="blockedList">
+                <b>Blocked users</b>
+                {privacy.blockedUsers.map(user => (
+                  <div key={user.id}>
+                    <span>{user.username}</span>
+                    <button onClick={() => unblockUser(user.id)}>Unblock</button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

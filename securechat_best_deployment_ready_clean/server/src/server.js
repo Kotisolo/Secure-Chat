@@ -364,13 +364,19 @@ app.get('/api/users', auth, asyncRoute(async (req, res) => {
 app.get('/api/privacy', auth, asyncRoute(async (req, res) => {
   await pool.query('INSERT INTO user_privacy(user_id) VALUES($1) ON CONFLICT DO NOTHING', [req.user.id]);
   const result = await pool.query('SELECT * FROM user_privacy WHERE user_id=$1', [req.user.id]);
+  const blocked = await pool.query(
+    `SELECT u.id,u.username FROM user_blocks b JOIN users u ON u.id=b.blocked_id
+     WHERE b.blocker_id=$1 ORDER BY b.created_at DESC`,
+    [req.user.id]
+  );
   const p = result.rows[0];
   res.json({
     lastSeenVisibility: p.last_seen_visibility,
     profileVisibility: p.profile_visibility,
     aboutVisibility: p.about_visibility,
     readReceipts: p.read_receipts,
-    silenceUnknownCalls: p.silence_unknown_calls
+    silenceUnknownCalls: p.silence_unknown_calls,
+    blockedUsers: blocked.rows.map(row => ({ id: String(row.id), username: row.username }))
   });
 }));
 
