@@ -45,3 +45,14 @@ npm run dev
 See `DEPLOYMENT.md` for GitHub, Render, Neon, and Vercel deployment steps.
 
 Experimental encryption work is documented in `E2EE.md`. It is disabled in production.
+
+## Password recovery
+
+SecureChat uses free one-time recovery codes instead of insecure phone-only resets:
+
+- New users receive a recovery code after registration.
+- Existing users create one from the key button after logging in.
+- The server stores only a bcrypt hash of the code.
+- A successful reset consumes the code and revokes existing sessions.
+
+Users must save the displayed code privately.

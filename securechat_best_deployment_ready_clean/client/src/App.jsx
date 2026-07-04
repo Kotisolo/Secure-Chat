@@ -1,9 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
-  Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle
+  Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
+  KeyRound, Copy
 } from 'lucide-react';
-import { api, uploadFile, setSession, getStoredUser, clearSession, API_URL } from './api';
+import {
+  api, uploadFile, setSession, getStoredUser, clearSession, resolveFileUrl
+} from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import {
   E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage
@@ -70,7 +73,10 @@ export default function App() {
   const [form, setForm] = useState({
     username: '',
     phone: '',
-    password: ''
+    password: '',
+    resetPhone: '',
+    recoveryCode: '',
+    resetPassword: ''
   });
 
   const [me, setMe] = useState(storedUser && storedUser.id ? storedUser : null);
@@ -96,6 +102,7 @@ export default function App() {
   const [incoming, setIncoming] = useState(null);
   const [callError, setCallError] = useState('');
   const [encryptionReady, setEncryptionReady] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
 
   // Media states shown on the call buttons
   const [micOn, setMicOn] = useState(true);
@@ -159,6 +166,7 @@ export default function App() {
       });
 
       setSession(d.token, d.user);
+      setRecoveryCode(d.recoveryCode || '');
       setMe(d.user);
       setScreen('app');
       setTimeout(() => enterApp(), 0);
@@ -191,6 +199,44 @@ export default function App() {
       setErr(x.message);
     } finally {
       setAuthLoading(false);
+    }
+  }
+
+  async function resetPassword(e) {
+    e.preventDefault();
+    setErr('');
+    setAuthLoading(true);
+
+    try {
+      await api('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: form.resetPhone,
+          recoveryCode: form.recoveryCode,
+          password: form.resetPassword
+        })
+      });
+      setAuthMode('login');
+      setForm(current => ({
+        ...current,
+        password: '',
+        resetPassword: '',
+        recoveryCode: ''
+      }));
+      setErr('Password changed. Please log in with your new password.');
+    } catch (error) {
+      setErr(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function createRecoveryCode() {
+    try {
+      const result = await api('/api/auth/recovery-code', { method: 'POST', body: '{}' });
+      setRecoveryCode(result.recoveryCode);
+    } catch (error) {
+      alert('Could not create recovery code: ' + error.message);
     }
   }
 
@@ -601,6 +647,7 @@ export default function App() {
     if (!d) return;
 
     setIncoming(null);
+    setRecoveryCode('');
 
     setCall({
       active: true,
@@ -762,6 +809,46 @@ export default function App() {
                   <button className="primary" disabled={authLoading}>
                     {authLoading ? 'Signing in…' : 'Login'}
                   </button>
+                  <button type="button" className="link" onClick={() => {
+                    setErr('');
+                    setAuthMode('reset');
+                  }}>
+                    Forgot password?
+                  </button>
+                </form>
+              )}
+
+              {authMode === 'reset' && (
+                <form onSubmit={resetPassword}>
+                  <input
+                    placeholder="Registered phone number"
+                    value={form.resetPhone}
+                    onChange={e => f('resetPhone', e.target.value)}
+                    required
+                  />
+                  <input
+                    placeholder="Recovery code"
+                    value={form.recoveryCode}
+                    onChange={e => f('recoveryCode', e.target.value.toUpperCase())}
+                    required
+                  />
+                  <input
+                    placeholder="New password"
+                    type="password"
+                    value={form.resetPassword}
+                    onChange={e => f('resetPassword', e.target.value)}
+                    minLength={8}
+                    required
+                  />
+                  <button className="primary" disabled={authLoading}>
+                    {authLoading ? 'Changing password…' : 'Reset Password'}
+                  </button>
+                  <button type="button" className="link" onClick={() => {
+                    setErr('');
+                    setAuthMode('login');
+                  }}>
+                    Back to login
+                  </button>
                 </form>
               )}
 
@@ -792,6 +879,7 @@ export default function App() {
             <small>{ready ? 'Online' : 'Offline'}</small>
           </div>
           <button className="icon" onClick={logout}><LogOut /></button>
+          <button className="icon" onClick={createRecoveryCode} title="Create recovery code"><KeyRound /></button>
         </div>
 
         <div className="search">
@@ -855,9 +943,9 @@ export default function App() {
               {rows.map(m => (
                 <div key={m.id} className={'bubble ' + (String(m.senderId) === String(me.id) ? 'mine' : 'theirs')}>
                   {m.kind === 'image' && m.fileUrl ? (
-                    <img src={API_URL + m.fileUrl} alt={m.fileName || 'Photo'} />
+                    <img src={resolveFileUrl(m.fileUrl)} alt={m.fileName || 'Photo'} />
                   ) : m.kind === 'file' && m.fileUrl ? (
-                    <a href={API_URL + m.fileUrl} target="_blank" rel="noreferrer">
+                    <a href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer">
                       📎 {m.fileName || m.body}
                     </a>
                   ) : (
@@ -1018,6 +1106,21 @@ export default function App() {
             <h2>Call permission needed</h2>
             <p>{callError}</p>
             <button className="primary" onClick={() => setCallError('')}>Got it</button>
+          </div>
+        </div>
+      )}
+
+      {recoveryCode && (
+        <div className="modal">
+          <div className="permissionCard recoveryCard" role="dialog" aria-modal="true">
+            <div className="badge small"><KeyRound /></div>
+            <h2>Save your recovery code</h2>
+            <p>This code is shown only now. Keep it private—you will need it if you forget your password.</p>
+            <code>{recoveryCode}</code>
+            <button className="copyRecovery" onClick={() => navigator.clipboard.writeText(recoveryCode)}>
+              <Copy /> Copy code
+            </button>
+            <button className="primary" onClick={() => setRecoveryCode('')}>I saved it</button>
           </div>
         </div>
       )}

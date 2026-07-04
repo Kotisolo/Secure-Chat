@@ -52,5 +52,5 @@ Redeploy after changing any `VITE_` variable.
 
 - Render's local filesystem is temporary. Move uploads to Cloudinary, S3, or another persistent object-storage service before relying on attachments.
 - A TURN service is required for reliable voice/video calls across mobile and restricted networks.
-- Password recovery is intentionally disabled until verified email or SMS recovery is configured.
+- Password recovery uses one-time recovery codes without SMS cost. Users must save their code securely.
 - Store secrets only in Render, Neon, and Vercel environment settings. Never commit `.env` files.

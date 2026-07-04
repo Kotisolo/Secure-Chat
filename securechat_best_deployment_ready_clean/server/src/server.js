@@ -50,7 +50,11 @@ const pool = new Pool({
   ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
 });
 
-app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' }
+}));
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '20mb' }));
 
@@ -87,6 +91,10 @@ const io = new Server(server, {
 
 function clean(v) {
   return typeof v === 'string' ? v.trim().replace(/[<>]/g, '') : '';
+}
+
+function generateRecoveryCode() {
+  return crypto.randomBytes(10).toString('hex').toUpperCase().match(/.{1,4}/g).join('-');
 }
 
 function isOnline(userId) {
@@ -134,13 +142,17 @@ function cid(a, b) {
 
 function sign(u) {
   return jwt.sign(
-    { id: String(u.id), username: u.username },
+    {
+      id: String(u.id),
+      username: u.username,
+      sv: Number(u.sessionVersion ?? u.session_version ?? 0)
+    },
     JWT_SECRET,
     { expiresIn: '30d' }
   );
 }
 
-function auth(req, res, next) {
+async function auth(req, res, next) {
   const h = req.headers.authorization || '';
 
   if (!h.startsWith('Bearer ')) {
@@ -148,8 +160,13 @@ function auth(req, res, next) {
   }
 
   try {
-    req.user = jwt.verify(h.slice(7), JWT_SECRET);
-    req.user.id = String(req.user.id);
+    const decoded = jwt.verify(h.slice(7), JWT_SECRET);
+    const result = await pool.query('SELECT session_version FROM users WHERE id=$1', [decoded.id]);
+    if (!result.rows.length || Number(decoded.sv || 0) !== Number(result.rows[0].session_version || 0)) {
+      return res.status(401).json({ error: 'Session expired. Please log in again.' });
+    }
+    req.user = decoded;
+    req.user.id = String(decoded.id);
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid session.' });
@@ -211,14 +228,22 @@ app.post('/api/auth/register', authRateLimit, async (req, res) => {
     }
 
     const hash = await bcrypt.hash(password, 12);
+    const recoveryCode = generateRecoveryCode();
+    const recoveryCodeHash = await bcrypt.hash(recoveryCode, 12);
 
     const r = await pool.query(
-      'INSERT INTO users(username,phone,password_hash) VALUES($1,$2,$3) RETURNING id,username,phone,about,avatar_url,last_seen',
-      [username, phone, hash]
+      `INSERT INTO users(username,phone,password_hash,recovery_code_hash,recovery_code_created_at)
+       VALUES($1,$2,$3,$4,NOW())
+       RETURNING id,username,phone,about,avatar_url,last_seen,session_version`,
+      [username, phone, hash, recoveryCodeHash]
     );
 
     const u = user(r.rows[0]);
-    res.status(201).json({ token: sign(u), user: u });
+    res.status(201).json({
+      token: sign({ ...u, sessionVersion: r.rows[0].session_version }),
+      user: u,
+      recoveryCode
+    });
   } catch (e) {
     console.error('register', e.message);
     res.status(500).json({ error: 'Registration failed.' });
@@ -240,18 +265,62 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
     await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [u.id]);
 
     const out = user(u);
-    res.json({ token: sign(out), user: out });
+    res.json({
+      token: sign({ ...out, sessionVersion: u.session_version }),
+      user: out
+    });
   } catch (e) {
     console.error('login', e.message);
     res.status(500).json({ error: 'Login failed.' });
   }
 });
 
-app.post('/api/auth/reset-password', authRateLimit, (req, res) => {
-  res.status(501).json({
-    error: 'Password reset is temporarily unavailable until phone or email verification is configured.'
-  });
-});
+app.post('/api/auth/reset-password', authRateLimit, asyncRoute(async (req, res) => {
+  const phone = clean(req.body.phone);
+  const recoveryCode = clean(req.body.recoveryCode).toUpperCase();
+  const password = String(req.body.password || '');
+
+  if (phone.length < 6 || !recoveryCode) {
+    return res.status(400).json({ error: 'Phone number and recovery code are required.' });
+  }
+  if (password.length < 8) {
+    return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+  }
+
+  const result = await pool.query(
+    'SELECT id,recovery_code_hash FROM users WHERE phone=$1',
+    [phone]
+  );
+  const account = result.rows[0];
+  const valid = account?.recovery_code_hash
+    ? await bcrypt.compare(recoveryCode, account.recovery_code_hash)
+    : false;
+
+  if (!valid) {
+    return res.status(400).json({ error: 'Invalid phone number or recovery code.' });
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  await pool.query(
+    `UPDATE users
+     SET password_hash=$1,recovery_code_hash=NULL,recovery_code_created_at=NULL,
+         session_version=session_version+1
+     WHERE id=$2`,
+    [passwordHash, account.id]
+  );
+
+  res.json({ ok: true });
+}));
+
+app.post('/api/auth/recovery-code', auth, asyncRoute(async (req, res) => {
+  const recoveryCode = generateRecoveryCode();
+  const recoveryCodeHash = await bcrypt.hash(recoveryCode, 12);
+  await pool.query(
+    'UPDATE users SET recovery_code_hash=$1,recovery_code_created_at=NOW() WHERE id=$2',
+    [recoveryCodeHash, req.user.id]
+  );
+  res.json({ recoveryCode });
+}));
 
 app.get('/api/users', auth, asyncRoute(async (req, res) => {
   const q = clean(req.query.q || '');
@@ -507,14 +576,19 @@ app.use((err, req, res, next) => {
   });
 });
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
   try {
     const token = socket.handshake.auth?.token;
 
     if (!token) return next(new Error('Auth required'));
 
-    socket.user = jwt.verify(token, JWT_SECRET);
-    socket.user.id = String(socket.user.id);
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const result = await pool.query('SELECT session_version FROM users WHERE id=$1', [decoded.id]);
+    if (!result.rows.length || Number(decoded.sv || 0) !== Number(result.rows[0].session_version || 0)) {
+      return next(new Error('Session expired'));
+    }
+    socket.user = decoded;
+    socket.user.id = String(decoded.id);
 
     next();
   } catch {
