@@ -716,6 +716,35 @@ app.post('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
   res.status(201).json({ ...event, payload: cleanPayloads[String(req.user.id)] });
 }));
 
+app.delete('/api/groups/:groupId/messages/:messageId', auth, asyncRoute(async (req, res) => {
+  const allowed = await pool.query(
+    `SELECT 1 FROM group_messages m JOIN group_members gm ON gm.group_id=m.group_id
+     WHERE m.id=$1 AND m.group_id=$2 AND gm.user_id=$3
+       AND (m.sender_id=$3 OR gm.role='admin')`,
+    [req.params.messageId, req.params.groupId, req.user.id]
+  );
+  if (!allowed.rows.length) return res.status(403).json({ error: 'You cannot delete this message.' });
+  await pool.query('UPDATE group_messages SET deleted_at=NOW() WHERE id=$1', [req.params.messageId]);
+  io.to(groupRoom(req.params.groupId)).emit('group:message-deleted', {
+    groupId: req.params.groupId, messageId: req.params.messageId
+  });
+  res.json({ ok: true });
+}));
+
+app.post('/api/groups/:groupId/messages/:messageId/reaction', auth, asyncRoute(async (req, res) => {
+  const emoji = clean(req.body.emoji);
+  const member = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2', [req.params.groupId, req.user.id]);
+  if (!member.rows.length || !emoji || emoji.length > 16) return res.status(400).json({ error: 'Invalid reaction.' });
+  await pool.query(
+    `INSERT INTO group_message_reactions(message_id,user_id,emoji) VALUES($1,$2,$3)
+     ON CONFLICT(message_id,user_id) DO UPDATE SET emoji=$3,created_at=NOW()`,
+    [req.params.messageId, req.user.id, emoji]
+  );
+  const event = { groupId: req.params.groupId, messageId: req.params.messageId, userId: String(req.user.id), emoji };
+  io.to(groupRoom(req.params.groupId)).emit('group:reaction', event);
+  res.json(event);
+}));
+
 app.get('/api/chats', auth, asyncRoute(async (req, res) => {
   const r = await pool.query(
     `SELECT DISTINCT ON(m.conversation_id) 
@@ -1226,6 +1255,8 @@ io.on('connection', async socket => {
   sockets.add(socket.id);
   online.set(userId, sockets);
   socket.join(userRoom(userId));
+  const groupRooms = await pool.query('SELECT group_id FROM group_members WHERE user_id=$1', [userId]).catch(() => ({ rows: [] }));
+  groupRooms.rows.forEach(row => socket.join(groupRoom(row.group_id)));
 
   await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [userId]).catch(() => {});
 
