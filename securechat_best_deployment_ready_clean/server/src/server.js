@@ -179,6 +179,9 @@ function msg(m) {
     fileUrl: m.file_url,
     fileName: m.file_name,
     fileMime: m.file_mime,
+    ciphertext: m.ciphertext || null,
+    encryptionVersion: m.encryption_version || null,
+    senderDeviceId: m.sender_device_id || null,
     deliveredAt: m.delivered_at,
     readAt: m.read_at,
     createdAt: m.created_at
@@ -299,6 +302,52 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
   );
 }));
 
+app.post('/api/e2ee/devices', auth, asyncRoute(async (req, res) => {
+  const deviceId = clean(req.body.deviceId);
+  const fingerprint = clean(req.body.fingerprint);
+  const publicKeyJwk = req.body.publicKeyJwk;
+
+  if (!deviceId || deviceId.length > 100) return res.status(400).json({ error: 'Invalid device ID.' });
+  if (!/^[a-f0-9]{64}$/i.test(fingerprint)) return res.status(400).json({ error: 'Invalid key fingerprint.' });
+  if (!publicKeyJwk || publicKeyJwk.kty !== 'EC' || publicKeyJwk.crv !== 'P-256' || !publicKeyJwk.x || !publicKeyJwk.y) {
+    return res.status(400).json({ error: 'Invalid public key.' });
+  }
+
+  await pool.query(
+    `INSERT INTO user_devices(user_id,device_id,public_key_jwk,key_fingerprint,last_seen)
+     VALUES($1,$2,$3,$4,NOW())
+     ON CONFLICT(user_id,device_id) DO UPDATE
+     SET public_key_jwk=EXCLUDED.public_key_jwk,
+         key_fingerprint=EXCLUDED.key_fingerprint,
+         last_seen=NOW(),
+         revoked_at=NULL`,
+    [req.user.id, deviceId, publicKeyJwk, fingerprint]
+  );
+
+  res.json({ ok: true, deviceId, fingerprint });
+}));
+
+app.get('/api/e2ee/users/:userId/devices', auth, asyncRoute(async (req, res) => {
+  const targetId = req.params.userId;
+  if (!validUuid(targetId)) return res.status(400).json({ error: 'Invalid user.' });
+
+  const result = await pool.query(
+    `SELECT device_id,public_key_jwk,key_fingerprint,last_seen
+     FROM user_devices
+     WHERE user_id=$1 AND revoked_at IS NULL
+     ORDER BY last_seen DESC
+     LIMIT 10`,
+    [targetId]
+  );
+
+  res.json(result.rows.map(row => ({
+    deviceId: row.device_id,
+    publicKeyJwk: row.public_key_jwk,
+    fingerprint: row.key_fingerprint,
+    lastSeen: row.last_seen
+  })));
+}));
+
 app.get('/api/messages/:conversationId', auth, async (req, res) => {
   const c = req.params.conversationId;
 
@@ -340,6 +389,9 @@ app.post('/api/messages', auth, async (req, res) => {
   const fileUrl = req.body.fileUrl || null;
   const fileName = req.body.fileName || null;
   const fileMime = req.body.fileMime || null;
+  const ciphertext = typeof req.body.ciphertext === 'string' ? req.body.ciphertext : null;
+  const encryptionVersion = Number(req.body.encryptionVersion || 0) || null;
+  const senderDeviceId = clean(req.body.senderDeviceId);
 
   if (!recipientId) return res.status(400).json({ error: 'Recipient required.' });
   if (!validUuid(recipientId)) return res.status(400).json({ error: 'Invalid recipient.' });
@@ -347,6 +399,11 @@ app.post('/api/messages', auth, async (req, res) => {
   if (!body.trim() && !fileUrl) return res.status(400).json({ error: 'Message cannot be empty.' });
   if (body.length > 10000) return res.status(400).json({ error: 'Message is too long.' });
   if (!['text', 'image', 'file'].includes(kind)) return res.status(400).json({ error: 'Invalid message type.' });
+  if (ciphertext) {
+    if (encryptionVersion !== 1 || !senderDeviceId || ciphertext.length > 30000) {
+      return res.status(400).json({ error: 'Invalid encrypted message.' });
+    }
+  }
   if (fileUrl && (!String(fileUrl).startsWith('/uploads/') || !fileName)) {
     return res.status(400).json({ error: 'Invalid file attachment.' });
   }
@@ -365,8 +422,14 @@ app.post('/api/messages', auth, async (req, res) => {
     const delivered = isOnline(recipientId) ? new Date() : null;
 
     const r = await pool.query(
-      'INSERT INTO messages(conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,delivered_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *',
-      [c, req.user.id, recipientId, body || fileName || kind, kind, fileUrl, fileName, fileMime, delivered]
+      `INSERT INTO messages(
+        conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,delivered_at,
+        ciphertext,encryption_version,sender_device_id
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+      [
+        c, req.user.id, recipientId, ciphertext ? '[Encrypted message]' : (body || fileName || kind),
+        kind, fileUrl, fileName, fileMime, delivered, ciphertext, encryptionVersion, senderDeviceId || null
+      ]
     );
 
     const m = msg(r.rows[0]);
