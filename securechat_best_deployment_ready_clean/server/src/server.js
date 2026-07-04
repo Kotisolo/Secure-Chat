@@ -601,6 +601,45 @@ app.post('/api/groups', auth, asyncRoute(async (req, res) => {
   }
 }));
 
+app.patch('/api/groups/:groupId', auth, asyncRoute(async (req, res) => {
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can edit the group.' });
+  const name = clean(req.body.name);
+  if (name.length < 2) return res.status(400).json({ error: 'Group name must be at least 2 characters.' });
+  await pool.query('UPDATE chat_groups SET name=$1,description=$2,updated_at=NOW() WHERE id=$3', [name.slice(0, 120), clean(req.body.description).slice(0, 500), req.params.groupId]);
+  res.json({ ok: true });
+}));
+
+app.patch('/api/groups/:groupId/members/:userId/role', auth, asyncRoute(async (req, res) => {
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can change roles.' });
+  const role = req.body.role === 'admin' ? 'admin' : 'member';
+  await pool.query('UPDATE group_members SET role=$1 WHERE group_id=$2 AND user_id=$3', [role, req.params.groupId, req.params.userId]);
+  res.json({ role });
+}));
+
+app.post('/api/groups/:groupId/invite', auth, asyncRoute(async (req, res) => {
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can manage invite links.' });
+  const token = crypto.randomBytes(24).toString('base64url');
+  await pool.query('UPDATE chat_groups SET invite_token=$1,invite_enabled=TRUE WHERE id=$2', [token, req.params.groupId]);
+  res.json({ token });
+}));
+
+app.delete('/api/groups/:groupId/invite', auth, asyncRoute(async (req, res) => {
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can revoke invite links.' });
+  await pool.query('UPDATE chat_groups SET invite_token=NULL,invite_enabled=FALSE WHERE id=$1', [req.params.groupId]);
+  res.json({ ok: true });
+}));
+
+app.post('/api/groups/join/:token', auth, asyncRoute(async (req, res) => {
+  const group = await pool.query('SELECT id FROM chat_groups WHERE invite_token=$1 AND invite_enabled=TRUE', [req.params.token]);
+  if (!group.rows.length) return res.status(404).json({ error: 'Invite link is invalid or expired.' });
+  await pool.query('INSERT INTO group_members(group_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [group.rows[0].id, req.user.id]);
+  res.json({ groupId: String(group.rows[0].id) });
+}));
+
 app.post('/api/groups/:groupId/members', auth, asyncRoute(async (req, res) => {
   const groupId = req.params.groupId;
   const userId = clean(req.body.userId);
