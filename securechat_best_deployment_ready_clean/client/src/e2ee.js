@@ -221,3 +221,37 @@ export async function decryptAttachment(message, conversationId) {
   );
   return URL.createObjectURL(new Blob([decrypted], { type: message.fileMime || 'application/octet-stream' }));
 }
+
+export async function encryptGroupMessage(memberId, groupId, plaintext) {
+  const identity = await ensureE2EEIdentity();
+  const memberDevice = await getPeerDevice(memberId);
+  const key = await deriveMessageKey(identity, memberDevice, `group:${groupId}`);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv, additionalData: encoder.encode(`group:${groupId}`) },
+    key,
+    encoder.encode(plaintext)
+  );
+  return JSON.stringify({
+    iv: toBase64(iv),
+    data: toBase64(new Uint8Array(encrypted)),
+    senderDeviceId: identity.deviceId
+  });
+}
+
+export async function decryptGroupMessage(senderId, groupId, payload) {
+  const identity = await ensureE2EEIdentity();
+  const envelope = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  const senderDevice = await getPeerDevice(senderId, envelope.senderDeviceId);
+  const key = await deriveMessageKey(identity, senderDevice, `group:${groupId}`);
+  const plaintext = await crypto.subtle.decrypt(
+    {
+      name: 'AES-GCM',
+      iv: fromBase64(envelope.iv),
+      additionalData: encoder.encode(`group:${groupId}`)
+    },
+    key,
+    fromBase64(envelope.data)
+  );
+  return decoder.decode(plaintext);
+}
