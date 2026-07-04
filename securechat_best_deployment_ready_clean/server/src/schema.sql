@@ -45,6 +45,14 @@ CREATE TABLE IF NOT EXISTS message_reactions(
  emoji VARCHAR(16) NOT NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  PRIMARY KEY(user_id,message_id));
+CREATE TABLE IF NOT EXISTS chat_preferences(
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+ pinned BOOLEAN NOT NULL DEFAULT FALSE,
+ archived BOOLEAN NOT NULL DEFAULT FALSE,
+ muted_until TIMESTAMPTZ,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(user_id,conversation_id));
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id,created_at);

@@ -188,6 +188,18 @@
 .recordingStatus span{width:10px;height:10px;border-radius:50%;background:var(--red);animation:recordPulse 1s infinite}
 .recordingStop{background:var(--red)}
 @keyframes recordPulse{50%{opacity:.3}}
+.archiveToggle{margin:0 14px 8px;padding:9px 12px;border-radius:12px;background:transparent;color:var(--muted);display:flex;align-items:center;gap:8px}
+.chat{position:relative;padding:0}
+.chatMain{flex:1;min-width:0;display:flex;gap:12px;align-items:center;text-align:left;padding:13px;background:transparent;color:white}
+.chatMain>div:nth-child(2){flex:1;min-width:0}
+.chatMore{width:38px;height:38px;margin-right:6px;border-radius:12px;background:transparent;color:var(--muted);display:grid;place-items:center}
+.chatMenu{position:absolute;right:8px;top:48px;z-index:30;width:170px;padding:7px!important;border-radius:14px;background:var(--panel3);box-shadow:0 12px 35px rgba(0,0,0,.5)}
+.chatMenu button{width:100%;padding:9px;border-radius:9px;background:transparent;color:white;display:flex;align-items:center;gap:8px;text-align:left}
+.chatMenu button:hover{background:rgba(255,255,255,.08)}
+.unreadBadge{min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:var(--secondary);display:grid;place-items:center;font-size:12px}
+.messageSearch{display:flex;align-items:center;gap:9px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+.messageSearch input{flex:1;height:42px;border:0;outline:0;border-radius:20px;background:var(--panel3);color:white;padding:0 14px}
+.messageSearch button{width:36px;height:36px;border-radius:11px;background:var(--panel3);color:white;display:grid;place-items:center}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

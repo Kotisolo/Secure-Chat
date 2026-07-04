@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
-  KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square
+  KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
+  MoreVertical, Pin, Archive, BellOff
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -100,6 +101,10 @@ export default function App() {
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
+  const [chatMenu, setChatMenu] = useState(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [messageSearch, setMessageSearch] = useState('');
+  const [searchingMessages, setSearchingMessages] = useState(false);
 
   const [call, setCall] = useState({
     active: false,
@@ -419,7 +424,15 @@ export default function App() {
     try {
       const d = await api('/api/chats');
 
-      setContacts(d.map(x => x.contact));
+      setContacts(d.map(x => ({
+        ...x.contact,
+        chat: {
+          pinned: x.pinned,
+          archived: x.archived,
+          mutedUntil: x.mutedUntil,
+          unreadCount: x.unreadCount
+        }
+      })));
 
       setMessages(p => {
         const c = { ...p };
@@ -480,7 +493,7 @@ export default function App() {
       api('/api/messages/' + encodeURIComponent(c) + '/read', {
         method: 'POST',
         body: '{}'
-      }).catch(() => {});
+      }).then(loadChats).catch(() => {});
     } catch (e) {
       console.error(e);
       alert('Could not load chat: ' + e.message);
@@ -617,6 +630,26 @@ export default function App() {
       loadChats();
     } catch (error) {
       alert('Could not delete message: ' + error.message);
+    }
+  }
+
+  async function updateChatPreference(contact, changes) {
+    const conversationId = cid(me.id, contact.id);
+    const current = contact.chat || {};
+    try {
+      await api(`/api/chats/${encodeURIComponent(conversationId)}/preferences`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          pinned: Boolean(current.pinned),
+          archived: Boolean(current.archived),
+          mutedUntil: current.mutedUntil || null,
+          ...changes
+        })
+      });
+      setChatMenu(null);
+      await loadChats();
+    } catch (error) {
+      alert('Could not update chat: ' + error.message);
     }
   }
 
@@ -1036,6 +1069,9 @@ export default function App() {
     active && me && active.id && me.id
       ? messages[cid(me.id, active.id)] || []
       : [];
+  const displayRows = messageSearch.trim()
+    ? rows.filter(message => (message.body || '').toLowerCase().includes(messageSearch.trim().toLowerCase()))
+    : rows;
 
   if (screen !== 'app') {
     return (
@@ -1146,22 +1182,48 @@ export default function App() {
           <Search />
           <input placeholder="Search name or phone" onChange={e => search(e.target.value)} />
         </div>
+        <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
+          <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
+        </button>
 
         <div className="list">
           {contacts.length === 0 && <p className="empty">Search a user to start chatting.</p>}
 
-          {contacts.map(u => {
+          {contacts.filter(u => Boolean(u.chat?.archived) === showArchived).map(u => {
             const c = me && u && u.id ? cid(me.id, u.id) : '';
             const p = messages[c]?.slice?.(-1)?.[0] || messages[c]?.preview || {};
 
             return (
-              <button className="chat" key={u.id} onClick={() => openChat(u)}>
+              <div className="chat" key={u.id}>
+                <button className="chatMain" onClick={() => openChat(u)}>
                 <Avatar user={u} />
                 <div>
-                  <b>{u.username}</b>
+                  <b>{u.chat?.pinned ? '📌 ' : ''}{u.username}</b>
                   <span>{p.body || u.phone}</span>
                 </div>
-              </button>
+                {u.chat?.unreadCount > 0 && <strong className="unreadBadge">{u.chat.unreadCount}</strong>}
+                </button>
+                <button className="chatMore" onClick={() => setChatMenu(chatMenu?.id === u.id ? null : u)}>
+                  <MoreVertical />
+                </button>
+                {chatMenu?.id === u.id && (
+                  <div className="chatMenu">
+                    <button onClick={() => updateChatPreference(u, { pinned: !u.chat?.pinned })}>
+                      <Pin /> {u.chat?.pinned ? 'Unpin' : 'Pin'}
+                    </button>
+                    <button onClick={() => updateChatPreference(u, { archived: !u.chat?.archived })}>
+                      <Archive /> {u.chat?.archived ? 'Unarchive' : 'Archive'}
+                    </button>
+                    <button onClick={() => updateChatPreference(u, {
+                      mutedUntil: u.chat?.mutedUntil && new Date(u.chat.mutedUntil) > new Date()
+                        ? null
+                        : new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+                    })}>
+                      <BellOff /> {u.chat?.mutedUntil && new Date(u.chat.mutedUntil) > new Date() ? 'Unmute' : 'Mute 8 hours'}
+                    </button>
+                  </div>
+                )}
+              </div>
             );
           })}
         </div>
@@ -1196,11 +1258,23 @@ export default function App() {
 
               <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
               <button className="icon" onClick={() => startCall('video')}><Video /></button>
+              <button className="icon" onClick={() => setSearchingMessages(value => !value)}><Search /></button>
               <button className="icon" onClick={() => setProfile(active)}><User /></button>
             </header>
 
+            {searchingMessages && (
+              <div className="messageSearch">
+                <Search />
+                <input autoFocus value={messageSearch} onChange={e => setMessageSearch(e.target.value)} placeholder="Search this chat" />
+                <button onClick={() => {
+                  setSearchingMessages(false);
+                  setMessageSearch('');
+                }}><X /></button>
+              </div>
+            )}
+
             <section className="msgs">
-              {rows.map(m => {
+              {displayRows.map(m => {
                 const repliedMessage = m.replyToId
                   ? rows.find(row => row.id === m.replyToId)
                   : null;

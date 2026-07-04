@@ -349,10 +349,18 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
       CASE WHEN m.sender_id=$1 THEN ru.phone ELSE su.phone END contact_phone,
       CASE WHEN m.sender_id=$1 THEN ru.about ELSE su.about END contact_about,
       CASE WHEN m.sender_id=$1 THEN ru.avatar_url ELSE su.avatar_url END contact_avatar_url,
-      CASE WHEN m.sender_id=$1 THEN ru.last_seen ELSE su.last_seen END contact_last_seen
+      CASE WHEN m.sender_id=$1 THEN ru.last_seen ELSE su.last_seen END contact_last_seen,
+      COALESCE(cp.pinned,FALSE) pinned,
+      COALESCE(cp.archived,FALSE) archived,
+      cp.muted_until,
+      (SELECT COUNT(*)::int FROM messages unread
+       WHERE unread.conversation_id=m.conversation_id
+         AND unread.recipient_id=$1 AND unread.read_at IS NULL
+         AND unread.deleted_at IS NULL) unread_count
     FROM messages m
     JOIN users su ON su.id=m.sender_id
     JOIN users ru ON ru.id=m.recipient_id
+    LEFT JOIN chat_preferences cp ON cp.user_id=$1 AND cp.conversation_id=m.conversation_id
     WHERE (m.sender_id=$1 OR m.recipient_id=$1) AND m.deleted_at IS NULL
       AND NOT EXISTS (
         SELECT 1 FROM message_deletions md
@@ -373,10 +381,45 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
           avatar_url: x.contact_avatar_url,
           last_seen: x.contact_last_seen
         }),
-        lastMessage: msg(x)
+        lastMessage: msg(x),
+        pinned: x.pinned,
+        archived: x.archived,
+        mutedUntil: x.muted_until,
+        unreadCount: x.unread_count
       }))
-      .sort((a, b) => new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt))
+      .sort((a, b) => Number(b.pinned) - Number(a.pinned) ||
+        new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt))
   );
+}));
+
+app.patch('/api/chats/:conversationId/preferences', auth, asyncRoute(async (req, res) => {
+  const c = req.params.conversationId;
+  const conv = await pool.query('SELECT user_a,user_b FROM conversations WHERE id=$1', [c]);
+  if (!conv.rows.length) return res.status(404).json({ error: 'Chat not found.' });
+  const row = conv.rows[0];
+  if (String(row.user_a) !== String(req.user.id) && String(row.user_b) !== String(req.user.id)) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+  const pinned = Boolean(req.body.pinned);
+  const archived = Boolean(req.body.archived);
+  const mutedUntil = req.body.mutedUntil ? new Date(req.body.mutedUntil) : null;
+  if (mutedUntil && Number.isNaN(mutedUntil.getTime())) {
+    return res.status(400).json({ error: 'Invalid mute time.' });
+  }
+  const result = await pool.query(
+    `INSERT INTO chat_preferences(user_id,conversation_id,pinned,archived,muted_until)
+     VALUES($1,$2,$3,$4,$5)
+     ON CONFLICT(user_id,conversation_id) DO UPDATE
+     SET pinned=EXCLUDED.pinned,archived=EXCLUDED.archived,
+         muted_until=EXCLUDED.muted_until,updated_at=NOW()
+     RETURNING pinned,archived,muted_until`,
+    [req.user.id, c, pinned, archived, mutedUntil]
+  );
+  res.json({
+    pinned: result.rows[0].pinned,
+    archived: result.rows[0].archived,
+    mutedUntil: result.rows[0].muted_until
+  });
 }));
 
 app.post('/api/e2ee/devices', auth, asyncRoute(async (req, res) => {
