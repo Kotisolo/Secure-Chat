@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
-  KeyRound, Copy, Camera, Trash2
+  KeyRound, Copy, Camera, Trash2, Volume2, VolumeX
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -97,6 +97,7 @@ export default function App() {
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [selectedMessage, setSelectedMessage] = useState(null);
 
   const [call, setCall] = useState({
     active: false,
@@ -116,6 +117,8 @@ export default function App() {
   // Media states shown on the call buttons
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [speakerVolume, setSpeakerVolume] = useState(0.7);
+  const [speakerMuted, setSpeakerMuted] = useState(false);
 
   const pc = useRef(null);
   const localStream = useRef(null);
@@ -139,6 +142,12 @@ export default function App() {
     const frame = requestAnimationFrame(attachCallMedia);
     return () => cancelAnimationFrame(frame);
   }, [call.active, call.minimized, call.type]);
+
+  useEffect(() => {
+    if (remoteAudio.current) {
+      remoteAudio.current.volume = speakerMuted ? 0 : speakerVolume;
+    }
+  }, [speakerMuted, speakerVolume, call.active]);
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -552,22 +561,22 @@ export default function App() {
     }
   }
 
-  async function deleteChat() {
-    if (!active || !me) return;
-    if (!confirm(`Delete your chat with ${active.username}? This will only remove it from your account.`)) return;
-
+  async function deleteMessage() {
+    if (!selectedMessage || !active || !me) return;
     const conversationId = cid(me.id, active.id);
+    const messageId = selectedMessage.id;
     try {
-      await api('/api/chats/' + encodeURIComponent(conversationId), { method: 'DELETE' });
-      setMessages(current => {
-        const next = { ...current };
-        delete next[conversationId];
-        return next;
-      });
-      setContacts(current => current.filter(contact => String(contact.id) !== String(active.id)));
-      setActive(null);
+      if (!String(messageId).startsWith('tmp')) {
+        await api('/api/messages/' + encodeURIComponent(messageId), { method: 'DELETE' });
+      }
+      setMessages(current => ({
+        ...current,
+        [conversationId]: (current[conversationId] || []).filter(message => message.id !== messageId)
+      }));
+      setSelectedMessage(null);
+      loadChats();
     } catch (error) {
-      alert('Could not delete chat: ' + error.message);
+      alert('Could not delete message: ' + error.message);
     }
   }
 
@@ -1000,16 +1009,20 @@ export default function App() {
               <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
               <button className="icon" onClick={() => startCall('video')}><Video /></button>
               <button className="icon" onClick={() => setProfile(active)}><User /></button>
-              <button className="icon deleteChat" onClick={deleteChat} title="Delete chat"><Trash2 /></button>
             </header>
 
             <section className="msgs">
               {rows.map(m => (
-                <div key={m.id} className={'bubble ' + (String(m.senderId) === String(me.id) ? 'mine' : 'theirs')}>
+                <div
+                  key={m.id}
+                  className={'bubble messagePress ' + (String(m.senderId) === String(me.id) ? 'mine' : 'theirs')}
+                  onClick={() => setSelectedMessage(m)}
+                  title="Press to select this message"
+                >
                   {m.kind === 'image' && m.fileUrl ? (
                     <img src={resolveFileUrl(m.fileUrl)} alt={m.fileName || 'Photo'} />
                   ) : m.kind === 'file' && m.fileUrl ? (
-                    <a href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer">
+                    <a href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
                       📎 {m.fileName || m.body}
                     </a>
                   ) : (
@@ -1100,7 +1113,7 @@ export default function App() {
 
           {call.type === 'video' && (
             <div className="videoStage">
-              <video ref={remoteVideo} autoPlay playsInline />
+              <video ref={remoteVideo} autoPlay muted playsInline />
               <video ref={localVideo} autoPlay muted playsInline className="local" />
             </div>
           )}
@@ -1128,6 +1141,28 @@ export default function App() {
               </button>
             )}
 
+            <div className="speakerControl">
+              <button
+                className={speakerMuted ? 'off' : ''}
+                onClick={() => setSpeakerMuted(value => !value)}
+                title={speakerMuted ? 'Turn speaker on' : 'Mute speaker'}
+              >
+                {speakerMuted ? <VolumeX /> : <Volume2 />}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={speakerVolume}
+                aria-label="Speaker volume"
+                onChange={e => {
+                  setSpeakerVolume(Number(e.target.value));
+                  setSpeakerMuted(false);
+                }}
+              />
+            </div>
+
             <button className="danger" onClick={() => endCall()} title="End call">
               <PhoneOff />
             </button>
@@ -1140,7 +1175,7 @@ export default function App() {
       {call.active && call.minimized && (
         call.type === 'video' ? (
           <div className="mini videoMini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
-            <video ref={miniRemoteVideo} autoPlay playsInline />
+            <video ref={miniRemoteVideo} autoPlay muted playsInline />
             <video ref={miniLocalVideo} autoPlay muted playsInline className="miniLocalVideo" />
             <div className="miniOverlay">
               <b>{call.title}</b>
@@ -1179,6 +1214,19 @@ export default function App() {
             </button>
           </div>
         )
+      )}
+
+      {selectedMessage && (
+        <div className="modal" onClick={() => setSelectedMessage(null)}>
+          <div className="messageMenu" onClick={e => e.stopPropagation()}>
+            <h3>Delete this message?</h3>
+            <p>It will be removed only from your account.</p>
+            <div>
+              <button onClick={() => setSelectedMessage(null)}>Cancel</button>
+              <button className="danger" onClick={deleteMessage}><Trash2 /> Delete</button>
+            </div>
+          </div>
+        </div>
       )}
 
       {profile && (

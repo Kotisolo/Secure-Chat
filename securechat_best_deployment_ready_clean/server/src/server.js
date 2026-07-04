@@ -349,10 +349,9 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
     JOIN users su ON su.id=m.sender_id
     JOIN users ru ON ru.id=m.recipient_id
     WHERE (m.sender_id=$1 OR m.recipient_id=$1) AND m.deleted_at IS NULL
-      AND m.created_at > COALESCE(
-        (SELECT cd.deleted_before FROM conversation_deletions cd
-         WHERE cd.user_id=$1 AND cd.conversation_id=m.conversation_id),
-        '-infinity'::timestamptz)
+      AND NOT EXISTS (
+        SELECT 1 FROM message_deletions md
+        WHERE md.user_id=$1 AND md.message_id=m.id)
     ORDER BY m.conversation_id,m.created_at DESC`,
     [req.user.id]
   );
@@ -446,10 +445,9 @@ app.get('/api/messages/:conversationId', auth, async (req, res) => {
     const r = await pool.query(
       `SELECT * FROM messages
        WHERE conversation_id=$1 AND deleted_at IS NULL
-         AND created_at > COALESCE(
-           (SELECT deleted_before FROM conversation_deletions
-            WHERE user_id=$2 AND conversation_id=$1),
-           '-infinity'::timestamptz)
+         AND NOT EXISTS (
+           SELECT 1 FROM message_deletions md
+           WHERE md.user_id=$2 AND md.message_id=messages.id)
        ORDER BY created_at ASC LIMIT 500`,
       [c, req.user.id]
     );
@@ -564,23 +562,18 @@ app.post('/api/messages/:conversationId/read', auth, async (req, res) => {
   }
 });
 
-app.delete('/api/chats/:conversationId', auth, asyncRoute(async (req, res) => {
-  const c = req.params.conversationId;
-  const conv = await pool.query(
-    'SELECT user_a,user_b FROM conversations WHERE id=$1',
-    [c]
+app.delete('/api/messages/:messageId', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  if (!validUuid(messageId)) return res.status(400).json({ error: 'Invalid message.' });
+  const result = await pool.query(
+    'SELECT id FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
+    [messageId, req.user.id]
   );
-  if (!conv.rows.length) return res.json({ ok: true });
-  const row = conv.rows[0];
-  if (String(row.user_a) !== String(req.user.id) && String(row.user_b) !== String(req.user.id)) {
-    return res.status(403).json({ error: 'Access denied.' });
-  }
+  if (!result.rows.length) return res.status(404).json({ error: 'Message not found.' });
   await pool.query(
-    `INSERT INTO conversation_deletions(user_id,conversation_id,deleted_before)
-     VALUES($1,$2,NOW())
-     ON CONFLICT(user_id,conversation_id)
-     DO UPDATE SET deleted_before=EXCLUDED.deleted_before`,
-    [req.user.id, c]
+    `INSERT INTO message_deletions(user_id,message_id)
+     VALUES($1,$2) ON CONFLICT(user_id,message_id) DO NOTHING`,
+    [req.user.id, messageId]
   );
   res.json({ ok: true });
 }));

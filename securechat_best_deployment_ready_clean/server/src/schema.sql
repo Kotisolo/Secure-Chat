@@ -27,11 +27,11 @@ CREATE TABLE IF NOT EXISTS user_devices(
  last_seen TIMESTAMPTZ DEFAULT NOW(),
  revoked_at TIMESTAMPTZ,
  UNIQUE(user_id,device_id));
-CREATE TABLE IF NOT EXISTS conversation_deletions(
+CREATE TABLE IF NOT EXISTS message_deletions(
  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
- conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
- deleted_before TIMESTAMPTZ NOT NULL DEFAULT NOW(),
- PRIMARY KEY(user_id,conversation_id));
+ message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+ deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(user_id,message_id));
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id,created_at);
