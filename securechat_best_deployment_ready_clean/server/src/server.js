@@ -668,7 +668,9 @@ app.get('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
   if (!membership.rows.length) return res.status(403).json({ error: 'You are not a member of this group.' });
   const result = await pool.query(
     `SELECT m.id,m.group_id,m.sender_id,u.username sender_name,m.kind,m.reply_to_id,
-      m.created_at,m.edited_at,m.encrypted_payloads->$2 payload
+      m.created_at,m.edited_at,m.encrypted_payloads->$2 payload,
+      COALESCE((SELECT json_agg(json_build_object('userId',r.user_id::text,'emoji',r.emoji))
+        FROM group_message_reactions r WHERE r.message_id=m.id),'[]'::json) reactions
      FROM group_messages m JOIN users u ON u.id=m.sender_id
      WHERE m.group_id=$1 AND m.deleted_at IS NULL AND m.created_at>= $3
      ORDER BY m.created_at ASC LIMIT 500`,
@@ -677,7 +679,8 @@ app.get('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
   res.json(result.rows.map(row => ({
     id: String(row.id), groupId: String(row.group_id), senderId: String(row.sender_id),
     senderName: row.sender_name, kind: row.kind, replyToId: row.reply_to_id,
-    createdAt: row.created_at, editedAt: row.edited_at, payload: row.payload
+    createdAt: row.created_at, editedAt: row.edited_at, payload: row.payload,
+    reactions: row.reactions
   })));
 }));
 

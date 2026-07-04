@@ -124,6 +124,7 @@ export default function App() {
   const [groupMessages, setGroupMessages] = useState({});
   const [groupText, setGroupText] = useState('');
   const [groupInvite, setGroupInvite] = useState(null);
+  const [selectedGroupMessage, setSelectedGroupMessage] = useState(null);
   const selectedGroupRef = useRef(null);
 
   const [call, setCall] = useState({
@@ -551,6 +552,18 @@ export default function App() {
     setSelectedGroup((await api('/api/groups')).find(group => group.id === selectedGroup.id));
   }
 
+  async function reactGroupMessage(emoji) {
+    await api(`/api/groups/${selectedGroup.id}/messages/${selectedGroupMessage.id}/reaction`, {
+      method: 'POST', body: JSON.stringify({ emoji })
+    });
+    setSelectedGroupMessage(null);
+  }
+
+  async function deleteGroupMessage() {
+    await api(`/api/groups/${selectedGroup.id}/messages/${selectedGroupMessage.id}`, { method: 'DELETE' });
+    setSelectedGroupMessage(null);
+  }
+
   async function editGroup() {
     const name = prompt('Group name:', selectedGroup.name);
     if (!name) return;
@@ -558,6 +571,23 @@ export default function App() {
     await api(`/api/groups/${selectedGroup.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ name, description })
+    });
+    s.on('group:message-deleted', event => {
+      setGroupMessages(current => ({
+        ...current,
+        [event.groupId]: (current[event.groupId] || []).filter(message => message.id !== event.messageId)
+      }));
+    });
+    s.on('group:reaction', event => {
+      setGroupMessages(current => ({
+        ...current,
+        [event.groupId]: (current[event.groupId] || []).map(message => message.id !== event.messageId ? message : {
+          ...message,
+          reactions: [...(message.reactions || []).filter(reaction => reaction.userId !== event.userId), {
+            userId: event.userId, emoji: event.emoji
+          }]
+        })
+      }));
     });
     await loadGroups();
     setSelectedGroup(current => ({ ...current, name, description }));
@@ -2144,10 +2174,12 @@ export default function App() {
                   <div
                     className={'groupBubble ' + (String(message.senderId) === String(me.id) ? 'mine' : 'theirs')}
                     key={message.id}
+                    onClick={() => setSelectedGroupMessage(message)}
                   >
                     <b>{String(message.senderId) === String(me.id) ? 'You' : message.senderName}</b>
                     <span>{message.body}</span>
                     <small>{t(message.createdAt)}</small>
+                    {message.reactions?.length > 0 && <span>{message.reactions.map(reaction => reaction.emoji).join(' ')}</span>}
                   </div>
                 ))}
                 {(groupMessages[selectedGroup.id] || []).length === 0 && (
@@ -2181,6 +2213,23 @@ export default function App() {
               ))}
             </div>
             <button className="danger leaveGroup" onClick={() => removeGroupMember(me.id)}>Leave group</button>
+          </div>
+        </div>
+      )}
+
+      {selectedGroupMessage && (
+        <div className="modal" onClick={() => setSelectedGroupMessage(null)}>
+          <div className="messageMenu" onClick={e => e.stopPropagation()}>
+            <h3>Group message actions</h3>
+            <div className="reactionPicker">
+              {['👍', '❤️', '😂', '😮', '😢', '🙏'].map(emoji => (
+                <button key={emoji} onClick={() => reactGroupMessage(emoji)}>{emoji}</button>
+              ))}
+            </div>
+            {(selectedGroup.role === 'admin' || selectedGroupMessage.senderId === me.id) && (
+              <button className="danger menuCancel" onClick={deleteGroupMessage}><Trash2 /> Delete message</button>
+            )}
+            <button className="menuCancel" onClick={() => setSelectedGroupMessage(null)}>Cancel</button>
           </div>
         </div>
       )}
