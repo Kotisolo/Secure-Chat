@@ -64,3 +64,84 @@
   .incoming{left:10px;right:10px;top:10px;width:auto}
   .incoming .who{flex:1;min-width:0}
 }
+
+/* Keep the chat chrome visible when Android resizes the visual viewport. */
+.app,
+.side,
+.panel {
+  height: 100vh;
+  height: 100dvh;
+}
+
+.panel,
+.head,
+.msgs,
+.compose {
+  width: 100%;
+}
+
+.head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  padding-top: env(safe-area-inset-top);
+  height: calc(74px + env(safe-area-inset-top));
+  min-height: calc(74px + env(safe-area-inset-top));
+}
+
+.compose {
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  height: calc(76px + env(safe-area-inset-bottom));
+  min-height: calc(76px + env(safe-area-inset-bottom));
+}
+
+@media(max-width:900px){
+  html,
+  body,
+  #root {
+    height: 100%;
+    min-height: 100%;
+  }
+
+  .app,
+  .side,
+  .panel,
+  .panel.open {
+    height: 100vh !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+  }
+
+  .panel.open {
+    overflow: hidden;
+  }
+
+  .head {
+    flex: 0 0 auto;
+    height: calc(70px + env(safe-area-inset-top));
+    min-height: calc(70px + env(safe-area-inset-top));
+  }
+
+  .msgs {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .compose {
+    flex: 0 0 auto;
+    height: calc(72px + env(safe-area-inset-bottom));
+    min-height: calc(72px + env(safe-area-inset-bottom));
+  }
+}
+
+.primary:disabled {
+  cursor: wait;
+  opacity: .72;
+}
+
+.card .err {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 77, 109, .12);
+}
