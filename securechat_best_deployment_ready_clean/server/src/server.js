@@ -202,6 +202,9 @@ function msg(m) {
     senderDeviceId: m.sender_device_id || null,
     replyToId: m.reply_to_id ? String(m.reply_to_id) : null,
     editedAt: m.edited_at || null,
+    scheduledAt: m.scheduled_at || null,
+    sentAt: m.sent_at || null,
+    expiresAt: m.expires_at || null,
     starred: Boolean(m.starred),
     reactions: Array.isArray(m.reactions) ? m.reactions : [],
     deliveredAt: m.delivered_at,
@@ -353,6 +356,7 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
       COALESCE(cp.pinned,FALSE) pinned,
       COALESCE(cp.archived,FALSE) archived,
       cp.muted_until,
+      COALESCE(cp.disappearing_seconds,0) disappearing_seconds,
       (SELECT COUNT(*)::int FROM messages unread
        WHERE unread.conversation_id=m.conversation_id
          AND unread.recipient_id=$1 AND unread.read_at IS NULL
@@ -362,6 +366,7 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
     JOIN users ru ON ru.id=m.recipient_id
     LEFT JOIN chat_preferences cp ON cp.user_id=$1 AND cp.conversation_id=m.conversation_id
     WHERE (m.sender_id=$1 OR m.recipient_id=$1) AND m.deleted_at IS NULL
+      AND m.sent_at IS NOT NULL AND (m.expires_at IS NULL OR m.expires_at>NOW())
       AND NOT EXISTS (
         SELECT 1 FROM message_deletions md
         WHERE md.user_id=$1 AND md.message_id=m.id)
@@ -385,6 +390,7 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
         pinned: x.pinned,
         archived: x.archived,
         mutedUntil: x.muted_until,
+        disappearingSeconds: x.disappearing_seconds,
         unreadCount: x.unread_count
       }))
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) ||
@@ -403,22 +409,26 @@ app.patch('/api/chats/:conversationId/preferences', auth, asyncRoute(async (req,
   const pinned = Boolean(req.body.pinned);
   const archived = Boolean(req.body.archived);
   const mutedUntil = req.body.mutedUntil ? new Date(req.body.mutedUntil) : null;
+  const disappearingSeconds = [0, 86400, 604800, 7776000].includes(Number(req.body.disappearingSeconds))
+    ? Number(req.body.disappearingSeconds)
+    : 0;
   if (mutedUntil && Number.isNaN(mutedUntil.getTime())) {
     return res.status(400).json({ error: 'Invalid mute time.' });
   }
   const result = await pool.query(
-    `INSERT INTO chat_preferences(user_id,conversation_id,pinned,archived,muted_until)
-     VALUES($1,$2,$3,$4,$5)
+    `INSERT INTO chat_preferences(user_id,conversation_id,pinned,archived,muted_until,disappearing_seconds)
+     VALUES($1,$2,$3,$4,$5,$6)
      ON CONFLICT(user_id,conversation_id) DO UPDATE
      SET pinned=EXCLUDED.pinned,archived=EXCLUDED.archived,
-         muted_until=EXCLUDED.muted_until,updated_at=NOW()
-     RETURNING pinned,archived,muted_until`,
-    [req.user.id, c, pinned, archived, mutedUntil]
+         muted_until=EXCLUDED.muted_until,disappearing_seconds=EXCLUDED.disappearing_seconds,updated_at=NOW()
+     RETURNING pinned,archived,muted_until,disappearing_seconds`,
+    [req.user.id, c, pinned, archived, mutedUntil, disappearingSeconds]
   );
   res.json({
     pinned: result.rows[0].pinned,
     archived: result.rows[0].archived,
-    mutedUntil: result.rows[0].muted_until
+    mutedUntil: result.rows[0].muted_until,
+    disappearingSeconds: result.rows[0].disappearing_seconds
   });
 }));
 
@@ -498,6 +508,8 @@ app.get('/api/messages/:conversationId', auth, async (req, res) => {
            FROM message_reactions mr WHERE mr.message_id=m.id),'[]'::json) reactions
        FROM messages m
        WHERE m.conversation_id=$1 AND m.deleted_at IS NULL
+         AND (m.expires_at IS NULL OR m.expires_at>NOW())
+         AND (m.sent_at IS NOT NULL OR m.sender_id=$2)
          AND NOT EXISTS (
            SELECT 1 FROM message_deletions md
            WHERE md.user_id=$2 AND md.message_id=m.id)
@@ -523,6 +535,7 @@ app.post('/api/messages', auth, async (req, res) => {
   const encryptionVersion = Number(req.body.encryptionVersion || 0) || null;
   const senderDeviceId = clean(req.body.senderDeviceId);
   const replyToId = clean(req.body.replyToId);
+  const requestedSchedule = req.body.scheduledAt ? new Date(req.body.scheduledAt) : null;
 
   if (!recipientId) return res.status(400).json({ error: 'Recipient required.' });
   if (!validUuid(recipientId)) return res.status(400).json({ error: 'Invalid recipient.' });
@@ -539,6 +552,9 @@ app.post('/api/messages', auth, async (req, res) => {
     return res.status(400).json({ error: 'Invalid file attachment.' });
   }
   if (replyToId && !validUuid(replyToId)) return res.status(400).json({ error: 'Invalid reply.' });
+  if (requestedSchedule && (Number.isNaN(requestedSchedule.getTime()) || requestedSchedule <= new Date())) {
+    return res.status(400).json({ error: 'Choose a future delivery time.' });
+  }
 
   const c = cid(req.user.id, recipientId);
 
@@ -551,22 +567,32 @@ app.post('/api/messages', auth, async (req, res) => {
     const recipient = await pool.query('SELECT id FROM users WHERE id=$1', [recipientId]);
     if (!recipient.rows.length) return res.status(404).json({ error: 'Recipient not found.' });
 
-    const delivered = isOnline(recipientId) ? new Date() : null;
+    const scheduledAt = requestedSchedule || null;
+    const sentAt = scheduledAt ? null : new Date();
+    const delivered = !scheduledAt && isOnline(recipientId) ? new Date() : null;
+    const preference = await pool.query(
+      'SELECT disappearing_seconds FROM chat_preferences WHERE user_id=$1 AND conversation_id=$2',
+      [req.user.id, c]
+    );
+    const disappearingSeconds = Number(preference.rows[0]?.disappearing_seconds || 0);
+    const expiresAt = disappearingSeconds
+      ? new Date((scheduledAt || new Date()).getTime() + disappearingSeconds * 1000)
+      : null;
 
     const r = await pool.query(
       `INSERT INTO messages(
         conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,delivered_at,
-        ciphertext,encryption_version,sender_device_id,reply_to_id
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        ciphertext,encryption_version,sender_device_id,reply_to_id,scheduled_at,sent_at,expires_at
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [
         c, req.user.id, recipientId, ciphertext ? '[Encrypted message]' : (body || fileName || kind),
         kind, fileUrl, fileName, fileMime, delivered, ciphertext, encryptionVersion,
-        senderDeviceId || null, replyToId || null
+        senderDeviceId || null, replyToId || null, scheduledAt, sentAt, expiresAt
       ]
     );
 
     const m = msg(r.rows[0]);
-    if (isOnline(recipientId)) io.to(userRoom(recipientId)).emit('message:new', m);
+    if (!scheduledAt && isOnline(recipientId)) io.to(userRoom(recipientId)).emit('message:new', m);
 
     res.status(201).json(m);
   } catch (e) {
@@ -855,11 +881,27 @@ io.on('connection', async socket => {
   });
 });
 
+async function deliverScheduledMessages() {
+  const due = await pool.query(
+    `UPDATE messages SET sent_at=NOW()
+     WHERE id IN (
+       SELECT id FROM messages WHERE scheduled_at<=NOW() AND sent_at IS NULL AND deleted_at IS NULL
+       ORDER BY scheduled_at LIMIT 100 FOR UPDATE SKIP LOCKED)
+     RETURNING *`
+  );
+  due.rows.forEach(row => {
+    io.to(userRoom(row.recipient_id)).emit('message:new', msg(row));
+  });
+}
+
 init()
   .then(() => {
     server.listen(PORT, () => {
       console.log('SecureChat server running on ' + PORT);
     });
+    setInterval(() => deliverScheduledMessages().catch(error => {
+      console.error('scheduled delivery', error.message);
+    }), 15000);
   })
   .catch(e => {
     console.error('DB init failed', e);

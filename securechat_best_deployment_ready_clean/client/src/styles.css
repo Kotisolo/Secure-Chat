@@ -200,6 +200,9 @@
 .messageSearch{display:flex;align-items:center;gap:9px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
 .messageSearch input{flex:1;height:42px;border:0;outline:0;border-radius:20px;background:var(--panel3);color:white;padding:0 14px}
 .messageSearch button{width:36px;height:36px;border-radius:11px;background:var(--panel3);color:white;display:grid;place-items:center}
+.scheduleBar{display:flex;align-items:center;gap:9px;padding:8px 14px;background:var(--panel);border-top:1px solid var(--line)}
+.scheduleBar input{flex:1;height:40px;border:0;border-radius:12px;background:var(--panel3);color:white;padding:0 12px;color-scheme:dark}
+.scheduleBar button{width:36px;height:36px;border-radius:11px;background:var(--panel3);color:white;display:grid;place-items:center}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

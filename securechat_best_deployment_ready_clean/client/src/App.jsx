@@ -3,7 +3,7 @@ import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
-  MoreVertical, Pin, Archive, BellOff
+  MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -105,6 +105,8 @@ export default function App() {
   const [showArchived, setShowArchived] = useState(false);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingMessages, setSearchingMessages] = useState(false);
+  const [showScheduler, setShowScheduler] = useState(false);
+  const [scheduledAt, setScheduledAt] = useState('');
 
   const [call, setCall] = useState({
     active: false,
@@ -430,7 +432,8 @@ export default function App() {
           pinned: x.pinned,
           archived: x.archived,
           mutedUntil: x.mutedUntil,
-          unreadCount: x.unreadCount
+          unreadCount: x.unreadCount,
+          disappearingSeconds: x.disappearingSeconds
         }
       })));
 
@@ -519,6 +522,7 @@ export default function App() {
       fileName: payload.fileName,
       fileMime: payload.fileMime,
       replyToId: payload.replyToId || replyTo?.id || null,
+      scheduledAt: payload.scheduledAt || (scheduledAt ? new Date(scheduledAt).toISOString() : null),
       createdAt: new Date().toISOString(),
       local: true
     };
@@ -530,6 +534,8 @@ export default function App() {
 
     setText('');
     setReplyTo(null);
+    setScheduledAt('');
+    setShowScheduler(false);
 
     try {
       const encryptedPayload = E2EE_ENABLED && tmp.kind === 'text'
@@ -545,6 +551,7 @@ export default function App() {
           fileName: tmp.fileName,
           fileMime: tmp.fileMime,
           replyToId: tmp.replyToId,
+          scheduledAt: tmp.scheduledAt,
           ...encryptedPayload
         })
       });
@@ -643,6 +650,7 @@ export default function App() {
           pinned: Boolean(current.pinned),
           archived: Boolean(current.archived),
           mutedUntil: current.mutedUntil || null,
+          disappearingSeconds: current.disappearingSeconds || 0,
           ...changes
         })
       });
@@ -1221,6 +1229,11 @@ export default function App() {
                     })}>
                       <BellOff /> {u.chat?.mutedUntil && new Date(u.chat.mutedUntil) > new Date() ? 'Unmute' : 'Mute 8 hours'}
                     </button>
+                    <button onClick={() => updateChatPreference(u, {
+                      disappearingSeconds: u.chat?.disappearingSeconds ? 0 : 86400
+                    })}>
+                      <Timer /> {u.chat?.disappearingSeconds ? 'Turn off disappearing' : 'Disappear after 24h'}
+                    </button>
                   </div>
                 )}
               </div>
@@ -1311,6 +1324,8 @@ export default function App() {
 
                   <small>
                     {m.starred ? '★ ' : ''}{m.editedAt ? 'edited · ' : ''}
+                    {m.scheduledAt && !m.sentAt ? `scheduled ${new Date(m.scheduledAt).toLocaleString()} · ` : ''}
+                    {m.expiresAt ? 'disappearing · ' : ''}
                     {t(m.createdAt)} {String(m.senderId) === String(me.id) ? receipt(m) : ''}
                   </small>
                   {m.reactions?.length > 0 && (
@@ -1340,6 +1355,22 @@ export default function App() {
               </div>
             )}
 
+            {showScheduler && (
+              <div className="scheduleBar">
+                <CalendarClock />
+                <input
+                  type="datetime-local"
+                  min={new Date(Date.now() + 60000).toISOString().slice(0, 16)}
+                  value={scheduledAt}
+                  onChange={e => setScheduledAt(e.target.value)}
+                />
+                <button onClick={() => {
+                  setShowScheduler(false);
+                  setScheduledAt('');
+                }}><X /></button>
+              </div>
+            )}
+
             <footer className="compose">
               <button className="icon" onClick={() => setEmoji(!emoji)}><Smile /></button>
 
@@ -1357,6 +1388,10 @@ export default function App() {
                 <Camera />
                 <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
               </label>
+
+              <button className="icon" onClick={() => setShowScheduler(value => !value)} title="Schedule message">
+                <CalendarClock />
+              </button>
 
               {recording ? (
                 <div className="recordingStatus">
