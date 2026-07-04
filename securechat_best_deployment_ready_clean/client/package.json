@@ -9,6 +9,7 @@
     "dev": "vite --host 0.0.0.0",
     "build": "vite build",
     "build:matrix-poc": "vite build --config vite.matrix.config.js",
+    "build:matrix-test": "vite build --config vite.matrix-test.config.js",
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {

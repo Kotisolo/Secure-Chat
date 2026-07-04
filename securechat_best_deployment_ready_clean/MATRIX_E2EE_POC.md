@@ -42,3 +42,25 @@ Nothing imports, initializes, or connects to Matrix at runtime while the flag re
 The forced browser compatibility build passes with Vite. The Rust crypto chunk is approximately 7.7 MB uncompressed and 2.64 MB compressed, so production integration must keep it lazy-loaded.
 
 Dependency audit result: zero known vulnerabilities at the time of this proof of concept.
+
+## Hosted test page
+
+Because local hardware virtualization may be unavailable, the branch also contains an isolated `matrix-poc.html` test client for the free Matrix.org homeserver.
+
+The page:
+
+- accepts a Matrix ID and password only in browser memory
+- sends the credentials directly to Matrix.org
+- clears the password state immediately after login
+- initializes Matrix Rust Crypto with IndexedDB
+- creates private encrypted rooms
+- sends and receives encrypted Matrix messages
+- does not use SecureChat accounts, Neon, Render, or the production message API
+
+Build it with:
+
+```text
+npm run build:matrix-test
+```
+
+This remains a development tool. Matrix.org must not be treated as SecureChat's final production homeserver.

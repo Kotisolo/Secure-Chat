@@ -1,6 +1,7 @@
 **/node_modules/
 **/dist/
 **/dist-matrix-poc/
+**/dist-matrix-test/
 **/.env
 **/.env.*
 !**/.env.example
