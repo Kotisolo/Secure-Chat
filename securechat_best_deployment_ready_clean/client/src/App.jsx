@@ -125,6 +125,7 @@ export default function App() {
   const [groupText, setGroupText] = useState('');
   const [groupInvite, setGroupInvite] = useState(null);
   const [selectedGroupMessage, setSelectedGroupMessage] = useState(null);
+  const [groupRecording, setGroupRecording] = useState(false);
   const selectedGroupRef = useRef(null);
 
   const [call, setCall] = useState({
@@ -586,6 +587,52 @@ export default function App() {
     } catch (error) {
       alert('Encrypted group attachment failed: ' + error.message);
     }
+  }
+
+  async function startGroupVoiceRecording() {
+    if (groupRecording || !selectedGroup) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+      const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const chunks = [];
+      mediaRecorder.current = recorder;
+      recorder.ondataavailable = event => {
+        if (event.data.size) chunks.push(event.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        setGroupRecording(false);
+        const voice = new File([new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })],
+          `group-voice-${Date.now()}.webm`, { type: recorder.mimeType || 'audio/webm' });
+        try {
+          const entries = await Promise.all(selectedGroup.members.map(async member => {
+            const encrypted = await encryptAttachment(member.id, `group:${selectedGroup.id}`, voice);
+            const uploaded = await uploadFile(encrypted.file);
+            const content = JSON.stringify({
+              body: 'Voice message', kind: 'audio', fileUrl: uploaded.url,
+              fileName: voice.name, fileMime: voice.type,
+              fileEncryption: encrypted.fileEncryption, senderDeviceId: encrypted.senderDeviceId
+            });
+            return [member.id, await encryptGroupMessage(member.id, selectedGroup.id, content)];
+          }));
+          await api(`/api/groups/${selectedGroup.id}/messages`, {
+            method: 'POST', body: JSON.stringify({ kind: 'audio', payloads: Object.fromEntries(entries) })
+          });
+        } catch (error) {
+          alert('Group voice message failed: ' + error.message);
+        }
+      };
+      recorder.start(250);
+      setGroupRecording(true);
+    } catch (error) {
+      alert(mediaErrorMessage(error, 'audio'));
+    }
+  }
+
+  function stopGroupVoiceRecording() {
+    if (mediaRecorder.current?.state === 'recording') mediaRecorder.current.stop();
+    mediaRecorder.current = null;
   }
 
   async function reactGroupMessage(emoji) {
@@ -2219,6 +2266,8 @@ export default function App() {
                       <a href={message.mediaUrl} download={message.fileName} onClick={e => e.stopPropagation()}>
                         📎 {message.fileName}
                       </a>
+                    ) : message.kind === 'audio' && message.mediaUrl ? (
+                      <audio controls src={message.mediaUrl} onClick={e => e.stopPropagation()} />
                     ) : message.kind === 'sticker' ? (
                       <span className="stickerMessage">{message.body}</span>
                     ) : <span>{message.body}</span>}
@@ -2234,6 +2283,13 @@ export default function App() {
                 <label title="Photo"><Image /><input hidden type="file" accept="image/*" onChange={e => sendGroupFile(e, 'image')} /></label>
                 <label title="GIF"><b>GIF</b><input hidden type="file" accept="image/gif" onChange={e => sendGroupFile(e, 'image')} /></label>
                 <label title="File"><Paperclip /><input hidden type="file" onChange={e => sendGroupFile(e, 'file')} /></label>
+                <button
+                  className={groupRecording ? 'groupRecord active' : 'groupRecord'}
+                  onClick={groupRecording ? stopGroupVoiceRecording : startGroupVoiceRecording}
+                  title={groupRecording ? 'Stop and send voice message' : 'Record voice message'}
+                >
+                  {groupRecording ? <Square /> : <Mic />}
+                </button>
                 <input
                   value={groupText}
                   onChange={e => setGroupText(e.target.value)}
