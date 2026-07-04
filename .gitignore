@@ -1,5 +1,6 @@
 **/node_modules/
 **/dist/
+**/dist-matrix-poc/
 **/.env
 **/.env.*
 !**/.env.example
