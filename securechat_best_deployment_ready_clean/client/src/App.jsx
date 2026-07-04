@@ -2,10 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
-  KeyRound, Copy
+  KeyRound, Copy, Camera, Trash2
 } from 'lucide-react';
 import {
-  api, uploadFile, setSession, getStoredUser, clearSession, resolveFileUrl
+  api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import {
@@ -30,6 +30,15 @@ const rtcConfig = {
 };
 
 const initials = n => (n || '?').slice(0, 2).toUpperCase();
+const Avatar = ({ user, big = false, className = '', ...props }) => (
+  <div
+    className={`avatar${big ? ' big' : ''}${className ? ` ${className}` : ''}`}
+    style={user?.avatarUrl ? { backgroundImage: `url("${resolveFileUrl(user.avatarUrl)}")` } : undefined}
+    {...props}
+  >
+    {!user?.avatarUrl && initials(user?.username)}
+  </div>
+);
 const cid = (a, b) => [String(a), String(b)].sort().join('-');
 const t = v => {
   try {
@@ -115,11 +124,21 @@ export default function App() {
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
   const remoteAudio = useRef(null);
+  const remoteStream = useRef(null);
+  const miniLocalVideo = useRef(null);
+  const miniRemoteVideo = useRef(null);
   const endRef = useRef(null);
   const typingTimer = useRef(null);
   const socketReady = useRef(false);
   const activeRef = useRef(null);
   const pendingIce = useRef([]);
+
+  useEffect(() => {
+    if (!call.active) return undefined;
+
+    const frame = requestAnimationFrame(attachCallMedia);
+    return () => cancelAnimationFrame(frame);
+  }, [call.active, call.minimized, call.type]);
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -516,6 +535,42 @@ export default function App() {
     }
   }
 
+  async function uploadAvatar(e) {
+    const image = e.target.files?.[0];
+    e.target.value = '';
+    if (!image) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', image);
+      const updated = await api('/api/profile/avatar', { method: 'POST', body: formData });
+      setMe(updated);
+      setProfile(updated);
+      setSession(getToken(), updated);
+    } catch (error) {
+      alert('Profile photo failed: ' + error.message);
+    }
+  }
+
+  async function deleteChat() {
+    if (!active || !me) return;
+    if (!confirm(`Delete your chat with ${active.username}? This will only remove it from your account.`)) return;
+
+    const conversationId = cid(me.id, active.id);
+    try {
+      await api('/api/chats/' + encodeURIComponent(conversationId), { method: 'DELETE' });
+      setMessages(current => {
+        const next = { ...current };
+        delete next[conversationId];
+        return next;
+      });
+      setContacts(current => current.filter(contact => String(contact.id) !== String(active.id)));
+      setActive(null);
+    } catch (error) {
+      alert('Could not delete chat: ' + error.message);
+    }
+  }
+
   function emitTyping() {
     const s = getSocket();
 
@@ -555,21 +610,14 @@ export default function App() {
     localStream.current = stream;
     setMicOn(true);
     setCamOn(type === 'video');
+    attachCallMedia();
 
     stream.getTracks().forEach(tr => p.addTrack(tr, stream));
 
     p.ontrack = e => {
       const rs = e.streams[0];
-
-      if (remoteAudio.current) {
-        remoteAudio.current.srcObject = rs;
-        remoteAudio.current.play().catch(() => {});
-      }
-
-      if (remoteVideo.current) {
-        remoteVideo.current.srcObject = rs;
-        remoteVideo.current.play().catch(() => {});
-      }
+      remoteStream.current = rs;
+      attachCallMedia();
     };
 
     p.onicecandidate = e => {
@@ -592,9 +640,7 @@ export default function App() {
       }
     };
 
-    setTimeout(() => {
-      if (localVideo.current) localVideo.current.srcObject = stream;
-    }, 100);
+    setTimeout(attachCallMedia, 100);
 
     return p;
   }
@@ -709,9 +755,26 @@ export default function App() {
       localStream.current = null;
     }
 
+    remoteStream.current = null;
     if (localVideo.current) localVideo.current.srcObject = null;
     if (remoteVideo.current) remoteVideo.current.srcObject = null;
+    if (miniLocalVideo.current) miniLocalVideo.current.srcObject = null;
+    if (miniRemoteVideo.current) miniRemoteVideo.current.srcObject = null;
     if (remoteAudio.current) remoteAudio.current.srcObject = null;
+  }
+
+  function attachCallMedia() {
+    const attach = (element, stream) => {
+      if (!element || !stream) return;
+      if (element.srcObject !== stream) element.srcObject = stream;
+      element.play?.().catch(() => {});
+    };
+
+    attach(localVideo.current, localStream.current);
+    attach(miniLocalVideo.current, localStream.current);
+    attach(remoteVideo.current, remoteStream.current);
+    attach(miniRemoteVideo.current, remoteStream.current);
+    attach(remoteAudio.current, remoteStream.current);
   }
 
   function endCall(skip = false) {
@@ -873,7 +936,7 @@ export default function App() {
     <div className="app">
       <aside className={active ? 'side hide' : 'side'}>
         <div className="me">
-          <div className="avatar">{initials(me?.username)}</div>
+          <Avatar user={me} className="avatarButton" onClick={() => setProfile(me)} title="Change profile photo" />
           <div>
             <b>{me?.username}</b>
             <small>{ready ? 'Online' : 'Offline'}</small>
@@ -896,7 +959,7 @@ export default function App() {
 
             return (
               <button className="chat" key={u.id} onClick={() => openChat(u)}>
-                <div className="avatar">{initials(u.username)}</div>
+                <Avatar user={u} />
                 <div>
                   <b>{u.username}</b>
                   <span>{p.body || u.phone}</span>
@@ -921,7 +984,7 @@ export default function App() {
                 <ArrowLeft />
               </button>
 
-              <div className="avatar">{initials(active.username)}</div>
+              <Avatar user={active} />
 
               <div className="title">
                 <b>{active.username}</b>
@@ -937,6 +1000,7 @@ export default function App() {
               <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
               <button className="icon" onClick={() => startCall('video')}><Video /></button>
               <button className="icon" onClick={() => setProfile(active)}><User /></button>
+              <button className="icon deleteChat" onClick={deleteChat} title="Delete chat"><Trash2 /></button>
             </header>
 
             <section className="msgs">
@@ -973,6 +1037,11 @@ export default function App() {
                 <input hidden type="file" onChange={e => file(e)} />
               </label>
 
+              <label className="icon" title="Take photo">
+                <Camera />
+                <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
+              </label>
+
               <input
                 value={text}
                 onChange={e => {
@@ -1003,7 +1072,7 @@ export default function App() {
 
       {incoming && !call.active && (
         <div className="incoming">
-          <div className="avatar big">{initials(incoming.callerName)}</div>
+          <Avatar user={{ username: incoming.callerName }} big />
           <div className="who">
             <b>{incoming.callerName}</b>
             <small>Incoming {incoming.callType === 'video' ? 'video' : 'voice'} call...</small>
@@ -1019,13 +1088,15 @@ export default function App() {
 
       {call.active && !call.minimized && (
         <div className="call">
-          <h2>{call.title}</h2>
-          <p>
-            {call.status}{' '}
-            {call.seconds
-              ? `• ${String(Math.floor(call.seconds / 60)).padStart(2, '0')}:${String(call.seconds % 60).padStart(2, '0')}`
-              : ''}
-          </p>
+          <div className="callInfo">
+            <h2>{call.title}</h2>
+            <p>
+              {call.status}{' '}
+              {call.seconds
+                ? `• ${String(Math.floor(call.seconds / 60)).padStart(2, '0')}:${String(call.seconds % 60).padStart(2, '0')}`
+                : ''}
+            </p>
+          </div>
 
           {call.type === 'video' && (
             <div className="videoStage">
@@ -1033,8 +1104,6 @@ export default function App() {
               <video ref={localVideo} autoPlay muted playsInline className="local" />
             </div>
           )}
-
-          <audio ref={remoteAudio} autoPlay />
 
           <div className="callBtns">
             <button onClick={() => setCall(c => ({ ...c, minimized: true }))} title="Minimize">
@@ -1066,35 +1135,67 @@ export default function App() {
         </div>
       )}
 
+      {call.active && <audio ref={remoteAudio} autoPlay className="callAudio" />}
+
       {call.active && call.minimized && (
-        <div className="mini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
-          <Phone />
-          <div>
-            <b>{call.title}</b>
-            <small>
-              {String(Math.floor(call.seconds / 60)).padStart(2, '0')}:{String(call.seconds % 60).padStart(2, '0')}
-            </small>
+        call.type === 'video' ? (
+          <div className="mini videoMini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
+            <video ref={miniRemoteVideo} autoPlay playsInline />
+            <video ref={miniLocalVideo} autoPlay muted playsInline className="miniLocalVideo" />
+            <div className="miniOverlay">
+              <b>{call.title}</b>
+              <small>
+                {String(Math.floor(call.seconds / 60)).padStart(2, '0')}:{String(call.seconds % 60).padStart(2, '0')}
+              </small>
+            </div>
+            <button
+              className="danger miniEnd"
+              onClick={e => {
+                e.stopPropagation();
+                endCall();
+              }}
+              title="End call"
+            >
+              <PhoneOff />
+            </button>
           </div>
-          <button
-            className="danger"
-            onClick={e => {
-              e.stopPropagation();
-              endCall();
-            }}
-          >
-            <PhoneOff />
-          </button>
-        </div>
+        ) : (
+          <div className="mini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
+            <Phone />
+            <div>
+              <b>{call.title}</b>
+              <small>
+                {String(Math.floor(call.seconds / 60)).padStart(2, '0')}:{String(call.seconds % 60).padStart(2, '0')}
+              </small>
+            </div>
+            <button
+              className="danger"
+              onClick={e => {
+                e.stopPropagation();
+                endCall();
+              }}
+            >
+              <PhoneOff />
+            </button>
+          </div>
+        )
       )}
 
       {profile && (
         <div className="modal">
           <div className="profile">
             <button onClick={() => setProfile(null)}><X /></button>
-            <div className="avatar big">{initials(profile.username)}</div>
+            <Avatar user={profile} big />
             <h2>{profile.username}</h2>
             <p>{profile.phone}</p>
             <small>{profile.about}</small>
+            {String(profile.id) === String(me?.id) && (
+              <label className="profilePhoto">
+                <Camera />
+                Change profile photo
+                <input hidden type="file" accept="image/*" onChange={uploadAvatar} />
+              </label>
+            )}
           </div>
         </div>
       )}
