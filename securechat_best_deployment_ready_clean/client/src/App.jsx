@@ -512,8 +512,8 @@ export default function App() {
     }
   }
 
-  async function sendGroupMessage() {
-    const body = groupText.trim();
+  async function sendGroupMessage(messageBody, kind = 'text') {
+    const body = typeof messageBody === 'string' ? messageBody : groupText.trim();
     const group = selectedGroup;
     if (!body || !group) return;
     try {
@@ -523,13 +523,13 @@ export default function App() {
       ]));
       const saved = await api(`/api/groups/${group.id}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ kind: 'text', payloads: Object.fromEntries(entries) })
+        body: JSON.stringify({ kind, payloads: Object.fromEntries(entries) })
       });
       setGroupMessages(current => {
         const rows = current[group.id] || [];
         return rows.some(row => row.id === saved.id)
           ? current
-          : { ...current, [group.id]: [...rows, { ...saved, body }] };
+          : { ...current, [group.id]: [...rows, { ...saved, body, kind }] };
       });
       setGroupText('');
     } catch (error) {
@@ -2219,6 +2219,8 @@ export default function App() {
                       <a href={message.mediaUrl} download={message.fileName} onClick={e => e.stopPropagation()}>
                         📎 {message.fileName}
                       </a>
+                    ) : message.kind === 'sticker' ? (
+                      <span className="stickerMessage">{message.body}</span>
                     ) : <span>{message.body}</span>}
                     <small>{t(message.createdAt)}</small>
                     {message.reactions?.length > 0 && <span>{message.reactions.map(reaction => reaction.emoji).join(' ')}</span>}
@@ -2230,6 +2232,7 @@ export default function App() {
               </div>
               <div className="groupCompose">
                 <label title="Photo"><Image /><input hidden type="file" accept="image/*" onChange={e => sendGroupFile(e, 'image')} /></label>
+                <label title="GIF"><b>GIF</b><input hidden type="file" accept="image/gif" onChange={e => sendGroupFile(e, 'image')} /></label>
                 <label title="File"><Paperclip /><input hidden type="file" onChange={e => sendGroupFile(e, 'file')} /></label>
                 <input
                   value={groupText}
@@ -2240,6 +2243,11 @@ export default function App() {
                   placeholder="Encrypted group message"
                 />
                 <button onClick={sendGroupMessage}><Send /></button>
+              </div>
+              <div className="groupStickers">
+                {stickers.slice(0, 8).map(value => (
+                  <button key={value} onClick={() => sendGroupMessage(value, 'sticker')}>{value}</button>
+                ))}
               </div>
             </div>
             {selectedGroup.role === 'admin' && <button className="addMember" onClick={addGroupMember}><Plus /> Add member</button>}
