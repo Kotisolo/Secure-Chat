@@ -4,7 +4,7 @@ import {
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages, History, Bell,
-  Shield, Ban, Flag
+  Shield, Ban, Flag, Users, Plus
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -12,7 +12,7 @@ import {
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import {
   E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage,
-  encryptAttachment, decryptAttachment
+  encryptAttachment, decryptAttachment, encryptGroupMessage, decryptGroupMessage
 } from './e2ee';
 
 const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢 😭 😡 👍 👎 🙏 🔥 ❤️ 🎉 ✅ 💯'.split(' ');
@@ -118,6 +118,11 @@ export default function App() {
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [privacy, setPrivacy] = useState(null);
   const [security, setSecurity] = useState(null);
+  const [groups, setGroups] = useState([]);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupMessages, setGroupMessages] = useState({});
+  const [groupText, setGroupText] = useState('');
+  const selectedGroupRef = useRef(null);
 
   const [call, setCall] = useState({
     active: false,
@@ -207,6 +212,10 @@ export default function App() {
   useEffect(() => {
     activeRef.current = active;
   }, [active]);
+
+  useEffect(() => {
+    selectedGroupRef.current = selectedGroup;
+  }, [selectedGroup]);
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -451,6 +460,100 @@ export default function App() {
     });
 
     loadChats();
+    loadGroups();
+  }
+
+  async function loadGroups() {
+    try {
+      setGroups(await api('/api/groups'));
+    } catch {
+      setGroups([]);
+    }
+  }
+
+  async function createGroup() {
+    const name = prompt('Group name:');
+    if (!name) return;
+    const description = prompt('Group description (optional):') || '';
+    await api('/api/groups', {
+      method: 'POST',
+      body: JSON.stringify({ name, description, memberIds: [] })
+    });
+
+    s.on('group:message', async message => {
+      try {
+        const body = await decryptGroupMessage(message.senderId, message.groupId, message.payload);
+        const display = { ...message, body };
+        setGroupMessages(current => {
+          const rows = current[message.groupId] || [];
+          if (rows.some(row => row.id === message.id)) return current;
+          return { ...current, [message.groupId]: [...rows, display] };
+        });
+        if (String(selectedGroupRef.current?.id) !== String(message.groupId)) {
+          showNotification(`New message in ${selectedGroupRef.current?.name || 'a group'}`, body);
+        }
+      } catch (error) {
+        console.error('Group message decryption failed', error);
+      }
+    });
+    await loadGroups();
+  }
+
+  async function openGroup(group) {
+    setSelectedGroup(group);
+    try {
+      const history = await api(`/api/groups/${group.id}/messages`);
+      const decrypted = await Promise.all(history.map(async message => ({
+        ...message,
+        body: await decryptGroupMessage(message.senderId, group.id, message.payload)
+      })));
+      setGroupMessages(current => ({ ...current, [group.id]: decrypted }));
+    } catch (error) {
+      alert('Could not open encrypted group chat: ' + error.message);
+    }
+  }
+
+  async function sendGroupMessage() {
+    const body = groupText.trim();
+    const group = selectedGroup;
+    if (!body || !group) return;
+    try {
+      const entries = await Promise.all(group.members.map(async member => [
+        member.id,
+        await encryptGroupMessage(member.id, group.id, body)
+      ]));
+      const saved = await api(`/api/groups/${group.id}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ kind: 'text', payloads: Object.fromEntries(entries) })
+      });
+      setGroupMessages(current => {
+        const rows = current[group.id] || [];
+        return rows.some(row => row.id === saved.id)
+          ? current
+          : { ...current, [group.id]: [...rows, { ...saved, body }] };
+      });
+      setGroupText('');
+    } catch (error) {
+      alert('Group message failed: ' + error.message);
+    }
+  }
+
+  async function addGroupMember() {
+    const userId = prompt('Enter the user ID to add:');
+    if (!userId || !selectedGroup) return;
+    await api(`/api/groups/${selectedGroup.id}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ userId })
+    });
+    await loadGroups();
+    setSelectedGroup((await api('/api/groups')).find(group => group.id === selectedGroup.id));
+  }
+
+  async function removeGroupMember(userId) {
+    await api(`/api/groups/${selectedGroup.id}/members/${userId}`, { method: 'DELETE' });
+    const refreshed = await api('/api/groups');
+    setGroups(refreshed);
+    setSelectedGroup(refreshed.find(group => group.id === selectedGroup.id) || null);
   }
 
   async function loadChats() {
@@ -1428,6 +1531,16 @@ export default function App() {
         <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
         </button>
+        <div className="groupHeader">
+          <b><Users /> Groups</b>
+          <button onClick={createGroup} title="Create group"><Plus /></button>
+        </div>
+        {groups.map(group => (
+          <button className="groupRow" key={group.id} onClick={() => openGroup(group)}>
+            <div className="avatar"><Users /></div>
+            <div><b>{group.name}</b><small>{group.members.length} members</small></div>
+          </button>
+        ))}
 
         <div className="list">
           {contacts.length === 0 && <p className="empty">Search a user to start chatting.</p>}
@@ -1951,6 +2064,57 @@ export default function App() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {selectedGroup && (
+        <div className="modal" onClick={() => setSelectedGroup(null)}>
+          <div className="groupCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => setSelectedGroup(null)}><X /></button>
+            <div className="avatar big"><Users /></div>
+            <h2>{selectedGroup.name}</h2>
+            <p>{selectedGroup.description}</p>
+            <div className="groupConversation">
+              <div className="groupMessageList">
+                {(groupMessages[selectedGroup.id] || []).map(message => (
+                  <div
+                    className={'groupBubble ' + (String(message.senderId) === String(me.id) ? 'mine' : 'theirs')}
+                    key={message.id}
+                  >
+                    <b>{String(message.senderId) === String(me.id) ? 'You' : message.senderName}</b>
+                    <span>{message.body}</span>
+                    <small>{t(message.createdAt)}</small>
+                  </div>
+                ))}
+                {(groupMessages[selectedGroup.id] || []).length === 0 && (
+                  <p className="empty">No group messages yet.</p>
+                )}
+              </div>
+              <div className="groupCompose">
+                <input
+                  value={groupText}
+                  onChange={e => setGroupText(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') sendGroupMessage();
+                  }}
+                  placeholder="Encrypted group message"
+                />
+                <button onClick={sendGroupMessage}><Send /></button>
+              </div>
+            </div>
+            {selectedGroup.role === 'admin' && <button className="addMember" onClick={addGroupMember}><Plus /> Add member</button>}
+            <div className="memberList">
+              {selectedGroup.members.map(member => (
+                <div key={member.id}>
+                  <span>{member.username} · {member.role}</span>
+                  {selectedGroup.role === 'admin' && member.id !== me.id && (
+                    <button onClick={() => removeGroupMember(member.id)}>Remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button className="danger leaveGroup" onClick={() => removeGroupMember(me.id)}>Leave group</button>
           </div>
         </div>
       )}

@@ -107,6 +107,10 @@ function userRoom(userId) {
   return 'user:' + String(userId);
 }
 
+function groupRoom(groupId) {
+  return 'group:' + String(groupId);
+}
+
 function validUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value));
 }
@@ -552,6 +556,125 @@ app.post('/api/users/:userId/report', auth, asyncRoute(async (req, res) => {
     [req.user.id, req.params.userId, validUuid(req.body.messageId) ? req.body.messageId : null, reason.slice(0, 500)]
   );
   res.json({ ok: true });
+}));
+
+app.get('/api/groups', auth, asyncRoute(async (req, res) => {
+  const result = await pool.query(
+    `SELECT g.*,gm.role,
+      (SELECT json_agg(json_build_object('id',u.id::text,'username',u.username,'role',members.role))
+       FROM group_members members JOIN users u ON u.id=members.user_id WHERE members.group_id=g.id) members
+     FROM chat_groups g JOIN group_members gm ON gm.group_id=g.id
+     WHERE gm.user_id=$1 ORDER BY g.updated_at DESC`,
+    [req.user.id]
+  );
+  res.json(result.rows.map(row => ({
+    id: String(row.id), name: row.name, description: row.description,
+    avatarUrl: row.avatar_url, role: row.role, members: row.members || [],
+    createdAt: row.created_at
+  })));
+}));
+
+app.post('/api/groups', auth, asyncRoute(async (req, res) => {
+  const name = clean(req.body.name);
+  const memberIds = [...new Set((Array.isArray(req.body.memberIds) ? req.body.memberIds : [])
+    .filter(validUuid).filter(id => id !== String(req.user.id)))].slice(0, 255);
+  if (name.length < 2) return res.status(400).json({ error: 'Group name must be at least 2 characters.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const group = await client.query(
+      'INSERT INTO chat_groups(name,description,created_by) VALUES($1,$2,$3) RETURNING *',
+      [name.slice(0, 120), clean(req.body.description).slice(0, 500), req.user.id]
+    );
+    const groupId = group.rows[0].id;
+    await client.query('INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2,$3)', [groupId, req.user.id, 'admin']);
+    for (const memberId of memberIds) {
+      await client.query('INSERT INTO group_members(group_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [groupId, memberId]);
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ id: String(groupId), name, role: 'admin' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+app.post('/api/groups/:groupId/members', auth, asyncRoute(async (req, res) => {
+  const groupId = req.params.groupId;
+  const userId = clean(req.body.userId);
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can add members.' });
+  if (!validUuid(userId)) return res.status(400).json({ error: 'Invalid user.' });
+  await pool.query('INSERT INTO group_members(group_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [groupId, userId]);
+  res.json({ ok: true });
+}));
+
+app.delete('/api/groups/:groupId/members/:userId', auth, asyncRoute(async (req, res) => {
+  const ownLeave = String(req.params.userId) === String(req.user.id);
+  if (!ownLeave) {
+    const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+    if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can remove members.' });
+  }
+  await pool.query('DELETE FROM group_members WHERE group_id=$1 AND user_id=$2', [req.params.groupId, req.params.userId]);
+  res.json({ ok: true });
+}));
+
+app.get('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
+  const membership = await pool.query(
+    'SELECT joined_at FROM group_members WHERE group_id=$1 AND user_id=$2',
+    [req.params.groupId, req.user.id]
+  );
+  if (!membership.rows.length) return res.status(403).json({ error: 'You are not a member of this group.' });
+  const result = await pool.query(
+    `SELECT m.id,m.group_id,m.sender_id,u.username sender_name,m.kind,m.reply_to_id,
+      m.created_at,m.edited_at,m.encrypted_payloads->$2 payload
+     FROM group_messages m JOIN users u ON u.id=m.sender_id
+     WHERE m.group_id=$1 AND m.deleted_at IS NULL AND m.created_at>= $3
+     ORDER BY m.created_at ASC LIMIT 500`,
+    [req.params.groupId, req.user.id, membership.rows[0].joined_at]
+  );
+  res.json(result.rows.map(row => ({
+    id: String(row.id), groupId: String(row.group_id), senderId: String(row.sender_id),
+    senderName: row.sender_name, kind: row.kind, replyToId: row.reply_to_id,
+    createdAt: row.created_at, editedAt: row.edited_at, payload: row.payload
+  })));
+}));
+
+app.post('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
+  const payloads = req.body.payloads;
+  if (!payloads || typeof payloads !== 'object' || Array.isArray(payloads)) {
+    return res.status(400).json({ error: 'Encrypted member payloads are required.' });
+  }
+  const members = await pool.query('SELECT user_id FROM group_members WHERE group_id=$1', [req.params.groupId]);
+  if (!members.rows.some(row => String(row.user_id) === String(req.user.id))) {
+    return res.status(403).json({ error: 'You are not a member of this group.' });
+  }
+  for (const member of members.rows) {
+    const payload = payloads[String(member.user_id)];
+    if (typeof payload !== 'string' || payload.length > 30000) {
+      return res.status(400).json({ error: 'Every group member requires a valid encrypted payload.' });
+    }
+  }
+  const cleanPayloads = Object.fromEntries(members.rows.map(row => [String(row.user_id), payloads[String(row.user_id)]]));
+  const result = await pool.query(
+    `INSERT INTO group_messages(group_id,sender_id,encrypted_payloads,kind)
+     VALUES($1,$2,$3,$4) RETURNING id,created_at`,
+    [req.params.groupId, req.user.id, cleanPayloads, clean(req.body.kind || 'text')]
+  );
+  const event = {
+    id: String(result.rows[0].id), groupId: req.params.groupId,
+    senderId: String(req.user.id), senderName: req.user.username,
+    kind: clean(req.body.kind || 'text'), createdAt: result.rows[0].created_at
+  };
+  members.rows.forEach(member => {
+    io.to(userRoom(member.user_id)).emit('group:message', {
+      ...event,
+      payload: cleanPayloads[String(member.user_id)]
+    });
+  });
+  res.status(201).json({ ...event, payload: cleanPayloads[String(req.user.id)] });
 }));
 
 app.get('/api/chats', auth, asyncRoute(async (req, res) => {

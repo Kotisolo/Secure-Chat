@@ -16,6 +16,32 @@ CREATE TABLE IF NOT EXISTS user_sessions(
  last_seen TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  revoked_at TIMESTAMPTZ);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_active ON user_sessions(user_id,last_seen DESC) WHERE revoked_at IS NULL;
+CREATE TABLE IF NOT EXISTS chat_groups(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ name VARCHAR(120) NOT NULL,
+ description VARCHAR(500) DEFAULT '',
+ avatar_url TEXT,
+ created_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS group_members(
+ group_id UUID NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ role VARCHAR(20) NOT NULL DEFAULT 'member',
+ joined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(group_id,user_id));
+CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id,joined_at DESC);
+CREATE TABLE IF NOT EXISTS group_messages(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ group_id UUID NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+ sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ encrypted_payloads JSONB NOT NULL,
+ kind VARCHAR(20) NOT NULL DEFAULT 'text',
+ reply_to_id UUID REFERENCES group_messages(id) ON DELETE SET NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ edited_at TIMESTAMPTZ,
+ deleted_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS idx_group_messages_history ON group_messages(group_id,created_at);
 CREATE TABLE IF NOT EXISTS conversations(
  id TEXT PRIMARY KEY, user_a UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  user_b UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
