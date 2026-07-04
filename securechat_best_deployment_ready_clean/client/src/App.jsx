@@ -115,11 +115,21 @@ export default function App() {
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
   const remoteAudio = useRef(null);
+  const remoteStream = useRef(null);
+  const miniLocalVideo = useRef(null);
+  const miniRemoteVideo = useRef(null);
   const endRef = useRef(null);
   const typingTimer = useRef(null);
   const socketReady = useRef(false);
   const activeRef = useRef(null);
   const pendingIce = useRef([]);
+
+  useEffect(() => {
+    if (!call.active) return undefined;
+
+    const frame = requestAnimationFrame(attachCallMedia);
+    return () => cancelAnimationFrame(frame);
+  }, [call.active, call.minimized, call.type]);
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -555,21 +565,14 @@ export default function App() {
     localStream.current = stream;
     setMicOn(true);
     setCamOn(type === 'video');
+    attachCallMedia();
 
     stream.getTracks().forEach(tr => p.addTrack(tr, stream));
 
     p.ontrack = e => {
       const rs = e.streams[0];
-
-      if (remoteAudio.current) {
-        remoteAudio.current.srcObject = rs;
-        remoteAudio.current.play().catch(() => {});
-      }
-
-      if (remoteVideo.current) {
-        remoteVideo.current.srcObject = rs;
-        remoteVideo.current.play().catch(() => {});
-      }
+      remoteStream.current = rs;
+      attachCallMedia();
     };
 
     p.onicecandidate = e => {
@@ -592,9 +595,7 @@ export default function App() {
       }
     };
 
-    setTimeout(() => {
-      if (localVideo.current) localVideo.current.srcObject = stream;
-    }, 100);
+    setTimeout(attachCallMedia, 100);
 
     return p;
   }
@@ -709,9 +710,26 @@ export default function App() {
       localStream.current = null;
     }
 
+    remoteStream.current = null;
     if (localVideo.current) localVideo.current.srcObject = null;
     if (remoteVideo.current) remoteVideo.current.srcObject = null;
+    if (miniLocalVideo.current) miniLocalVideo.current.srcObject = null;
+    if (miniRemoteVideo.current) miniRemoteVideo.current.srcObject = null;
     if (remoteAudio.current) remoteAudio.current.srcObject = null;
+  }
+
+  function attachCallMedia() {
+    const attach = (element, stream) => {
+      if (!element || !stream) return;
+      if (element.srcObject !== stream) element.srcObject = stream;
+      element.play?.().catch(() => {});
+    };
+
+    attach(localVideo.current, localStream.current);
+    attach(miniLocalVideo.current, localStream.current);
+    attach(remoteVideo.current, remoteStream.current);
+    attach(miniRemoteVideo.current, remoteStream.current);
+    attach(remoteAudio.current, remoteStream.current);
   }
 
   function endCall(skip = false) {
@@ -1019,13 +1037,15 @@ export default function App() {
 
       {call.active && !call.minimized && (
         <div className="call">
-          <h2>{call.title}</h2>
-          <p>
-            {call.status}{' '}
-            {call.seconds
-              ? `• ${String(Math.floor(call.seconds / 60)).padStart(2, '0')}:${String(call.seconds % 60).padStart(2, '0')}`
-              : ''}
-          </p>
+          <div className="callInfo">
+            <h2>{call.title}</h2>
+            <p>
+              {call.status}{' '}
+              {call.seconds
+                ? `• ${String(Math.floor(call.seconds / 60)).padStart(2, '0')}:${String(call.seconds % 60).padStart(2, '0')}`
+                : ''}
+            </p>
+          </div>
 
           {call.type === 'video' && (
             <div className="videoStage">
@@ -1033,8 +1053,6 @@ export default function App() {
               <video ref={localVideo} autoPlay muted playsInline className="local" />
             </div>
           )}
-
-          <audio ref={remoteAudio} autoPlay />
 
           <div className="callBtns">
             <button onClick={() => setCall(c => ({ ...c, minimized: true }))} title="Minimize">
@@ -1066,25 +1084,50 @@ export default function App() {
         </div>
       )}
 
+      {call.active && <audio ref={remoteAudio} autoPlay className="callAudio" />}
+
       {call.active && call.minimized && (
-        <div className="mini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
-          <Phone />
-          <div>
-            <b>{call.title}</b>
-            <small>
-              {String(Math.floor(call.seconds / 60)).padStart(2, '0')}:{String(call.seconds % 60).padStart(2, '0')}
-            </small>
+        call.type === 'video' ? (
+          <div className="mini videoMini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
+            <video ref={miniRemoteVideo} autoPlay playsInline />
+            <video ref={miniLocalVideo} autoPlay muted playsInline className="miniLocalVideo" />
+            <div className="miniOverlay">
+              <b>{call.title}</b>
+              <small>
+                {String(Math.floor(call.seconds / 60)).padStart(2, '0')}:{String(call.seconds % 60).padStart(2, '0')}
+              </small>
+            </div>
+            <button
+              className="danger miniEnd"
+              onClick={e => {
+                e.stopPropagation();
+                endCall();
+              }}
+              title="End call"
+            >
+              <PhoneOff />
+            </button>
           </div>
-          <button
-            className="danger"
-            onClick={e => {
-              e.stopPropagation();
-              endCall();
-            }}
-          >
-            <PhoneOff />
-          </button>
-        </div>
+        ) : (
+          <div className="mini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
+            <Phone />
+            <div>
+              <b>{call.title}</b>
+              <small>
+                {String(Math.floor(call.seconds / 60)).padStart(2, '0')}:{String(call.seconds % 60).padStart(2, '0')}
+              </small>
+            </div>
+            <button
+              className="danger"
+              onClick={e => {
+                e.stopPropagation();
+                endCall();
+              }}
+            >
+              <PhoneOff />
+            </button>
+          </div>
+        )
       )}
 
       {profile && (
