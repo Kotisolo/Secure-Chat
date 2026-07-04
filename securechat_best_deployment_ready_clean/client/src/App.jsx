@@ -10,6 +10,7 @@ import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
+import QRCode from 'qrcode';
 import {
   E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage,
   encryptAttachment, decryptAttachment, encryptGroupMessage, decryptGroupMessage
@@ -122,6 +123,9 @@ export default function App() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupMessages, setGroupMessages] = useState({});
   const [groupText, setGroupText] = useState('');
+  const [groupInvite, setGroupInvite] = useState(null);
+  const [selectedGroupMessage, setSelectedGroupMessage] = useState(null);
+  const [groupRecording, setGroupRecording] = useState(false);
   const selectedGroupRef = useRef(null);
 
   const [call, setCall] = useState({
@@ -482,15 +486,14 @@ export default function App() {
 
     s.on('group:message', async message => {
       try {
-        const body = await decryptGroupMessage(message.senderId, message.groupId, message.payload);
-        const display = { ...message, body };
+        const display = await decodeGroupMessage(message, message.groupId);
         setGroupMessages(current => {
           const rows = current[message.groupId] || [];
           if (rows.some(row => row.id === message.id)) return current;
           return { ...current, [message.groupId]: [...rows, display] };
         });
         if (String(selectedGroupRef.current?.id) !== String(message.groupId)) {
-          showNotification(`New message in ${selectedGroupRef.current?.name || 'a group'}`, body);
+          showNotification(`New message in ${selectedGroupRef.current?.name || 'a group'}`, display.body);
         }
       } catch (error) {
         console.error('Group message decryption failed', error);
@@ -503,18 +506,15 @@ export default function App() {
     setSelectedGroup(group);
     try {
       const history = await api(`/api/groups/${group.id}/messages`);
-      const decrypted = await Promise.all(history.map(async message => ({
-        ...message,
-        body: await decryptGroupMessage(message.senderId, group.id, message.payload)
-      })));
+      const decrypted = await Promise.all(history.map(message => decodeGroupMessage(message, group.id)));
       setGroupMessages(current => ({ ...current, [group.id]: decrypted }));
     } catch (error) {
       alert('Could not open encrypted group chat: ' + error.message);
     }
   }
 
-  async function sendGroupMessage() {
-    const body = groupText.trim();
+  async function sendGroupMessage(messageBody, kind = 'text') {
+    const body = typeof messageBody === 'string' ? messageBody : groupText.trim();
     const group = selectedGroup;
     if (!body || !group) return;
     try {
@@ -524,13 +524,13 @@ export default function App() {
       ]));
       const saved = await api(`/api/groups/${group.id}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ kind: 'text', payloads: Object.fromEntries(entries) })
+        body: JSON.stringify({ kind, payloads: Object.fromEntries(entries) })
       });
       setGroupMessages(current => {
         const rows = current[group.id] || [];
         return rows.some(row => row.id === saved.id)
           ? current
-          : { ...current, [group.id]: [...rows, { ...saved, body }] };
+          : { ...current, [group.id]: [...rows, { ...saved, body, kind }] };
       });
       setGroupText('');
     } catch (error) {
@@ -547,6 +547,165 @@ export default function App() {
     });
     await loadGroups();
     setSelectedGroup((await api('/api/groups')).find(group => group.id === selectedGroup.id));
+  }
+
+  async function decodeGroupMessage(message, groupId) {
+    const plaintext = await decryptGroupMessage(message.senderId, groupId, message.payload);
+    try {
+      const content = JSON.parse(plaintext);
+      if (!content.fileUrl) return { ...message, body: plaintext };
+      const mediaUrl = await decryptAttachment({
+        ...content,
+        senderId: message.senderId,
+        recipientId: me.id
+      }, `group:${groupId}`);
+      return { ...message, ...content, body: content.body, mediaUrl };
+    } catch {
+      return { ...message, body: plaintext };
+    }
+  }
+
+  async function sendGroupFile(event, kind) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !selectedGroup) return;
+    try {
+      const entries = await Promise.all(selectedGroup.members.map(async member => {
+        const encrypted = await encryptAttachment(member.id, `group:${selectedGroup.id}`, file);
+        const uploaded = await uploadFile(encrypted.file);
+        const content = JSON.stringify({
+          body: kind === 'image' ? 'Photo' : file.name,
+          kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type,
+          fileEncryption: encrypted.fileEncryption, senderDeviceId: encrypted.senderDeviceId
+        });
+        return [member.id, await encryptGroupMessage(member.id, selectedGroup.id, content)];
+      }));
+      await api(`/api/groups/${selectedGroup.id}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ kind, payloads: Object.fromEntries(entries) })
+      });
+    } catch (error) {
+      alert('Encrypted group attachment failed: ' + error.message);
+    }
+  }
+
+  async function startGroupVoiceRecording() {
+    if (groupRecording || !selectedGroup) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const type = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '';
+      const recorder = new MediaRecorder(stream, type ? { mimeType: type } : undefined);
+      const chunks = [];
+      mediaRecorder.current = recorder;
+      recorder.ondataavailable = event => {
+        if (event.data.size) chunks.push(event.data);
+      };
+      recorder.onstop = async () => {
+        stream.getTracks().forEach(track => track.stop());
+        setGroupRecording(false);
+        const voice = new File([new Blob(chunks, { type: recorder.mimeType || 'audio/webm' })],
+          `group-voice-${Date.now()}.webm`, { type: recorder.mimeType || 'audio/webm' });
+        try {
+          const entries = await Promise.all(selectedGroup.members.map(async member => {
+            const encrypted = await encryptAttachment(member.id, `group:${selectedGroup.id}`, voice);
+            const uploaded = await uploadFile(encrypted.file);
+            const content = JSON.stringify({
+              body: 'Voice message', kind: 'audio', fileUrl: uploaded.url,
+              fileName: voice.name, fileMime: voice.type,
+              fileEncryption: encrypted.fileEncryption, senderDeviceId: encrypted.senderDeviceId
+            });
+            return [member.id, await encryptGroupMessage(member.id, selectedGroup.id, content)];
+          }));
+          await api(`/api/groups/${selectedGroup.id}/messages`, {
+            method: 'POST', body: JSON.stringify({ kind: 'audio', payloads: Object.fromEntries(entries) })
+          });
+        } catch (error) {
+          alert('Group voice message failed: ' + error.message);
+        }
+      };
+      recorder.start(250);
+      setGroupRecording(true);
+    } catch (error) {
+      alert(mediaErrorMessage(error, 'audio'));
+    }
+  }
+
+  function stopGroupVoiceRecording() {
+    if (mediaRecorder.current?.state === 'recording') mediaRecorder.current.stop();
+    mediaRecorder.current = null;
+  }
+
+  async function reactGroupMessage(emoji) {
+    await api(`/api/groups/${selectedGroup.id}/messages/${selectedGroupMessage.id}/reaction`, {
+      method: 'POST', body: JSON.stringify({ emoji })
+    });
+    setSelectedGroupMessage(null);
+  }
+
+  async function deleteGroupMessage() {
+    await api(`/api/groups/${selectedGroup.id}/messages/${selectedGroupMessage.id}`, { method: 'DELETE' });
+    setSelectedGroupMessage(null);
+  }
+
+  async function editGroup() {
+    const name = prompt('Group name:', selectedGroup.name);
+    if (!name) return;
+    const description = prompt('Group description:', selectedGroup.description || '') || '';
+    await api(`/api/groups/${selectedGroup.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name, description })
+    });
+    s.on('group:message-deleted', event => {
+      setGroupMessages(current => ({
+        ...current,
+        [event.groupId]: (current[event.groupId] || []).filter(message => message.id !== event.messageId)
+      }));
+    });
+    s.on('group:reaction', event => {
+      setGroupMessages(current => ({
+        ...current,
+        [event.groupId]: (current[event.groupId] || []).map(message => message.id !== event.messageId ? message : {
+          ...message,
+          reactions: [...(message.reactions || []).filter(reaction => reaction.userId !== event.userId), {
+            userId: event.userId, emoji: event.emoji
+          }]
+        })
+      }));
+    });
+    await loadGroups();
+    setSelectedGroup(current => ({ ...current, name, description }));
+  }
+
+  async function changeGroupRole(member) {
+    const role = member.role === 'admin' ? 'member' : 'admin';
+    await api(`/api/groups/${selectedGroup.id}/members/${member.id}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role })
+    });
+    const refreshed = await api('/api/groups');
+    setGroups(refreshed);
+    setSelectedGroup(refreshed.find(group => group.id === selectedGroup.id));
+  }
+
+  async function createGroupInvite() {
+    const result = await api(`/api/groups/${selectedGroup.id}/invite`, { method: 'POST', body: '{}' });
+    const url = `${location.origin}/?groupInvite=${encodeURIComponent(result.token)}`;
+    setGroupInvite({ url, qr: await QRCode.toDataURL(url, { width: 220, margin: 1 }) });
+  }
+
+  async function revokeGroupInvite() {
+    await api(`/api/groups/${selectedGroup.id}/invite`, { method: 'DELETE' });
+    setGroupInvite(null);
+  }
+
+  async function joinGroup() {
+    const value = prompt('Paste a SecureChat group invite link or token:');
+    if (!value) return;
+    const token = value.includes('groupInvite=')
+      ? new URL(value).searchParams.get('groupInvite')
+      : value.trim();
+    await api(`/api/groups/join/${encodeURIComponent(token)}`, { method: 'POST', body: '{}' });
+    await loadGroups();
   }
 
   async function removeGroupMember(userId) {
@@ -1533,7 +1692,10 @@ export default function App() {
         </button>
         <div className="groupHeader">
           <b><Users /> Groups</b>
-          <button onClick={createGroup} title="Create group"><Plus /></button>
+          <div>
+            <button onClick={joinGroup} title="Join group">Join</button>
+            <button onClick={createGroup} title="Create group"><Plus /></button>
+          </div>
         </div>
         {groups.map(group => (
           <button className="groupRow" key={group.id} onClick={() => openGroup(group)}>
@@ -2075,16 +2237,42 @@ export default function App() {
             <div className="avatar big"><Users /></div>
             <h2>{selectedGroup.name}</h2>
             <p>{selectedGroup.description}</p>
+            {selectedGroup.role === 'admin' && (
+              <div className="groupAdminActions">
+                <button onClick={editGroup}>Edit group</button>
+                <button onClick={createGroupInvite}>Invite link</button>
+              </div>
+            )}
+            {groupInvite && (
+              <div className="inviteCard">
+                <img src={groupInvite.qr} alt="Group invite QR code" />
+                <input readOnly value={groupInvite.url} />
+                <button onClick={() => navigator.clipboard.writeText(groupInvite.url)}>Copy link</button>
+                <button className="danger" onClick={revokeGroupInvite}>Revoke</button>
+              </div>
+            )}
             <div className="groupConversation">
               <div className="groupMessageList">
                 {(groupMessages[selectedGroup.id] || []).map(message => (
                   <div
                     className={'groupBubble ' + (String(message.senderId) === String(me.id) ? 'mine' : 'theirs')}
                     key={message.id}
+                    onClick={() => setSelectedGroupMessage(message)}
                   >
                     <b>{String(message.senderId) === String(me.id) ? 'You' : message.senderName}</b>
-                    <span>{message.body}</span>
+                    {message.kind === 'image' && message.mediaUrl ? (
+                      <img src={message.mediaUrl} alt={message.fileName || 'Group photo'} />
+                    ) : message.kind === 'file' && message.mediaUrl ? (
+                      <a href={message.mediaUrl} download={message.fileName} onClick={e => e.stopPropagation()}>
+                        📎 {message.fileName}
+                      </a>
+                    ) : message.kind === 'audio' && message.mediaUrl ? (
+                      <audio controls src={message.mediaUrl} onClick={e => e.stopPropagation()} />
+                    ) : message.kind === 'sticker' ? (
+                      <span className="stickerMessage">{message.body}</span>
+                    ) : <span>{message.body}</span>}
                     <small>{t(message.createdAt)}</small>
+                    {message.reactions?.length > 0 && <span>{message.reactions.map(reaction => reaction.emoji).join(' ')}</span>}
                   </div>
                 ))}
                 {(groupMessages[selectedGroup.id] || []).length === 0 && (
@@ -2092,6 +2280,16 @@ export default function App() {
                 )}
               </div>
               <div className="groupCompose">
+                <label title="Photo"><Image /><input hidden type="file" accept="image/*" onChange={e => sendGroupFile(e, 'image')} /></label>
+                <label title="GIF"><b>GIF</b><input hidden type="file" accept="image/gif" onChange={e => sendGroupFile(e, 'image')} /></label>
+                <label title="File"><Paperclip /><input hidden type="file" onChange={e => sendGroupFile(e, 'file')} /></label>
+                <button
+                  className={groupRecording ? 'groupRecord active' : 'groupRecord'}
+                  onClick={groupRecording ? stopGroupVoiceRecording : startGroupVoiceRecording}
+                  title={groupRecording ? 'Stop and send voice message' : 'Record voice message'}
+                >
+                  {groupRecording ? <Square /> : <Mic />}
+                </button>
                 <input
                   value={groupText}
                   onChange={e => setGroupText(e.target.value)}
@@ -2102,6 +2300,11 @@ export default function App() {
                 />
                 <button onClick={sendGroupMessage}><Send /></button>
               </div>
+              <div className="groupStickers">
+                {stickers.slice(0, 8).map(value => (
+                  <button key={value} onClick={() => sendGroupMessage(value, 'sticker')}>{value}</button>
+                ))}
+              </div>
             </div>
             {selectedGroup.role === 'admin' && <button className="addMember" onClick={addGroupMember}><Plus /> Add member</button>}
             <div className="memberList">
@@ -2109,12 +2312,32 @@ export default function App() {
                 <div key={member.id}>
                   <span>{member.username} · {member.role}</span>
                   {selectedGroup.role === 'admin' && member.id !== me.id && (
-                    <button onClick={() => removeGroupMember(member.id)}>Remove</button>
+                    <div>
+                      <button onClick={() => changeGroupRole(member)}>{member.role === 'admin' ? 'Demote' : 'Promote'}</button>
+                      <button onClick={() => removeGroupMember(member.id)}>Remove</button>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
             <button className="danger leaveGroup" onClick={() => removeGroupMember(me.id)}>Leave group</button>
+          </div>
+        </div>
+      )}
+
+      {selectedGroupMessage && (
+        <div className="modal" onClick={() => setSelectedGroupMessage(null)}>
+          <div className="messageMenu" onClick={e => e.stopPropagation()}>
+            <h3>Group message actions</h3>
+            <div className="reactionPicker">
+              {['👍', '❤️', '😂', '😮', '😢', '🙏'].map(emoji => (
+                <button key={emoji} onClick={() => reactGroupMessage(emoji)}>{emoji}</button>
+              ))}
+            </div>
+            {(selectedGroup.role === 'admin' || selectedGroupMessage.senderId === me.id) && (
+              <button className="danger menuCancel" onClick={deleteGroupMessage}><Trash2 /> Delete message</button>
+            )}
+            <button className="menuCancel" onClick={() => setSelectedGroupMessage(null)}>Cancel</button>
           </div>
         </div>
       )}

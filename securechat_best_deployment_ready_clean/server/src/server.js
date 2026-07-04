@@ -601,6 +601,45 @@ app.post('/api/groups', auth, asyncRoute(async (req, res) => {
   }
 }));
 
+app.patch('/api/groups/:groupId', auth, asyncRoute(async (req, res) => {
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can edit the group.' });
+  const name = clean(req.body.name);
+  if (name.length < 2) return res.status(400).json({ error: 'Group name must be at least 2 characters.' });
+  await pool.query('UPDATE chat_groups SET name=$1,description=$2,updated_at=NOW() WHERE id=$3', [name.slice(0, 120), clean(req.body.description).slice(0, 500), req.params.groupId]);
+  res.json({ ok: true });
+}));
+
+app.patch('/api/groups/:groupId/members/:userId/role', auth, asyncRoute(async (req, res) => {
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can change roles.' });
+  const role = req.body.role === 'admin' ? 'admin' : 'member';
+  await pool.query('UPDATE group_members SET role=$1 WHERE group_id=$2 AND user_id=$3', [role, req.params.groupId, req.params.userId]);
+  res.json({ role });
+}));
+
+app.post('/api/groups/:groupId/invite', auth, asyncRoute(async (req, res) => {
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can manage invite links.' });
+  const token = crypto.randomBytes(24).toString('base64url');
+  await pool.query('UPDATE chat_groups SET invite_token=$1,invite_enabled=TRUE WHERE id=$2', [token, req.params.groupId]);
+  res.json({ token });
+}));
+
+app.delete('/api/groups/:groupId/invite', auth, asyncRoute(async (req, res) => {
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can revoke invite links.' });
+  await pool.query('UPDATE chat_groups SET invite_token=NULL,invite_enabled=FALSE WHERE id=$1', [req.params.groupId]);
+  res.json({ ok: true });
+}));
+
+app.post('/api/groups/join/:token', auth, asyncRoute(async (req, res) => {
+  const group = await pool.query('SELECT id FROM chat_groups WHERE invite_token=$1 AND invite_enabled=TRUE', [req.params.token]);
+  if (!group.rows.length) return res.status(404).json({ error: 'Invite link is invalid or expired.' });
+  await pool.query('INSERT INTO group_members(group_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [group.rows[0].id, req.user.id]);
+  res.json({ groupId: String(group.rows[0].id) });
+}));
+
 app.post('/api/groups/:groupId/members', auth, asyncRoute(async (req, res) => {
   const groupId = req.params.groupId;
   const userId = clean(req.body.userId);
@@ -629,7 +668,9 @@ app.get('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
   if (!membership.rows.length) return res.status(403).json({ error: 'You are not a member of this group.' });
   const result = await pool.query(
     `SELECT m.id,m.group_id,m.sender_id,u.username sender_name,m.kind,m.reply_to_id,
-      m.created_at,m.edited_at,m.encrypted_payloads->$2 payload
+      m.created_at,m.edited_at,m.encrypted_payloads->$2 payload,
+      COALESCE((SELECT json_agg(json_build_object('userId',r.user_id::text,'emoji',r.emoji))
+        FROM group_message_reactions r WHERE r.message_id=m.id),'[]'::json) reactions
      FROM group_messages m JOIN users u ON u.id=m.sender_id
      WHERE m.group_id=$1 AND m.deleted_at IS NULL AND m.created_at>= $3
      ORDER BY m.created_at ASC LIMIT 500`,
@@ -638,7 +679,8 @@ app.get('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
   res.json(result.rows.map(row => ({
     id: String(row.id), groupId: String(row.group_id), senderId: String(row.sender_id),
     senderName: row.sender_name, kind: row.kind, replyToId: row.reply_to_id,
-    createdAt: row.created_at, editedAt: row.edited_at, payload: row.payload
+    createdAt: row.created_at, editedAt: row.edited_at, payload: row.payload,
+    reactions: row.reactions
   })));
 }));
 
@@ -675,6 +717,35 @@ app.post('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
     });
   });
   res.status(201).json({ ...event, payload: cleanPayloads[String(req.user.id)] });
+}));
+
+app.delete('/api/groups/:groupId/messages/:messageId', auth, asyncRoute(async (req, res) => {
+  const allowed = await pool.query(
+    `SELECT 1 FROM group_messages m JOIN group_members gm ON gm.group_id=m.group_id
+     WHERE m.id=$1 AND m.group_id=$2 AND gm.user_id=$3
+       AND (m.sender_id=$3 OR gm.role='admin')`,
+    [req.params.messageId, req.params.groupId, req.user.id]
+  );
+  if (!allowed.rows.length) return res.status(403).json({ error: 'You cannot delete this message.' });
+  await pool.query('UPDATE group_messages SET deleted_at=NOW() WHERE id=$1', [req.params.messageId]);
+  io.to(groupRoom(req.params.groupId)).emit('group:message-deleted', {
+    groupId: req.params.groupId, messageId: req.params.messageId
+  });
+  res.json({ ok: true });
+}));
+
+app.post('/api/groups/:groupId/messages/:messageId/reaction', auth, asyncRoute(async (req, res) => {
+  const emoji = clean(req.body.emoji);
+  const member = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2', [req.params.groupId, req.user.id]);
+  if (!member.rows.length || !emoji || emoji.length > 16) return res.status(400).json({ error: 'Invalid reaction.' });
+  await pool.query(
+    `INSERT INTO group_message_reactions(message_id,user_id,emoji) VALUES($1,$2,$3)
+     ON CONFLICT(message_id,user_id) DO UPDATE SET emoji=$3,created_at=NOW()`,
+    [req.params.messageId, req.user.id, emoji]
+  );
+  const event = { groupId: req.params.groupId, messageId: req.params.messageId, userId: String(req.user.id), emoji };
+  io.to(groupRoom(req.params.groupId)).emit('group:reaction', event);
+  res.json(event);
 }));
 
 app.get('/api/chats', auth, asyncRoute(async (req, res) => {
@@ -1187,6 +1258,8 @@ io.on('connection', async socket => {
   sockets.add(socket.id);
   online.set(userId, sockets);
   socket.join(userRoom(userId));
+  const groupRooms = await pool.query('SELECT group_id FROM group_members WHERE user_id=$1', [userId]).catch(() => ({ rows: [] }));
+  groupRooms.rows.forEach(row => socket.join(groupRoom(row.group_id)));
 
   await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [userId]).catch(() => {});
 

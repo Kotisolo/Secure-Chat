@@ -42,6 +42,14 @@ CREATE TABLE IF NOT EXISTS group_messages(
  edited_at TIMESTAMPTZ,
  deleted_at TIMESTAMPTZ);
 CREATE INDEX IF NOT EXISTS idx_group_messages_history ON group_messages(group_id,created_at);
+CREATE TABLE IF NOT EXISTS group_message_reactions(
+ message_id UUID NOT NULL REFERENCES group_messages(id) ON DELETE CASCADE,
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ emoji VARCHAR(16) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(message_id,user_id));
+ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_token TEXT UNIQUE;
+ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE TABLE IF NOT EXISTS conversations(
  id TEXT PRIMARY KEY, user_a UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  user_b UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
