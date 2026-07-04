@@ -156,11 +156,21 @@ function sign(u) {
     {
       id: String(u.id),
       username: u.username,
-      sv: Number(u.sessionVersion ?? u.session_version ?? 0)
+      sv: Number(u.sessionVersion ?? u.session_version ?? 0),
+      sid: u.sessionId || undefined
     },
     JWT_SECRET,
     { expiresIn: '30d' }
   );
+}
+
+async function createSession(req, userId) {
+  const deviceName = clean(req.body.deviceName || req.get('user-agent') || 'Unknown device').slice(0, 160);
+  const result = await pool.query(
+    'INSERT INTO user_sessions(user_id,device_name,ip_address) VALUES($1,$2,$3) RETURNING id',
+    [userId, deviceName, req.ip || null]
+  );
+  return String(result.rows[0].id);
 }
 
 async function auth(req, res, next) {
@@ -178,6 +188,13 @@ async function auth(req, res, next) {
     }
     req.user = decoded;
     req.user.id = String(decoded.id);
+    if (decoded.sid) {
+      const session = await pool.query(
+        'UPDATE user_sessions SET last_seen=NOW() WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL RETURNING id',
+        [decoded.sid, decoded.id]
+      );
+      if (!session.rows.length) return res.status(401).json({ error: 'This device session was logged out.' });
+    }
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid session.' });
@@ -261,8 +278,9 @@ app.post('/api/auth/register', authRateLimit, async (req, res) => {
     );
 
     const u = user(r.rows[0]);
+    const sessionId = await createSession(req, u.id);
     res.status(201).json({
-      token: sign({ ...u, sessionVersion: r.rows[0].session_version }),
+      token: sign({ ...u, sessionVersion: r.rows[0].session_version, sessionId }),
       user: u,
       recoveryCode
     });
@@ -275,6 +293,7 @@ app.post('/api/auth/register', authRateLimit, async (req, res) => {
 app.post('/api/auth/login', authRateLimit, async (req, res) => {
   const phone = clean(req.body.phone);
   const password = String(req.body.password || '');
+  const twoStepPin = String(req.body.twoStepPin || '');
 
   try {
     const r = await pool.query('SELECT * FROM users WHERE phone=$1', [phone]);
@@ -283,12 +302,19 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
     if (!u || !(await bcrypt.compare(password, u.password_hash))) {
       return res.status(401).json({ error: 'Invalid phone or password.' });
     }
+    if (u.two_step_pin_hash && !(await bcrypt.compare(twoStepPin, u.two_step_pin_hash))) {
+      return res.status(401).json({
+        error: twoStepPin ? 'Incorrect two-step verification PIN.' : 'Two-step verification PIN required.',
+        twoStepRequired: true
+      });
+    }
 
     await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [u.id]);
 
     const out = user(u);
+    const sessionId = await createSession(req, u.id);
     res.json({
-      token: sign({ ...out, sessionVersion: u.session_version }),
+      token: sign({ ...out, sessionVersion: u.session_version, sessionId }),
       user: out
     });
   } catch (e) {
@@ -393,6 +419,64 @@ app.patch('/api/privacy', auth, asyncRoute(async (req, res) => {
     [req.user.id, lastSeen, profile, about, req.body.readReceipts !== false, Boolean(req.body.silenceUnknownCalls)]
   );
   res.json({ ok: true });
+}));
+
+app.get('/api/security', auth, asyncRoute(async (req, res) => {
+  const sessions = await pool.query(
+    `SELECT id,device_name,ip_address,created_at,last_seen FROM user_sessions
+     WHERE user_id=$1 AND revoked_at IS NULL ORDER BY last_seen DESC`,
+    [req.user.id]
+  );
+  const account = await pool.query('SELECT two_step_pin_hash FROM users WHERE id=$1', [req.user.id]);
+  res.json({
+    twoStepEnabled: Boolean(account.rows[0]?.two_step_pin_hash),
+    sessions: sessions.rows.map(row => ({
+      id: String(row.id),
+      deviceName: row.device_name,
+      ipAddress: row.ip_address,
+      createdAt: row.created_at,
+      lastSeen: row.last_seen,
+      current: String(row.id) === String(req.user.sid)
+    }))
+  });
+}));
+
+app.delete('/api/security/sessions/:sessionId', auth, asyncRoute(async (req, res) => {
+  await pool.query(
+    'UPDATE user_sessions SET revoked_at=NOW() WHERE id=$1 AND user_id=$2',
+    [req.params.sessionId, req.user.id]
+  );
+  res.json({ ok: true });
+}));
+
+app.delete('/api/security/sessions', auth, asyncRoute(async (req, res) => {
+  await pool.query(
+    'UPDATE user_sessions SET revoked_at=NOW() WHERE user_id=$1 AND id<>$2 AND revoked_at IS NULL',
+    [req.user.id, req.user.sid]
+  );
+  res.json({ ok: true });
+}));
+
+app.post('/api/security/two-step', auth, asyncRoute(async (req, res) => {
+  const pin = String(req.body.pin || '');
+  const password = String(req.body.password || '');
+  if (!/^\d{6}$/.test(pin)) return res.status(400).json({ error: 'PIN must contain exactly 6 digits.' });
+  const account = await pool.query('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
+  if (!await bcrypt.compare(password, account.rows[0].password_hash)) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+  await pool.query('UPDATE users SET two_step_pin_hash=$1 WHERE id=$2', [await bcrypt.hash(pin, 12), req.user.id]);
+  res.json({ enabled: true });
+}));
+
+app.delete('/api/security/two-step', auth, asyncRoute(async (req, res) => {
+  const password = String(req.body.password || '');
+  const account = await pool.query('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
+  if (!await bcrypt.compare(password, account.rows[0].password_hash)) {
+    return res.status(401).json({ error: 'Current password is incorrect.' });
+  }
+  await pool.query('UPDATE users SET two_step_pin_hash=NULL WHERE id=$1', [req.user.id]);
+  res.json({ enabled: false });
 }));
 
 app.post('/api/users/:userId/block', auth, asyncRoute(async (req, res) => {
@@ -902,6 +986,13 @@ io.use(async (socket, next) => {
     const result = await pool.query('SELECT session_version FROM users WHERE id=$1', [decoded.id]);
     if (!result.rows.length || Number(decoded.sv || 0) !== Number(result.rows[0].session_version || 0)) {
       return next(new Error('Session expired'));
+    }
+    if (decoded.sid) {
+      const session = await pool.query(
+        'SELECT id FROM user_sessions WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL',
+        [decoded.sid, decoded.id]
+      );
+      if (!session.rows.length) return next(new Error('Device session expired'));
     }
     socket.user = decoded;
     socket.user.id = String(decoded.id);

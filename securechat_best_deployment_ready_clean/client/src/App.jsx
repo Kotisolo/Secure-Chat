@@ -88,6 +88,7 @@ export default function App() {
     username: '',
     phone: '',
     password: '',
+    twoStepPin: '',
     resetPhone: '',
     recoveryCode: '',
     resetPassword: ''
@@ -116,6 +117,7 @@ export default function App() {
   const [callHistory, setCallHistory] = useState([]);
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [privacy, setPrivacy] = useState(null);
+  const [security, setSecurity] = useState(null);
 
   const [call, setCall] = useState({
     active: false,
@@ -219,7 +221,8 @@ export default function App() {
         body: JSON.stringify({
           username: form.username,
           phone: form.phone,
-          password: form.password
+          password: form.password,
+          deviceName: navigator.userAgent
         })
       });
 
@@ -245,7 +248,9 @@ export default function App() {
         method: 'POST',
         body: JSON.stringify({
           phone: form.phone,
-          password: form.password
+          password: form.password,
+          twoStepPin: form.twoStepPin,
+          deviceName: navigator.userAgent
         })
       });
 
@@ -688,6 +693,50 @@ export default function App() {
     } catch (error) {
       alert('Could not load privacy settings: ' + error.message);
     }
+  }
+
+  async function openSecurity() {
+    try {
+      setSecurity(await api('/api/security'));
+    } catch (error) {
+      alert('Could not load account security: ' + error.message);
+    }
+  }
+
+  async function revokeSession(sessionId) {
+    await api(`/api/security/sessions/${sessionId}`, { method: 'DELETE' });
+    setSecurity(current => ({
+      ...current,
+      sessions: current.sessions.filter(session => session.id !== sessionId)
+    }));
+  }
+
+  async function revokeOtherSessions() {
+    await api('/api/security/sessions', { method: 'DELETE' });
+    setSecurity(current => ({
+      ...current,
+      sessions: current.sessions.filter(session => session.current)
+    }));
+  }
+
+  async function toggleTwoStep() {
+    const password = prompt('Enter your current account password:');
+    if (!password) return;
+    if (security.twoStepEnabled) {
+      await api('/api/security/two-step', {
+        method: 'DELETE',
+        body: JSON.stringify({ password })
+      });
+      setSecurity(current => ({ ...current, twoStepEnabled: false }));
+      return;
+    }
+    const pin = prompt('Choose a 6-digit two-step verification PIN:');
+    if (!/^\d{6}$/.test(pin || '')) return alert('PIN must contain exactly 6 digits.');
+    await api('/api/security/two-step', {
+      method: 'POST',
+      body: JSON.stringify({ password, pin })
+    });
+    setSecurity(current => ({ ...current, twoStepEnabled: true }));
   }
 
   async function savePrivacy(next) {
@@ -1254,6 +1303,7 @@ export default function App() {
                 <form onSubmit={login}>
                   <input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} />
                   <input placeholder="Password" type="password" value={form.password} onChange={e => f('password', e.target.value)} />
+                  <input placeholder="6-digit PIN (if enabled)" inputMode="numeric" maxLength="6" value={form.twoStepPin} onChange={e => f('twoStepPin', e.target.value.replace(/\D/g, ''))} />
                   <button className="primary" disabled={authLoading}>
                     {authLoading ? 'Signing in…' : 'Login'}
                   </button>
@@ -1331,6 +1381,7 @@ export default function App() {
           <button className="icon" onClick={requestNotifications} title="Enable notifications"><Bell /></button>
           <button className="icon" onClick={loadCallHistory} title="Call history"><History /></button>
           <button className="icon" onClick={openPrivacy} title="Privacy"><Shield /></button>
+          <button className="icon" onClick={openSecurity} title="Account security"><Lock /></button>
         </div>
 
         <div className="search">
@@ -1831,6 +1882,33 @@ export default function App() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {security && (
+        <div className="modal" onClick={() => setSecurity(null)}>
+          <div className="securityCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => setSecurity(null)}><X /></button>
+            <h2>Account security</h2>
+            <button className="twoStepButton" onClick={toggleTwoStep}>
+              <Lock /> Two-step verification: {security.twoStepEnabled ? 'On' : 'Off'}
+            </button>
+            <div className="sessionHeader">
+              <b>Logged-in devices</b>
+              <button onClick={revokeOtherSessions}>Log out others</button>
+            </div>
+            <div className="sessionList">
+              {security.sessions.map(session => (
+                <div key={session.id}>
+                  <div>
+                    <b>{session.current ? 'This device' : session.deviceName}</b>
+                    <small>{new Date(session.lastSeen).toLocaleString()} · {session.ipAddress || 'Unknown IP'}</small>
+                  </div>
+                  {!session.current && <button onClick={() => revokeSession(session.id)}>Log out</button>}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
