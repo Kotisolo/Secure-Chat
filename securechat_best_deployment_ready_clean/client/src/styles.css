@@ -231,6 +231,9 @@
 .sessionList>div{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
 .sessionList>div>div{flex:1;min-width:0}
 .sessionList small{display:block;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.accountActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.accountActions button{min-height:42px;border-radius:12px;background:var(--panel3);color:white;font-weight:800}
+.accountActions .danger{grid-column:1/-1}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

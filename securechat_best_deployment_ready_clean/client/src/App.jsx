@@ -412,6 +412,11 @@ export default function App() {
       showNotification(`Incoming ${d.callType} call`, d.callerName);
     });
 
+    s.on('security:new-login', d => {
+      showNotification('New SecureChat login', d.deviceName);
+      alert(`New login detected: ${d.deviceName}`);
+    });
+
     s.on('call:answer', async ({ answer }) => {
       if (!pc.current) return;
       await pc.current.setRemoteDescription(new RTCSessionDescription(answer));
@@ -737,6 +742,38 @@ export default function App() {
       body: JSON.stringify({ password, pin })
     });
     setSecurity(current => ({ ...current, twoStepEnabled: true }));
+  }
+
+  async function changePassword() {
+    const currentPassword = prompt('Enter your current password:');
+    if (!currentPassword) return;
+    const newPassword = prompt('Enter a new password (at least 8 characters):');
+    if (!newPassword) return;
+    await api('/api/security/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword })
+    });
+    alert('Password changed. Other devices were logged out.');
+    openSecurity();
+  }
+
+  async function downloadAccountData() {
+    const data = await api('/api/account/export');
+    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `securechat-data-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function deleteAccount() {
+    if (!confirm('Permanently delete your account, messages and call history? This cannot be undone.')) return;
+    const password = prompt('Enter your password to permanently delete the account:');
+    if (!password) return;
+    await api('/api/account', { method: 'DELETE', body: JSON.stringify({ password }) });
+    setSecurity(null);
+    logout();
   }
 
   async function savePrivacy(next) {
@@ -1894,6 +1931,11 @@ export default function App() {
             <button className="twoStepButton" onClick={toggleTwoStep}>
               <Lock /> Two-step verification: {security.twoStepEnabled ? 'On' : 'Off'}
             </button>
+            <div className="accountActions">
+              <button onClick={changePassword}>Change password</button>
+              <button onClick={downloadAccountData}>Download my data</button>
+              <button className="danger" onClick={deleteAccount}>Delete account</button>
+            </div>
             <div className="sessionHeader">
               <b>Logged-in devices</b>
               <button onClick={revokeOtherSessions}>Log out others</button>
