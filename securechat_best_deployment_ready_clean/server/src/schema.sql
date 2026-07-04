@@ -17,6 +17,8 @@ CREATE TABLE IF NOT EXISTS messages(
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS ciphertext TEXT;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS encryption_version SMALLINT;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_device_id TEXT;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to_id UUID REFERENCES messages(id) ON DELETE SET NULL;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited_at TIMESTAMPTZ;
 CREATE TABLE IF NOT EXISTS user_devices(
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -31,6 +33,17 @@ CREATE TABLE IF NOT EXISTS message_deletions(
  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
  deleted_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(user_id,message_id));
+CREATE TABLE IF NOT EXISTS message_stars(
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(user_id,message_id));
+CREATE TABLE IF NOT EXISTS message_reactions(
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ message_id UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+ emoji VARCHAR(16) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  PRIMARY KEY(user_id,message_id));
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);

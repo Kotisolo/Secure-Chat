@@ -168,6 +168,21 @@
 .messageMenu p{color:var(--muted)}
 .messageMenu>div{display:flex;gap:10px;margin-top:20px}
 .messageMenu button{flex:1;height:46px;border-radius:14px;background:var(--panel3);color:white;font-weight:800;display:flex;align-items:center;justify-content:center;gap:8px}
+.messageMenu .reactionPicker{display:flex;gap:6px;margin:14px 0}
+.messageMenu .reactionPicker button{height:42px;min-width:0;font-size:20px;padding:0}
+.messageMenu .messageActionGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}
+.messageMenu .messageActionGrid button{padding:0 8px}
+.messageMenu .menuCancel{width:100%;margin-top:10px}
+.replyPreview{margin:-4px -5px 8px;padding:7px 9px;border-left:3px solid var(--cyan);border-radius:8px;background:rgba(0,0,0,.2)}
+.replyPreview b,.replyPreview span{display:block;font-size:12px}
+.replyPreview span{opacity:.78;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reactionRow{display:flex;gap:3px;margin:5px 0 -7px}
+.reactionRow span{padding:2px 5px;border-radius:10px;background:var(--panel);font-size:14px}
+.composeContext{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-top:1px solid var(--line)}
+.composeContext>div{flex:1;min-width:0}
+.composeContext b,.composeContext span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.composeContext span{color:var(--muted);font-size:12px}
+.composeContext button{width:36px;height:36px;border-radius:11px;background:var(--panel3);color:white;display:grid;place-items:center}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
-  KeyRound, Copy, Camera, Trash2, Volume2, VolumeX
+  KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -98,6 +98,8 @@ export default function App() {
   const [emoji, setEmoji] = useState(false);
   const [profile, setProfile] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);
+  const [editingMessage, setEditingMessage] = useState(null);
 
   const [call, setCall] = useState({
     active: false,
@@ -339,6 +341,32 @@ export default function App() {
       setMessages(p => updateReceipt(p, d.conversationId, 'readAt', d.readAt));
     });
 
+    s.on('message:deleted', d => {
+      setMessages(current => ({
+        ...current,
+        [d.conversationId]: (current[d.conversationId] || []).filter(message => message.id !== d.messageId)
+      }));
+    });
+
+    s.on('message:reaction', applyReaction);
+
+    s.on('message:updated', async message => {
+      let displayMessage = message;
+      if (E2EE_ENABLED && message.ciphertext) {
+        try {
+          displayMessage = await decryptMessage(message, message.conversationId);
+        } catch {
+          displayMessage = { ...message, body: 'Unable to decrypt this edited message.' };
+        }
+      }
+      setMessages(current => ({
+        ...current,
+        [message.conversationId]: (current[message.conversationId] || []).map(existing => (
+          existing.id === message.id ? { ...existing, ...displayMessage } : existing
+        ))
+      }));
+    });
+
     s.on('user:online', loadChats);
     s.on('user:offline', loadChats);
 
@@ -471,6 +499,7 @@ export default function App() {
       fileUrl: payload.fileUrl,
       fileName: payload.fileName,
       fileMime: payload.fileMime,
+      replyToId: payload.replyToId || replyTo?.id || null,
       createdAt: new Date().toISOString(),
       local: true
     };
@@ -481,6 +510,7 @@ export default function App() {
     }));
 
     setText('');
+    setReplyTo(null);
 
     try {
       const encryptedPayload = E2EE_ENABLED && tmp.kind === 'text'
@@ -495,6 +525,7 @@ export default function App() {
           fileUrl: tmp.fileUrl,
           fileName: tmp.fileName,
           fileMime: tmp.fileMime,
+          replyToId: tmp.replyToId,
           ...encryptedPayload
         })
       });
@@ -561,13 +592,16 @@ export default function App() {
     }
   }
 
-  async function deleteMessage() {
+  async function deleteMessage(scope = 'me') {
     if (!selectedMessage || !active || !me) return;
     const conversationId = cid(me.id, active.id);
     const messageId = selectedMessage.id;
     try {
       if (!String(messageId).startsWith('tmp')) {
-        await api('/api/messages/' + encodeURIComponent(messageId), { method: 'DELETE' });
+        await api(
+          '/api/messages/' + encodeURIComponent(messageId) + (scope === 'everyone' ? '?scope=everyone' : ''),
+          { method: 'DELETE' }
+        );
       }
       setMessages(current => ({
         ...current,
@@ -577,6 +611,96 @@ export default function App() {
       loadChats();
     } catch (error) {
       alert('Could not delete message: ' + error.message);
+    }
+  }
+
+  function beginReply() {
+    setReplyTo(selectedMessage);
+    setSelectedMessage(null);
+  }
+
+  async function copyMessage() {
+    await navigator.clipboard.writeText(selectedMessage?.body || '');
+    setSelectedMessage(null);
+  }
+
+  async function toggleStar() {
+    if (!selectedMessage || String(selectedMessage.id).startsWith('tmp')) return;
+    try {
+      const result = await api(`/api/messages/${encodeURIComponent(selectedMessage.id)}/star`, {
+        method: 'POST',
+        body: '{}'
+      });
+      const c = cid(me.id, active.id);
+      setMessages(current => ({
+        ...current,
+        [c]: (current[c] || []).map(message => (
+          message.id === selectedMessage.id ? { ...message, starred: result.starred } : message
+        ))
+      }));
+      setSelectedMessage(null);
+    } catch (error) {
+      alert('Could not star message: ' + error.message);
+    }
+  }
+
+  async function reactToMessage(emojiValue) {
+    if (!selectedMessage || String(selectedMessage.id).startsWith('tmp')) return;
+    try {
+      const result = await api(`/api/messages/${encodeURIComponent(selectedMessage.id)}/reaction`, {
+        method: 'POST',
+        body: JSON.stringify({ emoji: emojiValue })
+      });
+      applyReaction(result);
+      setSelectedMessage(null);
+    } catch (error) {
+      alert('Could not add reaction: ' + error.message);
+    }
+  }
+
+  function applyReaction({ conversationId, messageId, userId, emoji: emojiValue }) {
+    setMessages(current => ({
+      ...current,
+      [conversationId]: (current[conversationId] || []).map(message => {
+        if (message.id !== messageId) return message;
+        const reactions = (message.reactions || []).filter(reaction => String(reaction.userId) !== String(userId));
+        return { ...message, reactions: [...reactions, { userId, emoji: emojiValue }] };
+      })
+    }));
+  }
+
+  function beginEdit() {
+    setEditingMessage(selectedMessage);
+    setText(selectedMessage.body || '');
+    setSelectedMessage(null);
+  }
+
+  async function saveEdit() {
+    if (!editingMessage || !text.trim()) return;
+    const c = cid(me.id, active.id);
+    try {
+      const encryptedPayload = E2EE_ENABLED
+        ? await encryptMessage(active.id, c, text.trim())
+        : {};
+      const updated = await api(`/api/messages/${encodeURIComponent(editingMessage.id)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          body: text.trim(),
+          ...encryptedPayload
+        })
+      });
+      setMessages(current => ({
+        ...current,
+        [c]: (current[c] || []).map(message => (
+          message.id === editingMessage.id
+            ? { ...message, ...updated, body: text.trim() }
+            : message
+        ))
+      }));
+      setEditingMessage(null);
+      setText('');
+    } catch (error) {
+      alert('Could not edit message: ' + error.message);
     }
   }
 
@@ -1012,13 +1136,23 @@ export default function App() {
             </header>
 
             <section className="msgs">
-              {rows.map(m => (
+              {rows.map(m => {
+                const repliedMessage = m.replyToId
+                  ? rows.find(row => row.id === m.replyToId)
+                  : null;
+                return (
                 <div
                   key={m.id}
                   className={'bubble messagePress ' + (String(m.senderId) === String(me.id) ? 'mine' : 'theirs')}
                   onClick={() => setSelectedMessage(m)}
                   title="Press to select this message"
                 >
+                  {repliedMessage && (
+                    <div className="replyPreview">
+                      <b>{String(repliedMessage.senderId) === String(me.id) ? 'You' : active.username}</b>
+                      <span>{repliedMessage.body}</span>
+                    </div>
+                  )}
                   {m.kind === 'image' && m.fileUrl ? (
                     <img src={resolveFileUrl(m.fileUrl)} alt={m.fileName || 'Photo'} />
                   ) : m.kind === 'file' && m.fileUrl ? (
@@ -1030,12 +1164,35 @@ export default function App() {
                   )}
 
                   <small>
+                    {m.starred ? '★ ' : ''}{m.editedAt ? 'edited · ' : ''}
                     {t(m.createdAt)} {String(m.senderId) === String(me.id) ? receipt(m) : ''}
                   </small>
+                  {m.reactions?.length > 0 && (
+                    <div className="reactionRow">
+                      {m.reactions.map((reaction, index) => (
+                        <span key={`${reaction.userId}-${index}`}>{reaction.emoji}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
               <div ref={endRef} />
             </section>
+
+            {(replyTo || editingMessage) && (
+              <div className="composeContext">
+                <div>
+                  <b>{editingMessage ? 'Editing message' : `Replying to ${String(replyTo?.senderId) === String(me.id) ? 'yourself' : active.username}`}</b>
+                  <span>{editingMessage?.body || replyTo?.body}</span>
+                </div>
+                <button onClick={() => {
+                  setReplyTo(null);
+                  setEditingMessage(null);
+                  if (editingMessage) setText('');
+                }}><X /></button>
+              </div>
+            )}
 
             <footer className="compose">
               <button className="icon" onClick={() => setEmoji(!emoji)}><Smile /></button>
@@ -1062,12 +1219,12 @@ export default function App() {
                   emitTyping();
                 }}
                 onKeyDown={e => {
-                  if (e.key === 'Enter') send();
+                  if (e.key === 'Enter') editingMessage ? saveEdit() : send();
                 }}
-                placeholder="Message"
+                placeholder={editingMessage ? 'Edit message' : 'Message'}
               />
 
-              <button className="send" onClick={() => send()}><Send /></button>
+              <button className="send" onClick={() => editingMessage ? saveEdit() : send()}><Send /></button>
             </footer>
 
             {emoji && (
@@ -1219,12 +1376,25 @@ export default function App() {
       {selectedMessage && (
         <div className="modal" onClick={() => setSelectedMessage(null)}>
           <div className="messageMenu" onClick={e => e.stopPropagation()}>
-            <h3>Delete this message?</h3>
-            <p>It will be removed only from your account.</p>
-            <div>
-              <button onClick={() => setSelectedMessage(null)}>Cancel</button>
-              <button className="danger" onClick={deleteMessage}><Trash2 /> Delete</button>
+            <h3>Message actions</h3>
+            <div className="reactionPicker">
+              {['👍', '❤️', '😂', '😮', '😢', '🙏'].map(value => (
+                <button key={value} onClick={() => reactToMessage(value)}>{value}</button>
+              ))}
             </div>
+            <div className="messageActionGrid">
+              <button onClick={beginReply}><Reply /> Reply</button>
+              <button onClick={copyMessage}><Copy /> Copy</button>
+              <button onClick={toggleStar}><Star /> {selectedMessage.starred ? 'Unstar' : 'Star'}</button>
+              {String(selectedMessage.senderId) === String(me?.id) && selectedMessage.kind === 'text' && (
+                <button onClick={beginEdit}><Pencil /> Edit</button>
+              )}
+              <button className="danger" onClick={() => deleteMessage('me')}><Trash2 /> Delete for me</button>
+              {String(selectedMessage.senderId) === String(me?.id) && (
+                <button className="danger" onClick={() => deleteMessage('everyone')}><Trash2 /> Delete for everyone</button>
+              )}
+            </div>
+            <button className="menuCancel" onClick={() => setSelectedMessage(null)}>Cancel</button>
           </div>
         </div>
       )}

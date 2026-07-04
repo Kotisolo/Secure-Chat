@@ -199,6 +199,10 @@ function msg(m) {
     ciphertext: m.ciphertext || null,
     encryptionVersion: m.encryption_version || null,
     senderDeviceId: m.sender_device_id || null,
+    replyToId: m.reply_to_id ? String(m.reply_to_id) : null,
+    editedAt: m.edited_at || null,
+    starred: Boolean(m.starred),
+    reactions: Array.isArray(m.reactions) ? m.reactions : [],
     deliveredAt: m.delivered_at,
     readAt: m.read_at,
     createdAt: m.created_at
@@ -443,12 +447,17 @@ app.get('/api/messages/:conversationId', auth, async (req, res) => {
     }
 
     const r = await pool.query(
-      `SELECT * FROM messages
-       WHERE conversation_id=$1 AND deleted_at IS NULL
+      `SELECT m.*,
+         EXISTS(SELECT 1 FROM message_stars ms WHERE ms.user_id=$2 AND ms.message_id=m.id) starred,
+         COALESCE((SELECT json_agg(json_build_object(
+           'userId',mr.user_id::text,'emoji',mr.emoji))
+           FROM message_reactions mr WHERE mr.message_id=m.id),'[]'::json) reactions
+       FROM messages m
+       WHERE m.conversation_id=$1 AND m.deleted_at IS NULL
          AND NOT EXISTS (
            SELECT 1 FROM message_deletions md
-           WHERE md.user_id=$2 AND md.message_id=messages.id)
-       ORDER BY created_at ASC LIMIT 500`,
+           WHERE md.user_id=$2 AND md.message_id=m.id)
+       ORDER BY m.created_at ASC LIMIT 500`,
       [c, req.user.id]
     );
 
@@ -469,6 +478,7 @@ app.post('/api/messages', auth, async (req, res) => {
   const ciphertext = typeof req.body.ciphertext === 'string' ? req.body.ciphertext : null;
   const encryptionVersion = Number(req.body.encryptionVersion || 0) || null;
   const senderDeviceId = clean(req.body.senderDeviceId);
+  const replyToId = clean(req.body.replyToId);
 
   if (!recipientId) return res.status(400).json({ error: 'Recipient required.' });
   if (!validUuid(recipientId)) return res.status(400).json({ error: 'Invalid recipient.' });
@@ -484,6 +494,7 @@ app.post('/api/messages', auth, async (req, res) => {
   if (fileUrl && (!String(fileUrl).startsWith('/uploads/') || !fileName)) {
     return res.status(400).json({ error: 'Invalid file attachment.' });
   }
+  if (replyToId && !validUuid(replyToId)) return res.status(400).json({ error: 'Invalid reply.' });
 
   const c = cid(req.user.id, recipientId);
 
@@ -501,11 +512,12 @@ app.post('/api/messages', auth, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO messages(
         conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,delivered_at,
-        ciphertext,encryption_version,sender_device_id
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        ciphertext,encryption_version,sender_device_id,reply_to_id
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
       [
         c, req.user.id, recipientId, ciphertext ? '[Encrypted message]' : (body || fileName || kind),
-        kind, fileUrl, fileName, fileMime, delivered, ciphertext, encryptionVersion, senderDeviceId || null
+        kind, fileUrl, fileName, fileMime, delivered, ciphertext, encryptionVersion,
+        senderDeviceId || null, replyToId || null
       ]
     );
 
@@ -566,16 +578,105 @@ app.delete('/api/messages/:messageId', auth, asyncRoute(async (req, res) => {
   const messageId = req.params.messageId;
   if (!validUuid(messageId)) return res.status(400).json({ error: 'Invalid message.' });
   const result = await pool.query(
-    'SELECT id FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
+    'SELECT id,sender_id,recipient_id,conversation_id FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
     [messageId, req.user.id]
   );
   if (!result.rows.length) return res.status(404).json({ error: 'Message not found.' });
+  const message = result.rows[0];
+  if (req.query.scope === 'everyone') {
+    if (String(message.sender_id) !== String(req.user.id)) {
+      return res.status(403).json({ error: 'Only the sender can delete for everyone.' });
+    }
+    await pool.query('UPDATE messages SET deleted_at=NOW() WHERE id=$1', [messageId]);
+    io.to(userRoom(message.recipient_id)).emit('message:deleted', {
+      messageId,
+      conversationId: message.conversation_id
+    });
+    return res.json({ ok: true });
+  }
   await pool.query(
     `INSERT INTO message_deletions(user_id,message_id)
      VALUES($1,$2) ON CONFLICT(user_id,message_id) DO NOTHING`,
     [req.user.id, messageId]
   );
   res.json({ ok: true });
+}));
+
+app.patch('/api/messages/:messageId', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  const body = String(req.body.body || '').trim();
+  const ciphertext = typeof req.body.ciphertext === 'string' ? req.body.ciphertext : null;
+  const encryptionVersion = Number(req.body.encryptionVersion || 0) || null;
+  const senderDeviceId = clean(req.body.senderDeviceId);
+  if (!validUuid(messageId) || !body || body.length > 10000 || ciphertext?.length > 30000) {
+    return res.status(400).json({ error: 'Enter a valid message.' });
+  }
+  const result = await pool.query(
+    `UPDATE messages SET body=$1,ciphertext=$2,encryption_version=$3,sender_device_id=$4,edited_at=NOW()
+     WHERE id=$5 AND sender_id=$6 AND kind='text' AND deleted_at IS NULL
+     RETURNING *`,
+    [
+      ciphertext ? '[Encrypted message]' : body,
+      ciphertext, encryptionVersion, senderDeviceId || null, messageId, req.user.id
+    ]
+  );
+  if (!result.rows.length) {
+    return res.status(400).json({ error: 'This message cannot be edited.' });
+  }
+  const updated = msg(result.rows[0]);
+  io.to(userRoom(updated.recipientId)).emit('message:updated', updated);
+  res.json(updated);
+}));
+
+app.post('/api/messages/:messageId/star', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  const found = await pool.query(
+    'SELECT id FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
+    [messageId, req.user.id]
+  );
+  if (!found.rows.length) return res.status(404).json({ error: 'Message not found.' });
+  const existing = await pool.query(
+    'DELETE FROM message_stars WHERE user_id=$1 AND message_id=$2 RETURNING message_id',
+    [req.user.id, messageId]
+  );
+  const starred = !existing.rows.length;
+  if (starred) {
+    await pool.query(
+      'INSERT INTO message_stars(user_id,message_id) VALUES($1,$2)',
+      [req.user.id, messageId]
+    );
+  }
+  res.json({ starred });
+}));
+
+app.post('/api/messages/:messageId/reaction', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  const emoji = clean(req.body.emoji);
+  if (!validUuid(messageId) || !emoji || emoji.length > 16) {
+    return res.status(400).json({ error: 'Invalid reaction.' });
+  }
+  const found = await pool.query(
+    'SELECT sender_id,recipient_id,conversation_id FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
+    [messageId, req.user.id]
+  );
+  if (!found.rows.length) return res.status(404).json({ error: 'Message not found.' });
+  await pool.query(
+    `INSERT INTO message_reactions(user_id,message_id,emoji) VALUES($1,$2,$3)
+     ON CONFLICT(user_id,message_id) DO UPDATE SET emoji=EXCLUDED.emoji,created_at=NOW()`,
+    [req.user.id, messageId, emoji]
+  );
+  const message = found.rows[0];
+  const peerId = String(message.sender_id) === String(req.user.id)
+    ? message.recipient_id
+    : message.sender_id;
+  const payload = {
+    messageId,
+    conversationId: message.conversation_id,
+    userId: String(req.user.id),
+    emoji
+  };
+  io.to(userRoom(peerId)).emit('message:reaction', payload);
+  res.json(payload);
 }));
 
 app.post('/api/profile/avatar', auth, uploadRateLimit, upload.single('file'), asyncRoute(async (req, res) => {
