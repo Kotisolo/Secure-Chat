@@ -145,3 +145,14 @@
   border-radius: 12px;
   background: rgba(255, 77, 109, .12);
 }
+
+@media(min-width:901px){
+  .app{display:flex;width:100%;max-width:none}
+  .side{flex:0 0 360px;width:360px;min-width:360px}
+  .panel{flex:1 1 0;width:0;max-width:none}
+  .head,.msgs,.compose{width:100%;max-width:none}
+}
+
+.permissionCard{width:460px;max-width:94vw;padding:30px;text-align:center;border-radius:26px;background:var(--panel);border:1px solid var(--line);box-shadow:0 24px 80px rgba(0,0,0,.5)}
+.permissionCard p{color:var(--muted);line-height:1.55;margin:12px 0 22px}
+.badge.small{width:62px;height:62px;border-radius:20px}
