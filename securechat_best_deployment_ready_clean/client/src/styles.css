@@ -247,6 +247,10 @@
 .groupBubble{max-width:78%;padding:9px 11px;border-radius:14px;display:flex;flex-direction:column}
 .groupBubble.mine{align-self:flex-end}.groupBubble.theirs{align-self:flex-start}.groupBubble b{font-size:11px;color:var(--cyan)}.groupBubble small{font-size:10px;opacity:.7}
 .groupCompose{display:flex;gap:8px;padding:8px;background:var(--panel3)}.groupCompose input{flex:1;min-width:0;border:0;outline:0;border-radius:18px;background:var(--panel);color:white;padding:0 12px}.groupCompose button{width:40px;height:40px;border-radius:50%;background:var(--secondary);color:white;display:grid;place-items:center}
+.groupHeader>div{display:flex;gap:6px}.groupHeader>div button:first-child{width:auto;padding:0 10px}
+.groupAdminActions{display:flex;gap:8px;margin:10px 0}.groupAdminActions button{flex:1;height:40px;border-radius:11px;background:var(--panel3);color:white}
+.inviteCard{padding:12px;border-radius:14px;background:var(--panel3)}.inviteCard img{display:block;width:180px;height:180px;margin:0 auto 8px;border-radius:8px}.inviteCard input{width:100%;height:38px;border:0;border-radius:9px;background:var(--panel);color:white;padding:0 9px}.inviteCard button{margin:8px 4px 0;padding:8px 12px;border-radius:9px;background:var(--panel);color:white}
+.memberList>div>div{display:flex;gap:5px}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

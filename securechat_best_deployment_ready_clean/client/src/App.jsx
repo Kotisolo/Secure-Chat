@@ -10,6 +10,7 @@ import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
+import QRCode from 'qrcode';
 import {
   E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage,
   encryptAttachment, decryptAttachment, encryptGroupMessage, decryptGroupMessage
@@ -122,6 +123,7 @@ export default function App() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupMessages, setGroupMessages] = useState({});
   const [groupText, setGroupText] = useState('');
+  const [groupInvite, setGroupInvite] = useState(null);
   const selectedGroupRef = useRef(null);
 
   const [call, setCall] = useState({
@@ -547,6 +549,50 @@ export default function App() {
     });
     await loadGroups();
     setSelectedGroup((await api('/api/groups')).find(group => group.id === selectedGroup.id));
+  }
+
+  async function editGroup() {
+    const name = prompt('Group name:', selectedGroup.name);
+    if (!name) return;
+    const description = prompt('Group description:', selectedGroup.description || '') || '';
+    await api(`/api/groups/${selectedGroup.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name, description })
+    });
+    await loadGroups();
+    setSelectedGroup(current => ({ ...current, name, description }));
+  }
+
+  async function changeGroupRole(member) {
+    const role = member.role === 'admin' ? 'member' : 'admin';
+    await api(`/api/groups/${selectedGroup.id}/members/${member.id}/role`, {
+      method: 'PATCH',
+      body: JSON.stringify({ role })
+    });
+    const refreshed = await api('/api/groups');
+    setGroups(refreshed);
+    setSelectedGroup(refreshed.find(group => group.id === selectedGroup.id));
+  }
+
+  async function createGroupInvite() {
+    const result = await api(`/api/groups/${selectedGroup.id}/invite`, { method: 'POST', body: '{}' });
+    const url = `${location.origin}/?groupInvite=${encodeURIComponent(result.token)}`;
+    setGroupInvite({ url, qr: await QRCode.toDataURL(url, { width: 220, margin: 1 }) });
+  }
+
+  async function revokeGroupInvite() {
+    await api(`/api/groups/${selectedGroup.id}/invite`, { method: 'DELETE' });
+    setGroupInvite(null);
+  }
+
+  async function joinGroup() {
+    const value = prompt('Paste a SecureChat group invite link or token:');
+    if (!value) return;
+    const token = value.includes('groupInvite=')
+      ? new URL(value).searchParams.get('groupInvite')
+      : value.trim();
+    await api(`/api/groups/join/${encodeURIComponent(token)}`, { method: 'POST', body: '{}' });
+    await loadGroups();
   }
 
   async function removeGroupMember(userId) {
@@ -1533,7 +1579,10 @@ export default function App() {
         </button>
         <div className="groupHeader">
           <b><Users /> Groups</b>
-          <button onClick={createGroup} title="Create group"><Plus /></button>
+          <div>
+            <button onClick={joinGroup} title="Join group">Join</button>
+            <button onClick={createGroup} title="Create group"><Plus /></button>
+          </div>
         </div>
         {groups.map(group => (
           <button className="groupRow" key={group.id} onClick={() => openGroup(group)}>
@@ -2075,6 +2124,20 @@ export default function App() {
             <div className="avatar big"><Users /></div>
             <h2>{selectedGroup.name}</h2>
             <p>{selectedGroup.description}</p>
+            {selectedGroup.role === 'admin' && (
+              <div className="groupAdminActions">
+                <button onClick={editGroup}>Edit group</button>
+                <button onClick={createGroupInvite}>Invite link</button>
+              </div>
+            )}
+            {groupInvite && (
+              <div className="inviteCard">
+                <img src={groupInvite.qr} alt="Group invite QR code" />
+                <input readOnly value={groupInvite.url} />
+                <button onClick={() => navigator.clipboard.writeText(groupInvite.url)}>Copy link</button>
+                <button className="danger" onClick={revokeGroupInvite}>Revoke</button>
+              </div>
+            )}
             <div className="groupConversation">
               <div className="groupMessageList">
                 {(groupMessages[selectedGroup.id] || []).map(message => (
@@ -2109,7 +2172,10 @@ export default function App() {
                 <div key={member.id}>
                   <span>{member.username} · {member.role}</span>
                   {selectedGroup.role === 'admin' && member.id !== me.id && (
-                    <button onClick={() => removeGroupMember(member.id)}>Remove</button>
+                    <div>
+                      <button onClick={() => changeGroupRole(member)}>{member.role === 'admin' ? 'Demote' : 'Promote'}</button>
+                      <button onClick={() => removeGroupMember(member.id)}>Remove</button>
+                    </div>
                   )}
                 </div>
               ))}
