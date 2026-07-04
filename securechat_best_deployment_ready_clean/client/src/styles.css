@@ -183,6 +183,11 @@
 .composeContext b,.composeContext span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .composeContext span{color:var(--muted);font-size:12px}
 .composeContext button{width:36px;height:36px;border-radius:11px;background:var(--panel3);color:white;display:grid;place-items:center}
+.voiceMessage{display:block;width:260px;max-width:62vw;height:42px}
+.recordingStatus{flex:1;height:48px;border-radius:24px;background:var(--panel3);display:flex;align-items:center;gap:9px;padding:0 16px;color:#ffb4c0;font-weight:800}
+.recordingStatus span{width:10px;height:10px;border-radius:50%;background:var(--red);animation:recordPulse 1s infinite}
+.recordingStop{background:var(--red)}
+@keyframes recordPulse{50%{opacity:.3}}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

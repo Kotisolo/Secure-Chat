@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
-  KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil
+  KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -121,6 +121,8 @@ export default function App() {
   const [camOn, setCamOn] = useState(true);
   const [speakerVolume, setSpeakerVolume] = useState(0.7);
   const [speakerMuted, setSpeakerMuted] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
 
   const pc = useRef(null);
   const localStream = useRef(null);
@@ -137,6 +139,10 @@ export default function App() {
   const socketReady = useRef(false);
   const activeRef = useRef(null);
   const pendingIce = useRef([]);
+  const mediaRecorder = useRef(null);
+  const recordingStream = useRef(null);
+  const recordingChunks = useRef([]);
+  const recordingTimer = useRef(null);
 
   useEffect(() => {
     if (!call.active) return undefined;
@@ -612,6 +618,64 @@ export default function App() {
     } catch (error) {
       alert('Could not delete message: ' + error.message);
     }
+  }
+
+  async function startVoiceRecording() {
+    if (!active || recording) return;
+    if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+      alert('Voice recording is not supported by this browser.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      const preferredTypes = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'];
+      const mimeType = preferredTypes.find(type => MediaRecorder.isTypeSupported(type));
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recordingStream.current = stream;
+      recordingChunks.current = [];
+      mediaRecorder.current = recorder;
+      recorder.ondataavailable = event => {
+        if (event.data.size) recordingChunks.current.push(event.data);
+      };
+      recorder.onstop = async () => {
+        clearInterval(recordingTimer.current);
+        stream.getTracks().forEach(track => track.stop());
+        const type = recorder.mimeType || 'audio/webm';
+        const extension = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
+        const blob = new Blob(recordingChunks.current, { type });
+        recordingChunks.current = [];
+        recordingStream.current = null;
+        if (!blob.size) return;
+        try {
+          const voiceFile = new File([blob], `voice-${Date.now()}.${extension}`, { type });
+          const uploaded = await uploadFile(voiceFile);
+          await send({
+            body: 'Voice message',
+            kind: 'audio',
+            fileUrl: uploaded.url,
+            fileName: uploaded.name,
+            fileMime: uploaded.mime
+          });
+        } catch (error) {
+          alert('Voice message failed: ' + error.message);
+        }
+      };
+      recorder.start(250);
+      setRecording(true);
+      setRecordingSeconds(0);
+      recordingTimer.current = setInterval(() => setRecordingSeconds(value => value + 1), 1000);
+    } catch (error) {
+      alert(mediaErrorMessage(error, 'audio'));
+    }
+  }
+
+  function stopVoiceRecording() {
+    if (mediaRecorder.current?.state === 'recording') mediaRecorder.current.stop();
+    mediaRecorder.current = null;
+    setRecording(false);
+    setRecordingSeconds(0);
   }
 
   function beginReply() {
@@ -1159,6 +1223,14 @@ export default function App() {
                     <a href={resolveFileUrl(m.fileUrl)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}>
                       📎 {m.fileName || m.body}
                     </a>
+                  ) : m.kind === 'audio' && m.fileUrl ? (
+                    <audio
+                      className="voiceMessage"
+                      src={resolveFileUrl(m.fileUrl)}
+                      controls
+                      preload="metadata"
+                      onClick={e => e.stopPropagation()}
+                    />
                   ) : (
                     <span>{m.body}</span>
                   )}
@@ -1212,7 +1284,12 @@ export default function App() {
                 <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
               </label>
 
-              <input
+              {recording ? (
+                <div className="recordingStatus">
+                  <span />
+                  Recording {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
+                </div>
+              ) : <input
                 value={text}
                 onChange={e => {
                   setText(e.target.value);
@@ -1222,9 +1299,19 @@ export default function App() {
                   if (e.key === 'Enter') editingMessage ? saveEdit() : send();
                 }}
                 placeholder={editingMessage ? 'Edit message' : 'Message'}
-              />
+              />}
 
-              <button className="send" onClick={() => editingMessage ? saveEdit() : send()}><Send /></button>
+              <button
+                className={recording ? 'send recordingStop' : 'send'}
+                onClick={recording
+                  ? stopVoiceRecording
+                  : text.trim() || editingMessage
+                    ? editingMessage ? saveEdit : () => send()
+                    : startVoiceRecording}
+                title={recording ? 'Stop and send recording' : text.trim() || editingMessage ? 'Send message' : 'Record voice message'}
+              >
+                {recording ? <Square /> : text.trim() || editingMessage ? <Send /> : <Mic />}
+              </button>
             </footer>
 
             {emoji && (
