@@ -400,6 +400,31 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
   );
 }));
 
+app.get('/api/calls', auth, asyncRoute(async (req, res) => {
+  const result = await pool.query(
+    `SELECT c.*,
+      CASE WHEN c.caller_id=$1 THEN recipient.username ELSE caller.username END contact_name,
+      CASE WHEN c.caller_id=$1 THEN recipient.avatar_url ELSE caller.avatar_url END contact_avatar
+     FROM call_history c
+     JOIN users caller ON caller.id=c.caller_id
+     JOIN users recipient ON recipient.id=c.recipient_id
+     WHERE c.caller_id=$1 OR c.recipient_id=$1
+     ORDER BY c.started_at DESC LIMIT 100`,
+    [req.user.id]
+  );
+  res.json(result.rows.map(row => ({
+    id: String(row.id),
+    direction: String(row.caller_id) === String(req.user.id) ? 'outgoing' : 'incoming',
+    contactName: row.contact_name,
+    contactAvatar: row.contact_avatar,
+    type: row.call_type,
+    status: row.status,
+    startedAt: row.started_at,
+    answeredAt: row.answered_at,
+    endedAt: row.ended_at
+  })));
+}));
+
 app.patch('/api/chats/:conversationId/preferences', auth, asyncRoute(async (req, res) => {
   const c = req.params.conversationId;
   const conv = await pool.query('SELECT user_a,user_b FROM conversations WHERE id=$1', [c]);
@@ -846,9 +871,15 @@ io.on('connection', async socket => {
     io.to(userRoom(recipientId)).emit('typing:stop', { userId });
   });
 
-  socket.on('call:offer', ({ recipientId, offer, callType } = {}) => {
+  socket.on('call:offer', async ({ recipientId, offer, callType } = {}) => {
     if (!validUuid(recipientId) || !offer || !['audio', 'video'].includes(callType)) return;
-    if (!isOnline(recipientId)) return socket.emit('call:unavailable');
+    const available = isOnline(recipientId);
+    await pool.query(
+      `INSERT INTO call_history(caller_id,recipient_id,call_type,status,ended_at)
+       VALUES($1,$2,$3,$4,$5)`,
+      [userId, recipientId, callType, available ? 'ringing' : 'missed', available ? null : new Date()]
+    ).catch(() => {});
+    if (!available) return socket.emit('call:unavailable');
 
     io.to(userRoom(recipientId)).emit('call:incoming', {
       callerId: userId,
@@ -858,8 +889,13 @@ io.on('connection', async socket => {
     });
   });
 
-  socket.on('call:answer', ({ callerId, answer } = {}) => {
+  socket.on('call:answer', async ({ callerId, answer } = {}) => {
     if (!validUuid(callerId) || !answer) return;
+    await pool.query(
+      `UPDATE call_history SET status='answered',answered_at=NOW()
+       WHERE id=(SELECT id FROM call_history WHERE caller_id=$1 AND recipient_id=$2 AND status='ringing' ORDER BY started_at DESC LIMIT 1)`,
+      [callerId, userId]
+    ).catch(() => {});
     io.to(userRoom(callerId)).emit('call:answer', { answer, peerId: userId });
   });
 
@@ -868,9 +904,26 @@ io.on('connection', async socket => {
     io.to(userRoom(recipientId)).emit('call:ice-candidate', { candidate, peerId: userId });
   });
 
-  socket.on('call:end', ({ recipientId } = {}) => {
+  socket.on('call:end', async ({ recipientId } = {}) => {
     if (!validUuid(recipientId)) return;
+    await pool.query(
+      `UPDATE call_history SET status=CASE WHEN status='ringing' THEN 'missed' ELSE 'completed' END,ended_at=NOW()
+       WHERE id=(SELECT id FROM call_history
+         WHERE ((caller_id=$1 AND recipient_id=$2) OR (caller_id=$2 AND recipient_id=$1))
+           AND status IN('ringing','answered') ORDER BY started_at DESC LIMIT 1)`,
+      [userId, recipientId]
+    ).catch(() => {});
     io.to(userRoom(recipientId)).emit('call:ended', { peerId: userId });
+  });
+
+  socket.on('call:decline', async ({ callerId } = {}) => {
+    if (!validUuid(callerId)) return;
+    await pool.query(
+      `UPDATE call_history SET status='declined',ended_at=NOW()
+       WHERE id=(SELECT id FROM call_history WHERE caller_id=$1 AND recipient_id=$2 AND status='ringing' ORDER BY started_at DESC LIMIT 1)`,
+      [callerId, userId]
+    ).catch(() => {});
+    io.to(userRoom(callerId)).emit('call:ended', { peerId: userId });
   });
 
   socket.on('disconnect', async () => {

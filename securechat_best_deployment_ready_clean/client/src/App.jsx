@@ -3,7 +3,7 @@ import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
-  MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages
+  MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages, History, Bell
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -112,6 +112,8 @@ export default function App() {
   const [scheduledAt, setScheduledAt] = useState('');
   const [translations, setTranslations] = useState({});
   const [attachmentUrls, setAttachmentUrls] = useState({});
+  const [callHistory, setCallHistory] = useState([]);
+  const [showCallHistory, setShowCallHistory] = useState(false);
 
   const [call, setCall] = useState({
     active: false,
@@ -168,6 +170,12 @@ export default function App() {
       remoteAudio.current.volume = speakerMuted ? 0 : speakerVolume;
     }
   }, [speakerMuted, speakerVolume, call.active]);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -332,6 +340,9 @@ export default function App() {
         if (current.some(existing => existing.id === displayMessage.id)) return p;
         return { ...p, [c]: [...current, displayMessage] };
       });
+      if (document.hidden || String(activeRef.current?.id) !== String(other)) {
+        showNotification('New SecureChat message', displayMessage.kind === 'text' ? displayMessage.body : `New ${displayMessage.kind}`);
+      }
 
       loadChats();
 
@@ -389,7 +400,10 @@ export default function App() {
     s.on('user:offline', loadChats);
 
     // Incoming call: show a non-blocking card instead of a popup
-    s.on('call:incoming', d => setIncoming(d));
+    s.on('call:incoming', d => {
+      setIncoming(d);
+      showNotification(`Incoming ${d.callType} call`, d.callerName);
+    });
 
     s.on('call:answer', async ({ answer }) => {
       if (!pc.current) return;
@@ -649,6 +663,31 @@ export default function App() {
     } catch (error) {
       alert('Could not delete message: ' + error.message);
     }
+  }
+
+  async function requestNotifications() {
+    if (!('Notification' in window)) return alert('Notifications are not supported by this browser.');
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') alert('Notifications remain disabled. You can enable them from the browser site settings.');
+  }
+
+  async function loadCallHistory() {
+    try {
+      setCallHistory(await api('/api/calls'));
+      setShowCallHistory(true);
+    } catch (error) {
+      alert('Could not load call history: ' + error.message);
+    }
+  }
+
+  function showNotification(title, body) {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    navigator.serviceWorker?.ready
+      .then(registration => registration.showNotification(title, {
+        body,
+        tag: title
+      }))
+      .catch(() => new Notification(title, { body }));
   }
 
   async function updateChatPreference(contact, changes) {
@@ -1014,7 +1053,7 @@ export default function App() {
     if (!d) return;
 
     setIncoming(null);
-    getSocket()?.emit('call:end', { recipientId: d.callerId });
+    getSocket()?.emit('call:decline', { callerId: d.callerId });
   }
 
   function startTimer() {
@@ -1243,6 +1282,8 @@ export default function App() {
           </div>
           <button className="icon" onClick={logout}><LogOut /></button>
           <button className="icon" onClick={createRecoveryCode} title="Create recovery code"><KeyRound /></button>
+          <button className="icon" onClick={requestNotifications} title="Enable notifications"><Bell /></button>
+          <button className="icon" onClick={loadCallHistory} title="Call history"><History /></button>
         </div>
 
         <div className="search">
@@ -1679,6 +1720,29 @@ export default function App() {
               )}
             </div>
             <button className="menuCancel" onClick={() => setSelectedMessage(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {showCallHistory && (
+        <div className="modal" onClick={() => setShowCallHistory(false)}>
+          <div className="historyCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => setShowCallHistory(false)}><X /></button>
+            <h2>Call history</h2>
+            <div className="historyList">
+              {callHistory.length === 0 && <p className="empty">No calls yet.</p>}
+              {callHistory.map(item => (
+                <div className="historyItem" key={item.id}>
+                  <div className="avatar">{initials(item.contactName)}</div>
+                  <div>
+                    <b>{item.contactName}</b>
+                    <small>{item.direction} · {item.type} · {item.status}</small>
+                    <small>{new Date(item.startedAt).toLocaleString()}</small>
+                  </div>
+                  {item.type === 'video' ? <Video /> : <Phone />}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

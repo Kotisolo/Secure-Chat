@@ -209,6 +209,12 @@
 .stickerDivider{width:100%;flex-basis:100%;color:var(--muted);font-size:12px;font-weight:800}
 .emoji .stickerChoice{font-size:26px}
 .gifUpload{height:38px;padding:0 12px;border-radius:12px;background:var(--secondary);display:flex;align-items:center;justify-content:center;color:white;font-weight:900;cursor:pointer}
+.historyCard{position:relative;width:480px;max-width:94vw;max-height:82vh;padding:24px;border-radius:24px;background:var(--panel);border:1px solid var(--line)}
+.historyClose{position:absolute;right:14px;top:14px;width:38px;height:38px;border-radius:12px;background:var(--panel3);color:white;display:grid;place-items:center}
+.historyList{max-height:65vh;overflow:auto}
+.historyItem{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line)}
+.historyItem>div:nth-child(2){flex:1;min-width:0}
+.historyItem small{display:block;color:var(--muted);text-transform:capitalize}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

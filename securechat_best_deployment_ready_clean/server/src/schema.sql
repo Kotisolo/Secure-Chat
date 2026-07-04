@@ -59,6 +59,16 @@ CREATE TABLE IF NOT EXISTS chat_preferences(
  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  PRIMARY KEY(user_id,conversation_id));
 ALTER TABLE chat_preferences ADD COLUMN IF NOT EXISTS disappearing_seconds INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS call_history(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ caller_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ recipient_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ call_type VARCHAR(10) NOT NULL,
+ status VARCHAR(20) NOT NULL DEFAULT 'ringing',
+ started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ answered_at TIMESTAMPTZ,
+ ended_at TIMESTAMPTZ);
+CREATE INDEX IF NOT EXISTS idx_call_history_users ON call_history(caller_id,recipient_id,started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id,created_at);
