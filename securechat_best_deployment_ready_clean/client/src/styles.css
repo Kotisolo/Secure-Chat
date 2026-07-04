@@ -215,6 +215,12 @@
 .historyItem{display:flex;align-items:center;gap:12px;padding:12px 4px;border-bottom:1px solid var(--line)}
 .historyItem>div:nth-child(2){flex:1;min-width:0}
 .historyItem small{display:block;color:var(--muted);text-transform:capitalize}
+.privacyCard{position:relative;width:440px;max-width:94vw;padding:24px;border-radius:24px;background:var(--panel);border:1px solid var(--line)}
+.privacyRow{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
+.privacyRow select{height:38px;border:0;border-radius:10px;background:var(--panel3);color:white;padding:0 10px}
+.privacyRow input{width:20px;height:20px;accent-color:var(--secondary)}
+.profileSafety{display:flex;gap:10px;margin-top:18px}
+.profileSafety button{position:static!important;flex:1;width:auto!important;height:44px!important;border-radius:12px!important;display:flex;align-items:center;justify-content:center;gap:7px;background:var(--panel3);color:white}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}

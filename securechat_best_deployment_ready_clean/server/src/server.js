@@ -142,6 +142,15 @@ function cid(a, b) {
   return [String(a), String(b)].sort().join('-');
 }
 
+async function usersBlocked(a, b) {
+  const result = await pool.query(
+    `SELECT 1 FROM user_blocks
+     WHERE (blocker_id=$1 AND blocked_id=$2) OR (blocker_id=$2 AND blocked_id=$1) LIMIT 1`,
+    [a, b]
+  );
+  return Boolean(result.rows.length);
+}
+
 function sign(u) {
   return jwt.sign(
     {
@@ -176,14 +185,17 @@ async function auth(req, res, next) {
 }
 
 function user(u) {
+  const hideProfile = u.profile_visibility === 'nobody';
+  const hideAbout = u.about_visibility === 'nobody';
+  const hidePresence = u.last_seen_visibility === 'nobody';
   return {
     id: String(u.id),
     username: u.username,
     phone: u.phone,
-    about: u.about || '',
-    avatarUrl: u.avatar_url || null,
-    online: isOnline(u.id),
-    lastSeen: u.last_seen
+    about: hideAbout ? '' : (u.about || ''),
+    avatarUrl: hideProfile ? null : (u.avatar_url || null),
+    online: hidePresence ? false : isOnline(u.id),
+    lastSeen: hidePresence ? null : u.last_seen
   };
 }
 
@@ -338,11 +350,65 @@ app.get('/api/users', auth, asyncRoute(async (req, res) => {
   if (q.length < 2) return res.json([]);
 
   const r = await pool.query(
-    'SELECT id,username,phone,about,avatar_url,last_seen FROM users WHERE id<>$1 AND (LOWER(username) LIKE LOWER($2) OR phone LIKE $2) ORDER BY username LIMIT 30',
+    `SELECT u.id,u.username,u.phone,u.about,u.avatar_url,u.last_seen,
+      p.last_seen_visibility,p.profile_visibility,p.about_visibility
+     FROM users u LEFT JOIN user_privacy p ON p.user_id=u.id
+     WHERE u.id<>$1 AND (LOWER(u.username) LIKE LOWER($2) OR u.phone LIKE $2)
+     ORDER BY u.username LIMIT 30`,
     [req.user.id, '%' + q + '%']
   );
 
   res.json(r.rows.map(user));
+}));
+
+app.get('/api/privacy', auth, asyncRoute(async (req, res) => {
+  await pool.query('INSERT INTO user_privacy(user_id) VALUES($1) ON CONFLICT DO NOTHING', [req.user.id]);
+  const result = await pool.query('SELECT * FROM user_privacy WHERE user_id=$1', [req.user.id]);
+  const p = result.rows[0];
+  res.json({
+    lastSeenVisibility: p.last_seen_visibility,
+    profileVisibility: p.profile_visibility,
+    aboutVisibility: p.about_visibility,
+    readReceipts: p.read_receipts,
+    silenceUnknownCalls: p.silence_unknown_calls
+  });
+}));
+
+app.patch('/api/privacy', auth, asyncRoute(async (req, res) => {
+  const allowed = new Set(['everyone', 'nobody']);
+  const lastSeen = allowed.has(req.body.lastSeenVisibility) ? req.body.lastSeenVisibility : 'everyone';
+  const profile = allowed.has(req.body.profileVisibility) ? req.body.profileVisibility : 'everyone';
+  const about = allowed.has(req.body.aboutVisibility) ? req.body.aboutVisibility : 'everyone';
+  await pool.query(
+    `INSERT INTO user_privacy(user_id,last_seen_visibility,profile_visibility,about_visibility,read_receipts,silence_unknown_calls)
+     VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(user_id) DO UPDATE SET
+       last_seen_visibility=$2,profile_visibility=$3,about_visibility=$4,
+       read_receipts=$5,silence_unknown_calls=$6,updated_at=NOW()`,
+    [req.user.id, lastSeen, profile, about, req.body.readReceipts !== false, Boolean(req.body.silenceUnknownCalls)]
+  );
+  res.json({ ok: true });
+}));
+
+app.post('/api/users/:userId/block', auth, asyncRoute(async (req, res) => {
+  const target = req.params.userId;
+  if (!validUuid(target) || target === String(req.user.id)) return res.status(400).json({ error: 'Invalid user.' });
+  await pool.query('INSERT INTO user_blocks(blocker_id,blocked_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [req.user.id, target]);
+  res.json({ blocked: true });
+}));
+
+app.delete('/api/users/:userId/block', auth, asyncRoute(async (req, res) => {
+  await pool.query('DELETE FROM user_blocks WHERE blocker_id=$1 AND blocked_id=$2', [req.user.id, req.params.userId]);
+  res.json({ blocked: false });
+}));
+
+app.post('/api/users/:userId/report', auth, asyncRoute(async (req, res) => {
+  const reason = clean(req.body.reason);
+  if (!validUuid(req.params.userId) || reason.length < 3) return res.status(400).json({ error: 'Add a report reason.' });
+  await pool.query(
+    'INSERT INTO user_reports(reporter_id,reported_id,message_id,reason) VALUES($1,$2,$3,$4)',
+    [req.user.id, req.params.userId, validUuid(req.body.messageId) ? req.body.messageId : null, reason.slice(0, 500)]
+  );
+  res.json({ ok: true });
 }));
 
 app.get('/api/chats', auth, asyncRoute(async (req, res) => {
@@ -590,6 +656,9 @@ app.post('/api/messages', auth, async (req, res) => {
   const c = cid(req.user.id, recipientId);
 
   try {
+    if (await usersBlocked(req.user.id, recipientId)) {
+      return res.status(403).json({ error: 'Messaging is unavailable for this user.' });
+    }
     await pool.query(
       'INSERT INTO conversations(id,user_a,user_b,updated_at) VALUES($1,$2,$3,NOW()) ON CONFLICT(id) DO UPDATE SET updated_at=NOW()',
       [c, req.user.id, recipientId]
@@ -636,6 +705,8 @@ app.post('/api/messages/:conversationId/read', auth, async (req, res) => {
   const c = req.params.conversationId;
 
   try {
+    const privacy = await pool.query('SELECT read_receipts FROM user_privacy WHERE user_id=$1', [req.user.id]);
+    if (privacy.rows[0]?.read_receipts === false) return res.json({ ok: true });
     const conv = await pool.query(
       'SELECT user_a, user_b FROM conversations WHERE id=$1',
       [c]
@@ -873,6 +944,16 @@ io.on('connection', async socket => {
 
   socket.on('call:offer', async ({ recipientId, offer, callType } = {}) => {
     if (!validUuid(recipientId) || !offer || !['audio', 'video'].includes(callType)) return;
+    if (await usersBlocked(userId, recipientId)) return socket.emit('call:unavailable');
+    const privacy = await pool.query(
+      `SELECT p.silence_unknown_calls,
+        EXISTS(SELECT 1 FROM conversations c WHERE c.id=$2) known
+       FROM user_privacy p WHERE p.user_id=$1`,
+      [recipientId, cid(userId, recipientId)]
+    ).catch(() => ({ rows: [] }));
+    if (privacy.rows[0]?.silence_unknown_calls && !privacy.rows[0]?.known) {
+      return socket.emit('call:unavailable');
+    }
     const available = isOnline(recipientId);
     await pool.query(
       `INSERT INTO call_history(caller_id,recipient_id,call_type,status,ended_at)

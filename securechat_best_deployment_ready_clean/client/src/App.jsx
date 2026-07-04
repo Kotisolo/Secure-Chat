@@ -3,7 +3,8 @@ import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
-  MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages, History, Bell
+  MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages, History, Bell,
+  Shield, Ban, Flag
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -114,6 +115,7 @@ export default function App() {
   const [attachmentUrls, setAttachmentUrls] = useState({});
   const [callHistory, setCallHistory] = useState([]);
   const [showCallHistory, setShowCallHistory] = useState(false);
+  const [privacy, setPrivacy] = useState(null);
 
   const [call, setCall] = useState({
     active: false,
@@ -678,6 +680,42 @@ export default function App() {
     } catch (error) {
       alert('Could not load call history: ' + error.message);
     }
+  }
+
+  async function openPrivacy() {
+    try {
+      setPrivacy(await api('/api/privacy'));
+    } catch (error) {
+      alert('Could not load privacy settings: ' + error.message);
+    }
+  }
+
+  async function savePrivacy(next) {
+    setPrivacy(next);
+    try {
+      await api('/api/privacy', { method: 'PATCH', body: JSON.stringify(next) });
+    } catch (error) {
+      alert('Could not save privacy settings: ' + error.message);
+    }
+  }
+
+  async function blockProfile() {
+    if (!profile || !confirm(`Block ${profile.username}? They will not be able to message or call you.`)) return;
+    await api(`/api/users/${profile.id}/block`, { method: 'POST', body: '{}' });
+    setProfile(null);
+    setActive(null);
+    loadChats();
+  }
+
+  async function reportProfile() {
+    if (!profile) return;
+    const reason = prompt('Why are you reporting this user?');
+    if (!reason) return;
+    await api(`/api/users/${profile.id}/report`, {
+      method: 'POST',
+      body: JSON.stringify({ reason })
+    });
+    alert('Report submitted.');
   }
 
   function showNotification(title, body) {
@@ -1284,6 +1322,7 @@ export default function App() {
           <button className="icon" onClick={createRecoveryCode} title="Create recovery code"><KeyRound /></button>
           <button className="icon" onClick={requestNotifications} title="Enable notifications"><Bell /></button>
           <button className="icon" onClick={loadCallHistory} title="Call history"><History /></button>
+          <button className="icon" onClick={openPrivacy} title="Privacy"><Shield /></button>
         </div>
 
         <div className="search">
@@ -1747,6 +1786,36 @@ export default function App() {
         </div>
       )}
 
+      {privacy && (
+        <div className="modal" onClick={() => setPrivacy(null)}>
+          <div className="privacyCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => setPrivacy(null)}><X /></button>
+            <h2>Privacy</h2>
+            {[
+              ['Last seen and online', 'lastSeenVisibility'],
+              ['Profile photo', 'profileVisibility'],
+              ['About', 'aboutVisibility']
+            ].map(([label, key]) => (
+              <label className="privacyRow" key={key}>
+                <span>{label}</span>
+                <select value={privacy[key]} onChange={e => savePrivacy({ ...privacy, [key]: e.target.value })}>
+                  <option value="everyone">Everyone</option>
+                  <option value="nobody">Nobody</option>
+                </select>
+              </label>
+            ))}
+            <label className="privacyRow">
+              <span>Read receipts</span>
+              <input type="checkbox" checked={privacy.readReceipts} onChange={e => savePrivacy({ ...privacy, readReceipts: e.target.checked })} />
+            </label>
+            <label className="privacyRow">
+              <span>Silence unknown calls</span>
+              <input type="checkbox" checked={privacy.silenceUnknownCalls} onChange={e => savePrivacy({ ...privacy, silenceUnknownCalls: e.target.checked })} />
+            </label>
+          </div>
+        </div>
+      )}
+
       {profile && (
         <div className="modal">
           <div className="profile">
@@ -1755,6 +1824,12 @@ export default function App() {
             <h2>{profile.username}</h2>
             <p>{profile.phone}</p>
             <small>{profile.about}</small>
+            {String(profile.id) !== String(me?.id) && (
+              <div className="profileSafety">
+                <button onClick={reportProfile}><Flag /> Report</button>
+                <button className="danger" onClick={blockProfile}><Ban /> Block</button>
+              </div>
+            )}
             {String(profile.id) === String(me?.id) && (
               <label className="profilePhoto">
                 <Camera />

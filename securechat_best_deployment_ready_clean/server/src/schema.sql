@@ -69,6 +69,26 @@ CREATE TABLE IF NOT EXISTS call_history(
  answered_at TIMESTAMPTZ,
  ended_at TIMESTAMPTZ);
 CREATE INDEX IF NOT EXISTS idx_call_history_users ON call_history(caller_id,recipient_id,started_at DESC);
+CREATE TABLE IF NOT EXISTS user_blocks(
+ blocker_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ blocked_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(blocker_id,blocked_id));
+CREATE TABLE IF NOT EXISTS user_reports(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ reporter_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ reported_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ message_id UUID REFERENCES messages(id) ON DELETE SET NULL,
+ reason VARCHAR(500) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS user_privacy(
+ user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+ last_seen_visibility VARCHAR(20) NOT NULL DEFAULT 'everyone',
+ profile_visibility VARCHAR(20) NOT NULL DEFAULT 'everyone',
+ about_visibility VARCHAR(20) NOT NULL DEFAULT 'everyone',
+ read_receipts BOOLEAN NOT NULL DEFAULT TRUE,
+ silence_unknown_calls BOOLEAN NOT NULL DEFAULT FALSE,
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS idx_users_phone ON users(phone);
 CREATE INDEX IF NOT EXISTS idx_users_username ON users(username);
 CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id,created_at);
