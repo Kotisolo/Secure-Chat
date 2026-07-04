@@ -4,7 +4,7 @@ import {
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages, History, Bell,
-  Shield, Ban, Flag
+  Shield, Ban, Flag, Users, Plus
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -118,6 +118,8 @@ export default function App() {
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [privacy, setPrivacy] = useState(null);
   const [security, setSecurity] = useState(null);
+  const [groups, setGroups] = useState([]);
+  const [selectedGroup, setSelectedGroup] = useState(null);
 
   const [call, setCall] = useState({
     active: false,
@@ -451,6 +453,44 @@ export default function App() {
     });
 
     loadChats();
+    loadGroups();
+  }
+
+  async function loadGroups() {
+    try {
+      setGroups(await api('/api/groups'));
+    } catch {
+      setGroups([]);
+    }
+  }
+
+  async function createGroup() {
+    const name = prompt('Group name:');
+    if (!name) return;
+    const description = prompt('Group description (optional):') || '';
+    await api('/api/groups', {
+      method: 'POST',
+      body: JSON.stringify({ name, description, memberIds: [] })
+    });
+    await loadGroups();
+  }
+
+  async function addGroupMember() {
+    const userId = prompt('Enter the user ID to add:');
+    if (!userId || !selectedGroup) return;
+    await api(`/api/groups/${selectedGroup.id}/members`, {
+      method: 'POST',
+      body: JSON.stringify({ userId })
+    });
+    await loadGroups();
+    setSelectedGroup((await api('/api/groups')).find(group => group.id === selectedGroup.id));
+  }
+
+  async function removeGroupMember(userId) {
+    await api(`/api/groups/${selectedGroup.id}/members/${userId}`, { method: 'DELETE' });
+    const refreshed = await api('/api/groups');
+    setGroups(refreshed);
+    setSelectedGroup(refreshed.find(group => group.id === selectedGroup.id) || null);
   }
 
   async function loadChats() {
@@ -1428,6 +1468,16 @@ export default function App() {
         <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
         </button>
+        <div className="groupHeader">
+          <b><Users /> Groups</b>
+          <button onClick={createGroup} title="Create group"><Plus /></button>
+        </div>
+        {groups.map(group => (
+          <button className="groupRow" key={group.id} onClick={() => setSelectedGroup(group)}>
+            <div className="avatar"><Users /></div>
+            <div><b>{group.name}</b><small>{group.members.length} members</small></div>
+          </button>
+        ))}
 
         <div className="list">
           {contacts.length === 0 && <p className="empty">Search a user to start chatting.</p>}
@@ -1951,6 +2001,29 @@ export default function App() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {selectedGroup && (
+        <div className="modal" onClick={() => setSelectedGroup(null)}>
+          <div className="groupCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => setSelectedGroup(null)}><X /></button>
+            <div className="avatar big"><Users /></div>
+            <h2>{selectedGroup.name}</h2>
+            <p>{selectedGroup.description}</p>
+            {selectedGroup.role === 'admin' && <button className="addMember" onClick={addGroupMember}><Plus /> Add member</button>}
+            <div className="memberList">
+              {selectedGroup.members.map(member => (
+                <div key={member.id}>
+                  <span>{member.username} · {member.role}</span>
+                  {selectedGroup.role === 'admin' && member.id !== me.id && (
+                    <button onClick={() => removeGroupMember(member.id)}>Remove</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button className="danger leaveGroup" onClick={() => removeGroupMember(me.id)}>Leave group</button>
           </div>
         </div>
       )}
