@@ -1,4 +1,5 @@
 export const API_URL=import.meta.env.VITE_API_URL||'http://localhost:8080';
+export const resolveFileUrl=value=>!value?'':/^https?:\/\//i.test(value)?value:API_URL+value;
 export const getToken=()=>localStorage.getItem('sc_token');
 export const getStoredUser=()=>{try{return JSON.parse(localStorage.getItem('sc_user')||'null')}catch{return null}};
 export const setSession=(token,user)=>{localStorage.setItem('sc_token',token);localStorage.setItem('sc_user',JSON.stringify(user))};
