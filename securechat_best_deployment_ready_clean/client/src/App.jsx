@@ -485,15 +485,14 @@ export default function App() {
 
     s.on('group:message', async message => {
       try {
-        const body = await decryptGroupMessage(message.senderId, message.groupId, message.payload);
-        const display = { ...message, body };
+        const display = await decodeGroupMessage(message, message.groupId);
         setGroupMessages(current => {
           const rows = current[message.groupId] || [];
           if (rows.some(row => row.id === message.id)) return current;
           return { ...current, [message.groupId]: [...rows, display] };
         });
         if (String(selectedGroupRef.current?.id) !== String(message.groupId)) {
-          showNotification(`New message in ${selectedGroupRef.current?.name || 'a group'}`, body);
+          showNotification(`New message in ${selectedGroupRef.current?.name || 'a group'}`, display.body);
         }
       } catch (error) {
         console.error('Group message decryption failed', error);
@@ -506,10 +505,7 @@ export default function App() {
     setSelectedGroup(group);
     try {
       const history = await api(`/api/groups/${group.id}/messages`);
-      const decrypted = await Promise.all(history.map(async message => ({
-        ...message,
-        body: await decryptGroupMessage(message.senderId, group.id, message.payload)
-      })));
+      const decrypted = await Promise.all(history.map(message => decodeGroupMessage(message, group.id)));
       setGroupMessages(current => ({ ...current, [group.id]: decrypted }));
     } catch (error) {
       alert('Could not open encrypted group chat: ' + error.message);
@@ -550,6 +546,46 @@ export default function App() {
     });
     await loadGroups();
     setSelectedGroup((await api('/api/groups')).find(group => group.id === selectedGroup.id));
+  }
+
+  async function decodeGroupMessage(message, groupId) {
+    const plaintext = await decryptGroupMessage(message.senderId, groupId, message.payload);
+    try {
+      const content = JSON.parse(plaintext);
+      if (!content.fileUrl) return { ...message, body: plaintext };
+      const mediaUrl = await decryptAttachment({
+        ...content,
+        senderId: message.senderId,
+        recipientId: me.id
+      }, `group:${groupId}`);
+      return { ...message, ...content, body: content.body, mediaUrl };
+    } catch {
+      return { ...message, body: plaintext };
+    }
+  }
+
+  async function sendGroupFile(event, kind) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !selectedGroup) return;
+    try {
+      const entries = await Promise.all(selectedGroup.members.map(async member => {
+        const encrypted = await encryptAttachment(member.id, `group:${selectedGroup.id}`, file);
+        const uploaded = await uploadFile(encrypted.file);
+        const content = JSON.stringify({
+          body: kind === 'image' ? 'Photo' : file.name,
+          kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type,
+          fileEncryption: encrypted.fileEncryption, senderDeviceId: encrypted.senderDeviceId
+        });
+        return [member.id, await encryptGroupMessage(member.id, selectedGroup.id, content)];
+      }));
+      await api(`/api/groups/${selectedGroup.id}/messages`, {
+        method: 'POST',
+        body: JSON.stringify({ kind, payloads: Object.fromEntries(entries) })
+      });
+    } catch (error) {
+      alert('Encrypted group attachment failed: ' + error.message);
+    }
   }
 
   async function reactGroupMessage(emoji) {
@@ -2177,7 +2213,13 @@ export default function App() {
                     onClick={() => setSelectedGroupMessage(message)}
                   >
                     <b>{String(message.senderId) === String(me.id) ? 'You' : message.senderName}</b>
-                    <span>{message.body}</span>
+                    {message.kind === 'image' && message.mediaUrl ? (
+                      <img src={message.mediaUrl} alt={message.fileName || 'Group photo'} />
+                    ) : message.kind === 'file' && message.mediaUrl ? (
+                      <a href={message.mediaUrl} download={message.fileName} onClick={e => e.stopPropagation()}>
+                        📎 {message.fileName}
+                      </a>
+                    ) : <span>{message.body}</span>}
                     <small>{t(message.createdAt)}</small>
                     {message.reactions?.length > 0 && <span>{message.reactions.map(reaction => reaction.emoji).join(' ')}</span>}
                   </div>
@@ -2187,6 +2229,8 @@ export default function App() {
                 )}
               </div>
               <div className="groupCompose">
+                <label title="Photo"><Image /><input hidden type="file" accept="image/*" onChange={e => sendGroupFile(e, 'image')} /></label>
+                <label title="File"><Paperclip /><input hidden type="file" onChange={e => sendGroupFile(e, 'file')} /></label>
                 <input
                   value={groupText}
                   onChange={e => setGroupText(e.target.value)}
