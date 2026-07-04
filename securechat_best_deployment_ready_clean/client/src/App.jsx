@@ -2,10 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
-  KeyRound, Copy
+  KeyRound, Copy, Camera, Trash2
 } from 'lucide-react';
 import {
-  api, uploadFile, setSession, getStoredUser, clearSession, resolveFileUrl
+  api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import {
@@ -30,6 +30,15 @@ const rtcConfig = {
 };
 
 const initials = n => (n || '?').slice(0, 2).toUpperCase();
+const Avatar = ({ user, big = false, className = '', ...props }) => (
+  <div
+    className={`avatar${big ? ' big' : ''}${className ? ` ${className}` : ''}`}
+    style={user?.avatarUrl ? { backgroundImage: `url("${resolveFileUrl(user.avatarUrl)}")` } : undefined}
+    {...props}
+  >
+    {!user?.avatarUrl && initials(user?.username)}
+  </div>
+);
 const cid = (a, b) => [String(a), String(b)].sort().join('-');
 const t = v => {
   try {
@@ -526,6 +535,42 @@ export default function App() {
     }
   }
 
+  async function uploadAvatar(e) {
+    const image = e.target.files?.[0];
+    e.target.value = '';
+    if (!image) return;
+
+    try {
+      const formData = new FormData();
+      formData.append('file', image);
+      const updated = await api('/api/profile/avatar', { method: 'POST', body: formData });
+      setMe(updated);
+      setProfile(updated);
+      setSession(getToken(), updated);
+    } catch (error) {
+      alert('Profile photo failed: ' + error.message);
+    }
+  }
+
+  async function deleteChat() {
+    if (!active || !me) return;
+    if (!confirm(`Delete your chat with ${active.username}? This will only remove it from your account.`)) return;
+
+    const conversationId = cid(me.id, active.id);
+    try {
+      await api('/api/chats/' + encodeURIComponent(conversationId), { method: 'DELETE' });
+      setMessages(current => {
+        const next = { ...current };
+        delete next[conversationId];
+        return next;
+      });
+      setContacts(current => current.filter(contact => String(contact.id) !== String(active.id)));
+      setActive(null);
+    } catch (error) {
+      alert('Could not delete chat: ' + error.message);
+    }
+  }
+
   function emitTyping() {
     const s = getSocket();
 
@@ -891,7 +936,7 @@ export default function App() {
     <div className="app">
       <aside className={active ? 'side hide' : 'side'}>
         <div className="me">
-          <div className="avatar">{initials(me?.username)}</div>
+          <Avatar user={me} className="avatarButton" onClick={() => setProfile(me)} title="Change profile photo" />
           <div>
             <b>{me?.username}</b>
             <small>{ready ? 'Online' : 'Offline'}</small>
@@ -914,7 +959,7 @@ export default function App() {
 
             return (
               <button className="chat" key={u.id} onClick={() => openChat(u)}>
-                <div className="avatar">{initials(u.username)}</div>
+                <Avatar user={u} />
                 <div>
                   <b>{u.username}</b>
                   <span>{p.body || u.phone}</span>
@@ -939,7 +984,7 @@ export default function App() {
                 <ArrowLeft />
               </button>
 
-              <div className="avatar">{initials(active.username)}</div>
+              <Avatar user={active} />
 
               <div className="title">
                 <b>{active.username}</b>
@@ -955,6 +1000,7 @@ export default function App() {
               <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
               <button className="icon" onClick={() => startCall('video')}><Video /></button>
               <button className="icon" onClick={() => setProfile(active)}><User /></button>
+              <button className="icon deleteChat" onClick={deleteChat} title="Delete chat"><Trash2 /></button>
             </header>
 
             <section className="msgs">
@@ -991,6 +1037,11 @@ export default function App() {
                 <input hidden type="file" onChange={e => file(e)} />
               </label>
 
+              <label className="icon" title="Take photo">
+                <Camera />
+                <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
+              </label>
+
               <input
                 value={text}
                 onChange={e => {
@@ -1021,7 +1072,7 @@ export default function App() {
 
       {incoming && !call.active && (
         <div className="incoming">
-          <div className="avatar big">{initials(incoming.callerName)}</div>
+          <Avatar user={{ username: incoming.callerName }} big />
           <div className="who">
             <b>{incoming.callerName}</b>
             <small>Incoming {incoming.callType === 'video' ? 'video' : 'voice'} call...</small>
@@ -1134,10 +1185,17 @@ export default function App() {
         <div className="modal">
           <div className="profile">
             <button onClick={() => setProfile(null)}><X /></button>
-            <div className="avatar big">{initials(profile.username)}</div>
+            <Avatar user={profile} big />
             <h2>{profile.username}</h2>
             <p>{profile.phone}</p>
             <small>{profile.about}</small>
+            {String(profile.id) === String(me?.id) && (
+              <label className="profilePhoto">
+                <Camera />
+                Change profile photo
+                <input hidden type="file" accept="image/*" onChange={uploadAvatar} />
+              </label>
+            )}
           </div>
         </div>
       )}

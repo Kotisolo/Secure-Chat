@@ -349,6 +349,10 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
     JOIN users su ON su.id=m.sender_id
     JOIN users ru ON ru.id=m.recipient_id
     WHERE (m.sender_id=$1 OR m.recipient_id=$1) AND m.deleted_at IS NULL
+      AND m.created_at > COALESCE(
+        (SELECT cd.deleted_before FROM conversation_deletions cd
+         WHERE cd.user_id=$1 AND cd.conversation_id=m.conversation_id),
+        '-infinity'::timestamptz)
     ORDER BY m.conversation_id,m.created_at DESC`,
     [req.user.id]
   );
@@ -440,8 +444,14 @@ app.get('/api/messages/:conversationId', auth, async (req, res) => {
     }
 
     const r = await pool.query(
-      'SELECT * FROM messages WHERE conversation_id=$1 AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 500',
-      [c]
+      `SELECT * FROM messages
+       WHERE conversation_id=$1 AND deleted_at IS NULL
+         AND created_at > COALESCE(
+           (SELECT deleted_before FROM conversation_deletions
+            WHERE user_id=$2 AND conversation_id=$1),
+           '-infinity'::timestamptz)
+       ORDER BY created_at ASC LIMIT 500`,
+      [c, req.user.id]
     );
 
     res.json(r.rows.map(msg));
@@ -553,6 +563,40 @@ app.post('/api/messages/:conversationId/read', auth, async (req, res) => {
     res.status(500).json({ error: 'Could not mark messages as read.' });
   }
 });
+
+app.delete('/api/chats/:conversationId', auth, asyncRoute(async (req, res) => {
+  const c = req.params.conversationId;
+  const conv = await pool.query(
+    'SELECT user_a,user_b FROM conversations WHERE id=$1',
+    [c]
+  );
+  if (!conv.rows.length) return res.json({ ok: true });
+  const row = conv.rows[0];
+  if (String(row.user_a) !== String(req.user.id) && String(row.user_b) !== String(req.user.id)) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+  await pool.query(
+    `INSERT INTO conversation_deletions(user_id,conversation_id,deleted_before)
+     VALUES($1,$2,NOW())
+     ON CONFLICT(user_id,conversation_id)
+     DO UPDATE SET deleted_before=EXCLUDED.deleted_before`,
+    [req.user.id, c]
+  );
+  res.json({ ok: true });
+}));
+
+app.post('/api/profile/avatar', auth, uploadRateLimit, upload.single('file'), asyncRoute(async (req, res) => {
+  if (!req.file || !req.file.mimetype.startsWith('image/')) {
+    return res.status(400).json({ error: 'Choose a valid image.' });
+  }
+  const avatarUrl = '/uploads/' + req.file.filename;
+  const result = await pool.query(
+    `UPDATE users SET avatar_url=$1 WHERE id=$2
+     RETURNING id,username,phone,about,avatar_url,last_seen`,
+    [avatarUrl, req.user.id]
+  );
+  res.json(user(result.rows[0]));
+}));
 
 app.post('/api/upload', auth, uploadRateLimit, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'File required.' });
