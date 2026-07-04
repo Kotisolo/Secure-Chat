@@ -554,6 +554,69 @@ app.post('/api/users/:userId/report', auth, asyncRoute(async (req, res) => {
   res.json({ ok: true });
 }));
 
+app.get('/api/groups', auth, asyncRoute(async (req, res) => {
+  const result = await pool.query(
+    `SELECT g.*,gm.role,
+      (SELECT json_agg(json_build_object('id',u.id::text,'username',u.username,'role',members.role))
+       FROM group_members members JOIN users u ON u.id=members.user_id WHERE members.group_id=g.id) members
+     FROM chat_groups g JOIN group_members gm ON gm.group_id=g.id
+     WHERE gm.user_id=$1 ORDER BY g.updated_at DESC`,
+    [req.user.id]
+  );
+  res.json(result.rows.map(row => ({
+    id: String(row.id), name: row.name, description: row.description,
+    avatarUrl: row.avatar_url, role: row.role, members: row.members || [],
+    createdAt: row.created_at
+  })));
+}));
+
+app.post('/api/groups', auth, asyncRoute(async (req, res) => {
+  const name = clean(req.body.name);
+  const memberIds = [...new Set((Array.isArray(req.body.memberIds) ? req.body.memberIds : [])
+    .filter(validUuid).filter(id => id !== String(req.user.id)))].slice(0, 255);
+  if (name.length < 2) return res.status(400).json({ error: 'Group name must be at least 2 characters.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const group = await client.query(
+      'INSERT INTO chat_groups(name,description,created_by) VALUES($1,$2,$3) RETURNING *',
+      [name.slice(0, 120), clean(req.body.description).slice(0, 500), req.user.id]
+    );
+    const groupId = group.rows[0].id;
+    await client.query('INSERT INTO group_members(group_id,user_id,role) VALUES($1,$2,$3)', [groupId, req.user.id, 'admin']);
+    for (const memberId of memberIds) {
+      await client.query('INSERT INTO group_members(group_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [groupId, memberId]);
+    }
+    await client.query('COMMIT');
+    res.status(201).json({ id: String(groupId), name, role: 'admin' });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+app.post('/api/groups/:groupId/members', auth, asyncRoute(async (req, res) => {
+  const groupId = req.params.groupId;
+  const userId = clean(req.body.userId);
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can add members.' });
+  if (!validUuid(userId)) return res.status(400).json({ error: 'Invalid user.' });
+  await pool.query('INSERT INTO group_members(group_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [groupId, userId]);
+  res.json({ ok: true });
+}));
+
+app.delete('/api/groups/:groupId/members/:userId', auth, asyncRoute(async (req, res) => {
+  const ownLeave = String(req.params.userId) === String(req.user.id);
+  if (!ownLeave) {
+    const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+    if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can remove members.' });
+  }
+  await pool.query('DELETE FROM group_members WHERE group_id=$1 AND user_id=$2', [req.params.groupId, req.params.userId]);
+  res.json({ ok: true });
+}));
+
 app.get('/api/chats', auth, asyncRoute(async (req, res) => {
   const r = await pool.query(
     `SELECT DISTINCT ON(m.conversation_id) 
