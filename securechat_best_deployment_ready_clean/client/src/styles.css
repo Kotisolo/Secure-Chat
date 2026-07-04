@@ -224,6 +224,16 @@
 .blockedList{margin-top:18px}
 .blockedList>div{display:flex;align-items:center;justify-content:space-between;padding:9px 0}
 .blockedList button{padding:8px 12px;border-radius:10px;background:var(--panel3);color:white}
+.securityCard{position:relative;width:560px;max-width:94vw;max-height:84vh;overflow:auto;padding:24px;border-radius:24px;background:var(--panel);border:1px solid var(--line)}
+.twoStepButton{width:100%;height:48px;border-radius:14px;background:var(--panel3);color:white;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800}
+.sessionHeader{display:flex;align-items:center;justify-content:space-between;margin:22px 0 8px}
+.sessionHeader button,.sessionList button{padding:8px 11px;border-radius:10px;background:var(--panel3);color:white}
+.sessionList>div{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.sessionList>div>div{flex:1;min-width:0}
+.sessionList small{display:block;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.accountActions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+.accountActions button{min-height:42px;border-radius:12px;background:var(--panel3);color:white;font-weight:800}
+.accountActions .danger{grid-column:1/-1}
 
 /* Keep live call media attached when switching between full call and chat. */
 .call{justify-content:flex-start}
