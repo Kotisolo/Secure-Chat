@@ -4,13 +4,14 @@ import {
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages, History, Bell,
-  Shield, Ban, Flag, Users, Plus
+  Shield, Ban, Flag, Users, Plus, Settings
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import QRCode from 'qrcode';
+import { BRAND } from './branding';
 import {
   E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage,
   encryptAttachment, decryptAttachment, encryptGroupMessage, decryptGroupMessage
@@ -114,6 +115,7 @@ export default function App() {
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState({});
   const [active, setActive] = useState(null);
+  const [mobileTab, setMobileTab] = useState('chats');
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
@@ -1950,8 +1952,8 @@ export default function App() {
       <div className="auth">
         <div className="card">
           <div className="badge"><MessageCircle /></div>
-          <h1>SecureChat</h1>
-          <p>Private messaging with realtime chat and calls.</p>
+          <h1>{BRAND.name}</h1>
+          <p>{BRAND.tagline}</p>
 
           {screen === 'welcome' ? (
             <button className="primary" onClick={() => setScreen('auth')}>
@@ -2040,7 +2042,11 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className={active ? 'side hide' : 'side'}>
+      <aside className={`${active ? 'side hide' : 'side'} tab-${mobileTab}`}>
+        <div className="appTitle">
+          <div className="brandMark"><MessageCircle /></div>
+          <div><b>{BRAND.name}</b><small>{BRAND.tagline}</small></div>
+        </div>
         <div className="me">
           <Avatar user={me} className="avatarButton" onClick={() => setProfile(me)} title="Change profile photo" />
           <div>
@@ -2131,6 +2137,13 @@ export default function App() {
             );
           })}
         </div>
+        <nav className="bottomNav" aria-label="Primary navigation">
+          <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Chats</span></button>
+          <button className={mobileTab === 'calls' ? 'active' : ''} onClick={() => { setMobileTab('calls'); loadCallHistory(); }}><Phone /><span>Calls</span></button>
+          <button className={mobileTab === 'discover' ? 'active' : ''} onClick={() => { setMobileTab('discover'); loadChannels(); }}><Users /><span>Discover</span></button>
+          <button className={mobileTab === 'status' ? 'active' : ''} onClick={() => { setMobileTab('status'); loadStatuses(); }}><History /><span>Status</span></button>
+          <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); openPrivacy(); }}><Settings /><span>Settings</span></button>
+        </nav>
       </aside>
 
       <main className={active ? 'panel open' : 'panel'}>
@@ -2540,10 +2553,21 @@ export default function App() {
 
       {privacy && (
         <div className="modal" onClick={() => setPrivacy(null)}>
-          <div className="privacyCard" onClick={e => e.stopPropagation()}>
+          <div className="privacyCard settingsCard" onClick={e => e.stopPropagation()}>
             <button className="historyClose" onClick={() => setPrivacy(null)}><X /></button>
-            <h2>Privacy</h2>
-            {[
+            <div className="settingsProfile">
+              <Avatar user={me} />
+              <div><h2>{me?.username}</h2><small>{me?.phone}</small></div>
+              <button onClick={() => setProfile(me)}>Edit profile</button>
+            </div>
+            <div className="settingsShortcuts">
+              <button onClick={() => { setPrivacy(null); openSecurity(); }}><Lock /><span>Account & security</span></button>
+              <button onClick={requestNotifications}><Bell /><span>Notifications</span></button>
+              <button onClick={createRecoveryCode}><KeyRound /><span>Recovery code</span></button>
+              <button className="danger" onClick={logout}><LogOut /><span>Log out</span></button>
+            </div>
+            <h3>Privacy</h3>
+            {[ 
               ['Last seen and online', 'lastSeenVisibility'],
               ['Profile photo', 'profileVisibility'],
               ['About', 'aboutVisibility']
