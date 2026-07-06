@@ -41,12 +41,19 @@ Environment variables:
 
 ```env
 VITE_API_URL=https://your-render-service.onrender.com
-VITE_TURN_URL=turn:your-turn-server:3478
+VITE_TURN_URLS=turn:your-turn-server:80,turn:your-turn-server:443?transport=tcp,turns:your-turn-server:443?transport=tcp
 VITE_TURN_USERNAME=your-turn-username
 VITE_TURN_CREDENTIAL=your-turn-credential
+VITE_ICE_TRANSPORT_POLICY=all
 ```
 
 Redeploy after changing any `VITE_` variable.
+
+For carrier-to-Wi-Fi testing, use all TURN URLs supplied by the provider. Secure
+TURN over TCP port 443 is especially important on mobile and restricted
+networks. Set `VITE_ICE_TRANSPORT_POLICY=relay` for one test deployment to prove
+the relay works, then change it back to `all` so direct connections remain
+available.
 
 ## Production notes
 

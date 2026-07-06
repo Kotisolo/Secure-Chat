@@ -21,19 +21,24 @@ const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢
 
 const stickers = ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '👍', '🙏', '❤️', '🔥', '🎉'];
 
+const turnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '')
+  .split(',')
+  .map(url => url.trim())
+  .filter(Boolean);
+const hasTurnServer = turnUrls.length > 0;
 const rtcConfig = {
   iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    ...(import.meta.env.VITE_TURN_URL
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    ...(hasTurnServer
       ? [{
-          urls: import.meta.env.VITE_TURN_URL,
+          urls: turnUrls,
           username: import.meta.env.VITE_TURN_USERNAME || '',
           credential: import.meta.env.VITE_TURN_CREDENTIAL || ''
         }]
       : [])
   ],
-  iceCandidatePoolSize: 10
+  iceCandidatePoolSize: 10,
+  iceTransportPolicy: import.meta.env.VITE_ICE_TRANSPORT_POLICY === 'relay' ? 'relay' : 'all'
 };
 
 const initials = n => (n || '?').slice(0, 2).toUpperCase();
@@ -1718,6 +1723,27 @@ export default function App() {
           recipientId: callPeer.current,
           candidate: e.candidate
         });
+      }
+    };
+
+    p.onicecandidateerror = event => {
+      console.warn('ICE server error', event.errorCode, event.errorText);
+      if (event.url?.startsWith('turn')) {
+        setCall(c => ({ ...c, status: 'Relay server unavailable' }));
+      }
+    };
+
+    p.oniceconnectionstatechange = () => {
+      if (p.iceConnectionState === 'checking') {
+        setCall(c => ({ ...c, status: 'Connecting securely…' }));
+      }
+      if (p.iceConnectionState === 'failed') {
+        setCall(c => ({
+          ...c,
+          status: hasTurnServer
+            ? 'Network relay failed. Please try again.'
+            : 'A TURN relay is required for this mobile network.'
+        }));
       }
     };
 
