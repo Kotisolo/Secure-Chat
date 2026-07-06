@@ -143,6 +143,8 @@ export default function App() {
   const [groupTyping, setGroupTyping] = useState({});
   const [groupCall, setGroupCall] = useState(null);
   const [groupRemoteStreams, setGroupRemoteStreams] = useState({});
+  const [statuses, setStatuses] = useState([]);
+  const [showStatuses, setShowStatuses] = useState(false);
   const groupTypingTimer = useRef(null);
   const groupCallStream = useRef(null);
   const groupPeers = useRef(new Map());
@@ -498,6 +500,51 @@ export default function App() {
     } catch {
       setGroups([]);
     }
+  }
+
+  async function loadStatuses() {
+    try {
+      const rows = await api('/api/status');
+      const decrypted = await Promise.all(rows.map(async status => ({
+        ...status,
+        body: await decryptGroupMessage(status.userId, `status:${status.id}`, status.payload)
+      })));
+      setStatuses(decrypted);
+      setShowStatuses(true);
+    } catch (error) {
+      alert('Could not load Status: ' + error.message);
+    }
+  }
+
+  async function createTextStatus() {
+    const body = prompt('Write a Status update:');
+    if (!body) return;
+    const id = crypto.randomUUID();
+    const audience = [...new Map([me, ...contacts].filter(user => user?.id).map(user => [user.id, user])).values()];
+    try {
+      const entries = await Promise.all(audience.map(async user => [
+        user.id, await encryptGroupMessage(user.id, `status:${id}`, body)
+      ]));
+      await api('/api/status', {
+        method: 'POST',
+        body: JSON.stringify({ id, kind: 'text', payloads: Object.fromEntries(entries) })
+      });
+      await loadStatuses();
+    } catch (error) {
+      alert('Status failed: ' + error.message);
+    }
+  }
+
+  async function viewStatus(status, reaction) {
+    await api(`/api/status/${status.id}/view`, {
+      method: 'POST', body: JSON.stringify({ reaction: reaction || null })
+    });
+    setStatuses(current => current.map(item => item.id === status.id ? { ...item, viewed: true } : item));
+  }
+
+  async function deleteStatus(statusId) {
+    await api(`/api/status/${statusId}`, { method: 'DELETE' });
+    setStatuses(current => current.filter(status => status.id !== statusId));
   }
 
   async function createGroup() {
@@ -1851,6 +1898,10 @@ export default function App() {
         <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
         </button>
+        <div className="statusHeader">
+          <button onClick={loadStatuses}><div className="statusRing"><Avatar user={me} /></div> Status</button>
+          <button onClick={createTextStatus} title="Create Status"><Plus /></button>
+        </div>
         <div className="groupHeader">
           <b><Users /> Groups</b>
           <div>
@@ -2543,6 +2594,43 @@ export default function App() {
               </button>
             )}
             <button className="danger" onClick={leaveGroupCall}><PhoneOff /></button>
+          </div>
+        </div>
+      )}
+
+      {showStatuses && (
+        <div className="modal" onClick={() => setShowStatuses(false)}>
+          <div className="statusCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => setShowStatuses(false)}><X /></button>
+            <h2>Status</h2>
+            <button className="createStatus" onClick={createTextStatus}><Plus /> Add text Status</button>
+            <div className="statusList">
+              {statuses.length === 0 && <p className="empty">No active Status updates.</p>}
+              {statuses.map(status => (
+                <div className={status.viewed ? 'statusItem viewed' : 'statusItem'} key={status.id} onClick={() => viewStatus(status)}>
+                  <Avatar user={{ username: status.username, avatarUrl: status.avatarUrl }} />
+                  <div>
+                    <b>{status.userId === me.id ? 'My Status' : status.username}</b>
+                    <p>{status.body}</p>
+                    <small>{new Date(status.createdAt).toLocaleString()} · expires in 24h</small>
+                    {status.userId === me.id && <small>{status.viewCount} views</small>}
+                  </div>
+                  <div className="statusActions">
+                    {status.userId === me.id ? (
+                      <button className="danger" onClick={e => {
+                        e.stopPropagation();
+                        deleteStatus(status.id);
+                      }}><Trash2 /></button>
+                    ) : ['❤️', '👍'].map(reaction => (
+                      <button key={reaction} onClick={e => {
+                        e.stopPropagation();
+                        viewStatus(status, reaction);
+                      }}>{reaction}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
