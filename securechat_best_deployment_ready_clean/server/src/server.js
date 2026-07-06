@@ -73,6 +73,7 @@ const upload = multer({
     const allowed = new Set([
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
       'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
+      'video/mp4', 'video/webm', 'video/quicktime',
       'application/octet-stream',
       'application/pdf', 'text/plain',
       'application/msword',
@@ -561,6 +562,76 @@ app.post('/api/users/:userId/report', auth, asyncRoute(async (req, res) => {
     [req.user.id, req.params.userId, validUuid(req.body.messageId) ? req.body.messageId : null, reason.slice(0, 500)]
   );
   res.json({ ok: true });
+}));
+
+app.get('/api/status', auth, asyncRoute(async (req, res) => {
+  const result = await pool.query(
+    `SELECT s.id,s.user_id,u.username,u.avatar_url,s.kind,s.created_at,s.expires_at,
+      s.encrypted_payloads->($1::text) payload,
+      (SELECT COUNT(*)::int FROM status_views v WHERE v.status_id=s.id) view_count,
+      EXISTS(SELECT 1 FROM status_views v WHERE v.status_id=s.id AND v.viewer_id=$1) viewed,
+      EXISTS(SELECT 1 FROM status_mutes sm WHERE sm.user_id=$1 AND sm.muted_user_id=s.user_id) muted
+     FROM status_updates s JOIN users u ON u.id=s.user_id
+     WHERE s.deleted_at IS NULL AND s.expires_at>NOW()
+       AND (s.user_id=$1 OR s.encrypted_payloads ? ($1::text))
+     ORDER BY s.created_at DESC`,
+    [req.user.id]
+  );
+  res.json(result.rows.map(row => ({
+    id: String(row.id), userId: String(row.user_id), username: row.username,
+    avatarUrl: row.avatar_url, kind: row.kind, createdAt: row.created_at,
+    expiresAt: row.expires_at, payload: row.payload,
+    viewCount: row.view_count, viewed: row.viewed, muted: row.muted
+  })));
+}));
+
+app.post('/api/status', auth, asyncRoute(async (req, res) => {
+  const id = clean(req.body.id);
+  const payloads = req.body.payloads;
+  const kind = clean(req.body.kind || 'text');
+  if (!validUuid(id) || !payloads || typeof payloads !== 'object' || Array.isArray(payloads)) {
+    return res.status(400).json({ error: 'Invalid encrypted status.' });
+  }
+  const entries = Object.entries(payloads).slice(0, 500);
+  if (!entries.length || entries.some(([userId, payload]) => !validUuid(userId) || typeof payload !== 'string' || payload.length > 30000)) {
+    return res.status(400).json({ error: 'Invalid status audience.' });
+  }
+  await pool.query(
+    `INSERT INTO status_updates(id,user_id,encrypted_payloads,kind)
+     VALUES($1,$2,$3,$4)`,
+    [id, req.user.id, Object.fromEntries(entries), kind]
+  );
+  res.status(201).json({ id, createdAt: new Date().toISOString() });
+}));
+
+app.post('/api/status/:statusId/view', auth, asyncRoute(async (req, res) => {
+  const status = await pool.query(
+    `SELECT user_id FROM status_updates
+     WHERE id=$1 AND deleted_at IS NULL AND expires_at>NOW() AND encrypted_payloads ? $2`,
+    [req.params.statusId, req.user.id]
+  );
+  if (!status.rows.length) return res.status(404).json({ error: 'Status is unavailable.' });
+  await pool.query(
+    `INSERT INTO status_views(status_id,viewer_id,viewed_at,reaction) VALUES($1,$2,NOW(),$3)
+     ON CONFLICT(status_id,viewer_id) DO UPDATE SET viewed_at=NOW(),
+       reaction=COALESCE(EXCLUDED.reaction,status_views.reaction)`,
+    [req.params.statusId, req.user.id, clean(req.body.reaction) || null]
+  );
+  res.json({ ok: true });
+}));
+
+app.delete('/api/status/:statusId', auth, asyncRoute(async (req, res) => {
+  await pool.query('UPDATE status_updates SET deleted_at=NOW() WHERE id=$1 AND user_id=$2', [req.params.statusId, req.user.id]);
+  res.json({ ok: true });
+}));
+
+app.patch('/api/status/mute/:userId', auth, asyncRoute(async (req, res) => {
+  if (req.body.muted === false) {
+    await pool.query('DELETE FROM status_mutes WHERE user_id=$1 AND muted_user_id=$2', [req.user.id, req.params.userId]);
+  } else {
+    await pool.query('INSERT INTO status_mutes(user_id,muted_user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [req.user.id, req.params.userId]);
+  }
+  res.json({ muted: req.body.muted !== false });
 }));
 
 app.get('/api/groups', auth, asyncRoute(async (req, res) => {

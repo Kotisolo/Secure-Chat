@@ -143,6 +143,9 @@ export default function App() {
   const [groupTyping, setGroupTyping] = useState({});
   const [groupCall, setGroupCall] = useState(null);
   const [groupRemoteStreams, setGroupRemoteStreams] = useState({});
+  const [statuses, setStatuses] = useState([]);
+  const [showStatuses, setShowStatuses] = useState(false);
+  const [statusExcluded, setStatusExcluded] = useState([]);
   const groupTypingTimer = useRef(null);
   const groupCallStream = useRef(null);
   const groupPeers = useRef(new Map());
@@ -498,6 +501,123 @@ export default function App() {
     } catch {
       setGroups([]);
     }
+  }
+
+  async function loadStatuses() {
+    try {
+      const rows = await api('/api/status');
+      const decrypted = await Promise.all(rows.map(decodeStatus));
+      setStatuses(decrypted);
+      setShowStatuses(true);
+    } catch (error) {
+      alert('Could not load Status: ' + error.message);
+    }
+  }
+
+  async function decodeStatus(status) {
+    const plaintext = await decryptGroupMessage(status.userId, `status:${status.id}`, status.payload);
+    try {
+      const content = JSON.parse(plaintext);
+      if (!content.fileUrl) return { ...status, body: plaintext };
+      const mediaUrl = await decryptAttachment({
+        ...content,
+        senderId: status.userId,
+        recipientId: me.id
+      }, `status:${status.id}`);
+      return { ...status, ...content, mediaUrl };
+    } catch {
+      return { ...status, body: plaintext };
+    }
+  }
+
+  async function createTextStatus() {
+    const body = prompt('Write a Status update:');
+    if (!body) return;
+    const id = crypto.randomUUID();
+    const audience = statusAudience();
+    try {
+      const entries = await Promise.all(audience.map(async user => [
+        user.id, await encryptGroupMessage(user.id, `status:${id}`, body)
+      ]));
+      await api('/api/status', {
+        method: 'POST',
+        body: JSON.stringify({ id, kind: 'text', payloads: Object.fromEntries(entries) })
+      });
+      await loadStatuses();
+    } catch (error) {
+      alert('Status failed: ' + error.message);
+    }
+  }
+
+  function statusAudience() {
+    return [...new Map([me, ...contacts]
+      .filter(user => user?.id && (user.id === me.id || !statusExcluded.includes(user.id)))
+      .map(user => [user.id, user])).values()];
+  }
+
+  async function createMediaStatus(event, kind) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const id = crypto.randomUUID();
+    const audience = statusAudience();
+    try {
+      const entries = await Promise.all(audience.map(async user => {
+        const encrypted = await encryptAttachment(user.id, `status:${id}`, file);
+        const uploaded = await uploadFile(encrypted.file);
+        const content = JSON.stringify({
+          body: kind === 'image' ? 'Photo Status' : kind === 'video' ? 'Video Status' : 'Voice Status',
+          kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type,
+          fileEncryption: encrypted.fileEncryption, senderDeviceId: encrypted.senderDeviceId
+        });
+        return [user.id, await encryptGroupMessage(user.id, `status:${id}`, content)];
+      }));
+      await api('/api/status', {
+        method: 'POST',
+        body: JSON.stringify({ id, kind, payloads: Object.fromEntries(entries) })
+      });
+      await loadStatuses();
+    } catch (error) {
+      alert('Media Status failed: ' + error.message);
+    }
+  }
+
+  async function viewStatus(status, reaction) {
+    await api(`/api/status/${status.id}/view`, {
+      method: 'POST', body: JSON.stringify({ reaction: reaction || null })
+    });
+    setStatuses(current => current.map(item => item.id === status.id ? { ...item, viewed: true } : item));
+  }
+
+  async function deleteStatus(statusId) {
+    await api(`/api/status/${statusId}`, { method: 'DELETE' });
+    setStatuses(current => current.filter(status => status.id !== statusId));
+  }
+
+  async function replyToStatus(status) {
+    const body = prompt(`Reply privately to ${status.username}:`);
+    if (!body) return;
+    const conversationId = cid(me.id, status.userId);
+    const encrypted = await encryptMessage(status.userId, conversationId, body);
+    await api('/api/messages', {
+      method: 'POST',
+      body: JSON.stringify({
+        recipientId: status.userId,
+        body: '[Encrypted message]',
+        kind: 'text',
+        ...encrypted
+      })
+    });
+    await viewStatus(status);
+    alert('Private encrypted reply sent.');
+  }
+
+  async function toggleStatusMute(status) {
+    const muted = !status.muted;
+    await api(`/api/status/mute/${status.userId}`, {
+      method: 'PATCH', body: JSON.stringify({ muted })
+    });
+    setStatuses(current => current.map(item => item.userId === status.userId ? { ...item, muted } : item));
   }
 
   async function createGroup() {
@@ -1851,6 +1971,10 @@ export default function App() {
         <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
         </button>
+        <div className="statusHeader">
+          <button onClick={loadStatuses}><div className="statusRing"><Avatar user={me} /></div> Status</button>
+          <button onClick={createTextStatus} title="Create Status"><Plus /></button>
+        </div>
         <div className="groupHeader">
           <b><Users /> Groups</b>
           <div>
@@ -2543,6 +2667,81 @@ export default function App() {
               </button>
             )}
             <button className="danger" onClick={leaveGroupCall}><PhoneOff /></button>
+          </div>
+        </div>
+      )}
+
+      {showStatuses && (
+        <div className="modal" onClick={() => setShowStatuses(false)}>
+          <div className="statusCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => setShowStatuses(false)}><X /></button>
+            <h2>Status</h2>
+            <button className="createStatus" onClick={createTextStatus}><Plus /> Add text Status</button>
+            <div className="statusMediaButtons">
+              <label><Image /> Photo<input hidden type="file" accept="image/*" capture="environment" onChange={e => createMediaStatus(e, 'image')} /></label>
+              <label><Video /> Video<input hidden type="file" accept="video/*" capture="environment" onChange={e => createMediaStatus(e, 'video')} /></label>
+              <label><Mic /> Voice<input hidden type="file" accept="audio/*" capture onChange={e => createMediaStatus(e, 'audio')} /></label>
+            </div>
+            <details className="statusPrivacy">
+              <summary>Status audience · {contacts.length - statusExcluded.length} contacts</summary>
+              {contacts.map(contact => (
+                <label key={contact.id}>
+                  <input
+                    type="checkbox"
+                    checked={!statusExcluded.includes(contact.id)}
+                    onChange={e => setStatusExcluded(current => e.target.checked
+                      ? current.filter(id => id !== contact.id)
+                      : [...current, contact.id])}
+                  />
+                  {contact.username}
+                </label>
+              ))}
+            </details>
+            <div className="statusList">
+              {statuses.length === 0 && <p className="empty">No active Status updates.</p>}
+              {statuses.map(status => (
+                <div className={(status.viewed ? 'statusItem viewed' : 'statusItem') + (status.muted ? ' muted' : '')} key={status.id} onClick={() => viewStatus(status)}>
+                  <Avatar user={{ username: status.username, avatarUrl: status.avatarUrl }} />
+                  <div>
+                    <b>{status.userId === me.id ? 'My Status' : status.username}</b>
+                    {status.kind === 'image' && status.mediaUrl ? (
+                      <img className="statusMedia" src={status.mediaUrl} alt="Status" />
+                    ) : status.kind === 'video' && status.mediaUrl ? (
+                      <video className="statusMedia" src={status.mediaUrl} controls onClick={e => e.stopPropagation()} />
+                    ) : status.kind === 'audio' && status.mediaUrl ? (
+                      <audio src={status.mediaUrl} controls onClick={e => e.stopPropagation()} />
+                    ) : <p>{status.body}</p>}
+                    <small>{new Date(status.createdAt).toLocaleString()} · expires in 24h</small>
+                    {status.userId === me.id && <small>{status.viewCount} views</small>}
+                  </div>
+                  <div className="statusActions">
+                    {status.userId === me.id ? (
+                      <button className="danger" onClick={e => {
+                        e.stopPropagation();
+                        deleteStatus(status.id);
+                      }}><Trash2 /></button>
+                    ) : ['❤️', '👍'].map(reaction => (
+                      <button key={reaction} onClick={e => {
+                        e.stopPropagation();
+                        viewStatus(status, reaction);
+                      }}>{reaction}</button>
+                    ))}
+                    {status.userId !== me.id && (
+                      <>
+                        <button title="Reply privately" onClick={e => {
+                          e.stopPropagation();
+                          replyToStatus(status);
+                        }}><Reply /></button>
+                        <button title={status.muted ? 'Unmute Status' : 'Mute Status'} onClick={e => {
+                          e.stopPropagation();
+                          toggleStatusMute(status);
+                        }}><BellOff /></button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
