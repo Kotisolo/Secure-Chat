@@ -560,17 +560,21 @@ app.post('/api/users/:userId/report', auth, asyncRoute(async (req, res) => {
 
 app.get('/api/groups', auth, asyncRoute(async (req, res) => {
   const result = await pool.query(
-    `SELECT g.*,gm.role,
+    `SELECT g.*,gm.role,rs.muted_until,
+      (SELECT COUNT(*)::int FROM group_messages unread
+       WHERE unread.group_id=g.id AND unread.sender_id<>$1 AND unread.deleted_at IS NULL
+         AND unread.created_at>COALESCE(rs.last_read_at,gm.joined_at)) unread_count,
       (SELECT json_agg(json_build_object('id',u.id::text,'username',u.username,'role',members.role))
        FROM group_members members JOIN users u ON u.id=members.user_id WHERE members.group_id=g.id) members
      FROM chat_groups g JOIN group_members gm ON gm.group_id=g.id
+     LEFT JOIN group_read_states rs ON rs.group_id=g.id AND rs.user_id=$1
      WHERE gm.user_id=$1 ORDER BY g.updated_at DESC`,
     [req.user.id]
   );
   res.json(result.rows.map(row => ({
     id: String(row.id), name: row.name, description: row.description,
     avatarUrl: row.avatar_url, role: row.role, members: row.members || [],
-    createdAt: row.created_at
+    createdAt: row.created_at, unreadCount: row.unread_count, mutedUntil: row.muted_until
   })));
 }));
 
@@ -682,6 +686,30 @@ app.get('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
     createdAt: row.created_at, editedAt: row.edited_at, payload: row.payload,
     reactions: row.reactions
   })));
+}));
+
+app.post('/api/groups/:groupId/read', auth, asyncRoute(async (req, res) => {
+  const member = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2', [req.params.groupId, req.user.id]);
+  if (!member.rows.length) return res.status(403).json({ error: 'Not a group member.' });
+  await pool.query(
+    `INSERT INTO group_read_states(group_id,user_id,last_read_at) VALUES($1,$2,NOW())
+     ON CONFLICT(group_id,user_id) DO UPDATE SET last_read_at=NOW()`,
+    [req.params.groupId, req.user.id]
+  );
+  io.to(groupRoom(req.params.groupId)).emit('group:read', {
+    groupId: req.params.groupId, userId: String(req.user.id), readAt: new Date().toISOString()
+  });
+  res.json({ ok: true });
+}));
+
+app.patch('/api/groups/:groupId/mute', auth, asyncRoute(async (req, res) => {
+  const mutedUntil = req.body.mutedUntil ? new Date(req.body.mutedUntil) : null;
+  await pool.query(
+    `INSERT INTO group_read_states(group_id,user_id,muted_until) VALUES($1,$2,$3)
+     ON CONFLICT(group_id,user_id) DO UPDATE SET muted_until=$3`,
+    [req.params.groupId, req.user.id, mutedUntil]
+  );
+  res.json({ mutedUntil });
 }));
 
 app.post('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
@@ -1286,6 +1314,15 @@ io.on('connection', async socket => {
   socket.on('typing:stop', ({ recipientId } = {}) => {
     if (!validUuid(recipientId)) return;
     io.to(userRoom(recipientId)).emit('typing:stop', { userId });
+  });
+
+  socket.on('group:typing', async ({ groupId, typing } = {}) => {
+    if (!validUuid(groupId)) return;
+    const member = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2', [groupId, userId]);
+    if (!member.rows.length) return;
+    socket.to(groupRoom(groupId)).emit('group:typing', {
+      groupId, userId, username: socket.user.username, typing: Boolean(typing)
+    });
   });
 
   socket.on('call:offer', async ({ recipientId, offer, callType } = {}) => {

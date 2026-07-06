@@ -126,7 +126,10 @@ export default function App() {
   const [groupInvite, setGroupInvite] = useState(null);
   const [selectedGroupMessage, setSelectedGroupMessage] = useState(null);
   const [groupRecording, setGroupRecording] = useState(false);
+  const [groupTyping, setGroupTyping] = useState({});
+  const groupTypingTimer = useRef(null);
   const selectedGroupRef = useRef(null);
+  const groupsRef = useRef([]);
 
   const [call, setCall] = useState({
     active: false,
@@ -220,6 +223,10 @@ export default function App() {
   useEffect(() => {
     selectedGroupRef.current = selectedGroup;
   }, [selectedGroup]);
+
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -487,13 +494,19 @@ export default function App() {
     s.on('group:message', async message => {
       try {
         const display = await decodeGroupMessage(message, message.groupId);
+        display.mentioned = display.body?.toLowerCase().includes(`@${getStoredUser()?.username?.toLowerCase()}`);
         setGroupMessages(current => {
           const rows = current[message.groupId] || [];
           if (rows.some(row => row.id === message.id)) return current;
           return { ...current, [message.groupId]: [...rows, display] };
         });
         if (String(selectedGroupRef.current?.id) !== String(message.groupId)) {
-          showNotification(`New message in ${selectedGroupRef.current?.name || 'a group'}`, display.body);
+          const group = groupsRef.current.find(item => String(item.id) === String(message.groupId));
+          const muted = group?.mutedUntil && new Date(group.mutedUntil) > new Date();
+          if (!muted || display.mentioned) {
+            showNotification(display.mentioned ? `You were mentioned in ${group?.name || 'a group'}` : `New message in ${group?.name || 'a group'}`, display.body);
+          }
+          loadGroups();
         }
       } catch (error) {
         console.error('Group message decryption failed', error);
@@ -508,6 +521,8 @@ export default function App() {
       const history = await api(`/api/groups/${group.id}/messages`);
       const decrypted = await Promise.all(history.map(message => decodeGroupMessage(message, group.id)));
       setGroupMessages(current => ({ ...current, [group.id]: decrypted }));
+      await api(`/api/groups/${group.id}/read`, { method: 'POST', body: '{}' });
+      loadGroups();
     } catch (error) {
       alert('Could not open encrypted group chat: ' + error.message);
     }
@@ -563,6 +578,25 @@ export default function App() {
     } catch {
       return { ...message, body: plaintext };
     }
+  }
+
+  function emitGroupTyping() {
+    if (!selectedGroup) return;
+    getSocket()?.emit('group:typing', { groupId: selectedGroup.id, typing: true });
+    clearTimeout(groupTypingTimer.current);
+    groupTypingTimer.current = setTimeout(() => {
+      getSocket()?.emit('group:typing', { groupId: selectedGroup.id, typing: false });
+    }, 900);
+  }
+
+  async function toggleGroupMute() {
+    const muted = selectedGroup.mutedUntil && new Date(selectedGroup.mutedUntil) > new Date();
+    const mutedUntil = muted ? null : new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+    await api(`/api/groups/${selectedGroup.id}/mute`, {
+      method: 'PATCH', body: JSON.stringify({ mutedUntil })
+    });
+    setSelectedGroup(current => ({ ...current, mutedUntil }));
+    loadGroups();
   }
 
   async function sendGroupFile(event, kind) {
@@ -671,6 +705,9 @@ export default function App() {
           }]
         })
       }));
+    });
+    s.on('group:typing', event => {
+      setGroupTyping(current => ({ ...current, [event.groupId]: event.typing ? event.username : '' }));
     });
     await loadGroups();
     setSelectedGroup(current => ({ ...current, name, description }));
@@ -1701,6 +1738,7 @@ export default function App() {
           <button className="groupRow" key={group.id} onClick={() => openGroup(group)}>
             <div className="avatar"><Users /></div>
             <div><b>{group.name}</b><small>{group.members.length} members</small></div>
+            {group.unreadCount > 0 && <strong className="unreadBadge">{group.unreadCount}</strong>}
           </button>
         ))}
 
@@ -2237,6 +2275,9 @@ export default function App() {
             <div className="avatar big"><Users /></div>
             <h2>{selectedGroup.name}</h2>
             <p>{selectedGroup.description}</p>
+            <button className="groupMute" onClick={toggleGroupMute}>
+              <BellOff /> {selectedGroup.mutedUntil && new Date(selectedGroup.mutedUntil) > new Date() ? 'Unmute group' : 'Mute 8 hours'}
+            </button>
             {selectedGroup.role === 'admin' && (
               <div className="groupAdminActions">
                 <button onClick={editGroup}>Edit group</button>
@@ -2255,7 +2296,8 @@ export default function App() {
               <div className="groupMessageList">
                 {(groupMessages[selectedGroup.id] || []).map(message => (
                   <div
-                    className={'groupBubble ' + (String(message.senderId) === String(me.id) ? 'mine' : 'theirs')}
+                    className={'groupBubble ' + (String(message.senderId) === String(me.id) ? 'mine' : 'theirs') +
+                      (message.body?.toLowerCase().includes(`@${me.username?.toLowerCase()}`) ? ' mentioned' : '')}
                     key={message.id}
                     onClick={() => setSelectedGroupMessage(message)}
                   >
@@ -2292,7 +2334,10 @@ export default function App() {
                 </button>
                 <input
                   value={groupText}
-                  onChange={e => setGroupText(e.target.value)}
+                  onChange={e => {
+                    setGroupText(e.target.value);
+                    emitGroupTyping();
+                  }}
                   onKeyDown={e => {
                     if (e.key === 'Enter') sendGroupMessage();
                   }}
@@ -2300,6 +2345,7 @@ export default function App() {
                 />
                 <button onClick={sendGroupMessage}><Send /></button>
               </div>
+              {groupTyping[selectedGroup.id] && <div className="groupTyping">{groupTyping[selectedGroup.id]} is typing…</div>}
               <div className="groupStickers">
                 {stickers.slice(0, 8).map(value => (
                   <button key={value} onClick={() => sendGroupMessage(value, 'sticker')}>{value}</button>
