@@ -119,6 +119,7 @@ export default function App() {
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
+  const [showComposerTools, setShowComposerTools] = useState(false);
   const [profile, setProfile] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -2045,7 +2046,8 @@ export default function App() {
       <aside className={`${active ? 'side hide' : 'side'} tab-${mobileTab}`}>
         <div className="appTitle">
           <div className="brandMark"><MessageCircle /></div>
-          <div><b>{BRAND.name}</b><small>{BRAND.tagline}</small></div>
+          <div><b className="desktopBrand">{BRAND.name}</b><b className="mobileBrand">Chats</b><small>{BRAND.tagline}</small></div>
+          <button className="mobileTitleAction" onClick={() => setProfile(me)} title="Open profile"><Avatar user={me} /></button>
         </div>
         <div className="me">
           <Avatar user={me} className="avatarButton" onClick={() => setProfile(me)} title="Change profile photo" />
@@ -2064,6 +2066,18 @@ export default function App() {
         <div className="search">
           <Search />
           <input placeholder="Search name or phone" onChange={e => search(e.target.value)} />
+        </div>
+        <div className="contactStories">
+          <button onClick={() => setProfile(me)}>
+            <span className="storyAvatar"><Avatar user={me} /><Plus /></span>
+            <small>Your story</small>
+          </button>
+          {contacts.slice(0, 6).map(contact => (
+            <button key={`story-${contact.id}`} onClick={() => openChat(contact)}>
+              <span className="storyAvatar"><Avatar user={contact} /></span>
+              <small>{contact.username}</small>
+            </button>
+          ))}
         </div>
         <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
@@ -2106,6 +2120,7 @@ export default function App() {
                   <b>{u.chat?.pinned ? '📌 ' : ''}{u.username}</b>
                   <span>{p.body || u.phone}</span>
                 </div>
+                {p.createdAt && <time>{t(p.createdAt)}</time>}
                 {u.chat?.unreadCount > 0 && <strong className="unreadBadge">{u.chat.unreadCount}</strong>}
                 </button>
                 <button className="chatMore" onClick={() => setChatMenu(chatMenu?.id === u.id ? null : u)}>
@@ -2284,26 +2299,19 @@ export default function App() {
               </div>
             )}
 
+            {showComposerTools && (
+              <div className="composerTools">
+                <button onClick={() => { setEmoji(!emoji); setShowComposerTools(false); }}><Smile /><span>Emoji</span></button>
+                <label><Image /><span>Photo</span><input hidden type="file" accept="image/*" onChange={e => file(e, 'image')} /></label>
+                <label><Paperclip /><span>File</span><input hidden type="file" onChange={e => file(e)} /></label>
+                <label><Camera /><span>Camera</span><input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} /></label>
+                <button onClick={() => { setShowScheduler(value => !value); setShowComposerTools(false); }}><CalendarClock /><span>Schedule</span></button>
+              </div>
+            )}
+
             <footer className="compose">
-              <button className="icon" onClick={() => setEmoji(!emoji)}><Smile /></button>
-
-              <label className="icon">
-                <Image />
-                <input hidden type="file" accept="image/*" onChange={e => file(e, 'image')} />
-              </label>
-
-              <label className="icon">
-                <Paperclip />
-                <input hidden type="file" onChange={e => file(e)} />
-              </label>
-
-              <label className="icon" title="Take photo">
-                <Camera />
-                <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
-              </label>
-
-              <button className="icon" onClick={() => setShowScheduler(value => !value)} title="Schedule message">
-                <CalendarClock />
+              <button className="icon composePlus" onClick={() => setShowComposerTools(value => !value)} title="More message tools">
+                {showComposerTools ? <X /> : <Plus />}
               </button>
 
               {recording ? (
@@ -2322,6 +2330,11 @@ export default function App() {
                 }}
                 placeholder={editingMessage ? 'Edit message' : 'Message'}
               />}
+
+              <label className="icon composeCamera" title="Take photo">
+                <Camera />
+                <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
+              </label>
 
               <button
                 className={recording ? 'send recordingStop' : 'send'}

@@ -359,6 +359,11 @@ body{background:var(--bg);color:var(--text)}
 .settingsShortcuts button{min-height:48px;padding:10px 12px;border-radius:13px;background:#f5f3fa;color:var(--text);display:flex;align-items:center;gap:9px;text-align:left;font-weight:700}
 .settingsShortcuts button svg{width:18px}.settingsShortcuts .danger{background:#fff1f4!important;color:#d72f57}
 .settingsCard h3{margin:0}
+.mobileBrand,.mobileTitleAction,.contactStories{display:none}
+.chatMain time{align-self:flex-start;margin-top:3px;color:var(--muted);font-size:10px;white-space:nowrap}
+.composerTools{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 14px;background:#fff;border-top:1px solid var(--line)}
+.composerTools button,.composerTools label{width:66px;height:58px;border-radius:15px;background:#f4f2f9;color:#625d74;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:10px;font-weight:700;cursor:pointer}
+.composerTools svg{width:19px;height:19px;color:var(--primary)}
 
 @media(max-width:900px){
   .modal{padding:0;place-items:stretch;background:#fff}
@@ -371,6 +376,18 @@ body{background:var(--bg);color:var(--text)}
   .historyItem .avatar{width:48px;height:48px}
   .settingsProfile{padding-top:18px}
   .settingsShortcuts{grid-template-columns:1fr}
+  .appTitle{padding:10px 16px}.appTitle .brandMark{width:40px;height:40px;border-radius:13px}.desktopBrand{display:none!important}.mobileBrand{display:block}
+  .appTitle>div:nth-child(2){flex:1}.appTitle small{display:none}
+  .mobileTitleAction{display:grid;width:42px;height:42px;padding:0;border-radius:50%;background:transparent}.mobileTitleAction .avatar{width:38px;height:38px}
+  .contactStories{display:flex;gap:14px;padding:4px 16px 13px;overflow-x:auto;border-bottom:1px solid var(--line);scrollbar-width:none}
+  .contactStories::-webkit-scrollbar{display:none}.contactStories button{min-width:58px;padding:0;background:transparent;color:var(--text);display:flex;flex-direction:column;align-items:center;gap:5px}
+  .contactStories small{width:58px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px}
+  .storyAvatar{position:relative;padding:2px;border:2px solid var(--primary);border-radius:50%}.storyAvatar .avatar{width:48px;height:48px}
+  .storyAvatar>svg{position:absolute;right:-3px;bottom:-2px;width:18px;height:18px;padding:3px;border:2px solid #fff;border-radius:50%;color:#fff;background:var(--primary)}
+  .chatMain{padding:12px 8px}.chatMain .avatar{width:52px;height:52px}.chatMain b{font-size:14px}.chatMain span{margin-top:4px;font-size:12px}
+  .chatMore{margin-right:0}.composerTools{overflow-x:auto;justify-content:flex-start}
+  .compose{padding:8px 10px!important;gap:7px}.compose .composePlus,.compose .composeCamera{display:grid!important;border-radius:50%}
+  .compose input{background:#f4f3f8;border:1px solid #ece9f2}
   .tab-discover .search,.tab-discover .archiveToggle,.tab-discover .statusHeader,.tab-discover .list{display:none}
   .tab-chats .statusHeader,.tab-chats .channelHeader,.tab-chats .groupHeader,.tab-chats .groupRow{display:none}
 }
