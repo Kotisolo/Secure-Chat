@@ -88,14 +88,24 @@ const receipt = message => {
   return '✓';
 };
 const mediaErrorMessage = (error, type) => {
+  const deviceLabel = type === 'video' ? 'camera and microphone' : 'microphone';
   const denied = error?.name === 'NotAllowedError' || /permission denied|not allowed/i.test(error?.message || '');
   if (denied) {
-    return `Microphone${type === 'video' ? ' and camera' : ''} access is blocked. Click the lock or crossed-out microphone icon beside the website address, choose Allow, then try the call again.`;
+    return `${deviceLabel} access is blocked by the browser or Windows. Allow Camera/Microphone in Chrome site settings and Windows Privacy settings, then reload the page.`;
   }
   if (error?.name === 'NotFoundError') {
-    return `No ${type === 'video' ? 'camera or microphone' : 'microphone'} was found on this device.`;
+    return `No ${deviceLabel} was found on this device. Connect a device or choose the correct input in Chrome settings.`;
   }
-  return 'The call could not start. Check your device permissions and connection, then try again.';
+  if (error?.name === 'NotReadableError' || error?.name === 'TrackStartError') {
+    return `Chrome can see your ${deviceLabel}, but cannot start it. Close other apps using it, such as Teams, Zoom, Camera, or another browser tab, then reload.`;
+  }
+  if (error?.name === 'OverconstrainedError') {
+    return `The selected ${deviceLabel} does not support the requested call settings. Try another camera/microphone in Chrome settings.`;
+  }
+  if (error?.name === 'SecurityError') {
+    return `${deviceLabel} is blocked by browser security settings. Make sure you are using HTTPS and allow the device for this site.`;
+  }
+  return `The call could not start: ${error?.name || 'Unknown error'}${error?.message ? ` - ${error.message}` : ''}`;
 };
 
 export default function App() {
