@@ -4,13 +4,14 @@ import {
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages, History, Bell,
-  Shield, Ban, Flag, Users, Plus
+  Shield, Ban, Flag, Users, Plus, Settings
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import QRCode from 'qrcode';
+import { BRAND } from './branding';
 import {
   E2EE_ENABLED, ensureE2EEIdentity, encryptMessage, decryptMessage,
   encryptAttachment, decryptAttachment, encryptGroupMessage, decryptGroupMessage
@@ -20,19 +21,24 @@ const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢
 
 const stickers = ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '👍', '🙏', '❤️', '🔥', '🎉'];
 
+const turnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '')
+  .split(',')
+  .map(url => url.trim())
+  .filter(Boolean);
+const hasTurnServer = turnUrls.length > 0;
 const rtcConfig = {
   iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun1.l.google.com:19302' },
-    ...(import.meta.env.VITE_TURN_URL
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+    ...(hasTurnServer
       ? [{
-          urls: import.meta.env.VITE_TURN_URL,
+          urls: turnUrls,
           username: import.meta.env.VITE_TURN_USERNAME || '',
           credential: import.meta.env.VITE_TURN_CREDENTIAL || ''
         }]
       : [])
   ],
-  iceCandidatePoolSize: 10
+  iceCandidatePoolSize: 10,
+  iceTransportPolicy: import.meta.env.VITE_ICE_TRANSPORT_POLICY === 'relay' ? 'relay' : 'all'
 };
 
 const initials = n => (n || '?').slice(0, 2).toUpperCase();
@@ -114,9 +120,11 @@ export default function App() {
   const [contacts, setContacts] = useState([]);
   const [messages, setMessages] = useState({});
   const [active, setActive] = useState(null);
+  const [mobileTab, setMobileTab] = useState('chats');
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
+  const [showComposerTools, setShowComposerTools] = useState(false);
   const [profile, setProfile] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -1718,6 +1726,27 @@ export default function App() {
       }
     };
 
+    p.onicecandidateerror = event => {
+      console.warn('ICE server error', event.errorCode, event.errorText);
+      if (event.url?.startsWith('turn')) {
+        setCall(c => ({ ...c, status: 'Relay server unavailable' }));
+      }
+    };
+
+    p.oniceconnectionstatechange = () => {
+      if (p.iceConnectionState === 'checking') {
+        setCall(c => ({ ...c, status: 'Connecting securely…' }));
+      }
+      if (p.iceConnectionState === 'failed') {
+        setCall(c => ({
+          ...c,
+          status: hasTurnServer
+            ? 'Network relay failed. Please try again.'
+            : 'A TURN relay is required for this mobile network.'
+        }));
+      }
+    };
+
     p.onconnectionstatechange = () => {
       if (p.connectionState === 'connected') {
         setCall(c => ({ ...c, status: 'Connected' }));
@@ -1950,8 +1979,8 @@ export default function App() {
       <div className="auth">
         <div className="card">
           <div className="badge"><MessageCircle /></div>
-          <h1>SecureChat</h1>
-          <p>Private messaging with realtime chat and calls.</p>
+          <h1>{BRAND.name}</h1>
+          <p>{BRAND.tagline}</p>
 
           {screen === 'welcome' ? (
             <button className="primary" onClick={() => setScreen('auth')}>
@@ -2040,7 +2069,12 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className={active ? 'side hide' : 'side'}>
+      <aside className={`${active ? 'side hide' : 'side'} tab-${mobileTab}`}>
+        <div className="appTitle">
+          <div className="brandMark"><MessageCircle /></div>
+          <div><b className="desktopBrand">{BRAND.name}</b><b className="mobileBrand">Chats</b><small>{BRAND.tagline}</small></div>
+          <button className="mobileTitleAction" onClick={() => setProfile(me)} title="Open profile"><Avatar user={me} /></button>
+        </div>
         <div className="me">
           <Avatar user={me} className="avatarButton" onClick={() => setProfile(me)} title="Change profile photo" />
           <div>
@@ -2058,6 +2092,18 @@ export default function App() {
         <div className="search">
           <Search />
           <input placeholder="Search name or phone" onChange={e => search(e.target.value)} />
+        </div>
+        <div className="contactStories">
+          <button onClick={() => setProfile(me)}>
+            <span className="storyAvatar"><Avatar user={me} /><Plus /></span>
+            <small>Your story</small>
+          </button>
+          {contacts.slice(0, 6).map(contact => (
+            <button key={`story-${contact.id}`} onClick={() => openChat(contact)}>
+              <span className="storyAvatar"><Avatar user={contact} /></span>
+              <small>{contact.username}</small>
+            </button>
+          ))}
         </div>
         <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
@@ -2100,6 +2146,7 @@ export default function App() {
                   <b>{u.chat?.pinned ? '📌 ' : ''}{u.username}</b>
                   <span>{p.body || u.phone}</span>
                 </div>
+                {p.createdAt && <time>{t(p.createdAt)}</time>}
                 {u.chat?.unreadCount > 0 && <strong className="unreadBadge">{u.chat.unreadCount}</strong>}
                 </button>
                 <button className="chatMore" onClick={() => setChatMenu(chatMenu?.id === u.id ? null : u)}>
@@ -2131,6 +2178,13 @@ export default function App() {
             );
           })}
         </div>
+        <nav className="bottomNav" aria-label="Primary navigation">
+          <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Chats</span></button>
+          <button className={mobileTab === 'calls' ? 'active' : ''} onClick={() => { setMobileTab('calls'); loadCallHistory(); }}><Phone /><span>Calls</span></button>
+          <button className={mobileTab === 'discover' ? 'active' : ''} onClick={() => { setMobileTab('discover'); loadChannels(); }}><Users /><span>Discover</span></button>
+          <button className={mobileTab === 'status' ? 'active' : ''} onClick={() => { setMobileTab('status'); loadStatuses(); }}><History /><span>Status</span></button>
+          <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); openPrivacy(); }}><Settings /><span>Settings</span></button>
+        </nav>
       </aside>
 
       <main className={active ? 'panel open' : 'panel'}>
@@ -2271,26 +2325,19 @@ export default function App() {
               </div>
             )}
 
+            {showComposerTools && (
+              <div className="composerTools">
+                <button onClick={() => { setEmoji(!emoji); setShowComposerTools(false); }}><Smile /><span>Emoji</span></button>
+                <label><Image /><span>Photo</span><input hidden type="file" accept="image/*" onChange={e => file(e, 'image')} /></label>
+                <label><Paperclip /><span>File</span><input hidden type="file" onChange={e => file(e)} /></label>
+                <label><Camera /><span>Camera</span><input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} /></label>
+                <button onClick={() => { setShowScheduler(value => !value); setShowComposerTools(false); }}><CalendarClock /><span>Schedule</span></button>
+              </div>
+            )}
+
             <footer className="compose">
-              <button className="icon" onClick={() => setEmoji(!emoji)}><Smile /></button>
-
-              <label className="icon">
-                <Image />
-                <input hidden type="file" accept="image/*" onChange={e => file(e, 'image')} />
-              </label>
-
-              <label className="icon">
-                <Paperclip />
-                <input hidden type="file" onChange={e => file(e)} />
-              </label>
-
-              <label className="icon" title="Take photo">
-                <Camera />
-                <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
-              </label>
-
-              <button className="icon" onClick={() => setShowScheduler(value => !value)} title="Schedule message">
-                <CalendarClock />
+              <button className="icon composePlus" onClick={() => setShowComposerTools(value => !value)} title="More message tools">
+                {showComposerTools ? <X /> : <Plus />}
               </button>
 
               {recording ? (
@@ -2309,6 +2356,11 @@ export default function App() {
                 }}
                 placeholder={editingMessage ? 'Edit message' : 'Message'}
               />}
+
+              <label className="icon composeCamera" title="Take photo">
+                <Camera />
+                <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
+              </label>
 
               <button
                 className={recording ? 'send recordingStop' : 'send'}
@@ -2540,10 +2592,21 @@ export default function App() {
 
       {privacy && (
         <div className="modal" onClick={() => setPrivacy(null)}>
-          <div className="privacyCard" onClick={e => e.stopPropagation()}>
+          <div className="privacyCard settingsCard" onClick={e => e.stopPropagation()}>
             <button className="historyClose" onClick={() => setPrivacy(null)}><X /></button>
-            <h2>Privacy</h2>
-            {[
+            <div className="settingsProfile">
+              <Avatar user={me} />
+              <div><h2>{me?.username}</h2><small>{me?.phone}</small></div>
+              <button onClick={() => setProfile(me)}>Edit profile</button>
+            </div>
+            <div className="settingsShortcuts">
+              <button onClick={() => { setPrivacy(null); openSecurity(); }}><Lock /><span>Account & security</span></button>
+              <button onClick={requestNotifications}><Bell /><span>Notifications</span></button>
+              <button onClick={createRecoveryCode}><KeyRound /><span>Recovery code</span></button>
+              <button className="danger" onClick={logout}><LogOut /><span>Log out</span></button>
+            </div>
+            <h3>Privacy</h3>
+            {[ 
               ['Last seen and online', 'lastSeenVisibility'],
               ['Profile photo', 'profileVisibility'],
               ['About', 'aboutVisibility']
