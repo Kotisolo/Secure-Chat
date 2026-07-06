@@ -145,6 +145,7 @@ export default function App() {
   const [groupRemoteStreams, setGroupRemoteStreams] = useState({});
   const [statuses, setStatuses] = useState([]);
   const [showStatuses, setShowStatuses] = useState(false);
+  const [statusExcluded, setStatusExcluded] = useState([]);
   const groupTypingTimer = useRef(null);
   const groupCallStream = useRef(null);
   const groupPeers = useRef(new Map());
@@ -533,7 +534,7 @@ export default function App() {
     const body = prompt('Write a Status update:');
     if (!body) return;
     const id = crypto.randomUUID();
-    const audience = [...new Map([me, ...contacts].filter(user => user?.id).map(user => [user.id, user])).values()];
+    const audience = statusAudience();
     try {
       const entries = await Promise.all(audience.map(async user => [
         user.id, await encryptGroupMessage(user.id, `status:${id}`, body)
@@ -548,12 +549,18 @@ export default function App() {
     }
   }
 
+  function statusAudience() {
+    return [...new Map([me, ...contacts]
+      .filter(user => user?.id && (user.id === me.id || !statusExcluded.includes(user.id)))
+      .map(user => [user.id, user])).values()];
+  }
+
   async function createMediaStatus(event, kind) {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
     const id = crypto.randomUUID();
-    const audience = [...new Map([me, ...contacts].filter(user => user?.id).map(user => [user.id, user])).values()];
+    const audience = statusAudience();
     try {
       const entries = await Promise.all(audience.map(async user => {
         const encrypted = await encryptAttachment(user.id, `status:${id}`, file);
@@ -585,6 +592,32 @@ export default function App() {
   async function deleteStatus(statusId) {
     await api(`/api/status/${statusId}`, { method: 'DELETE' });
     setStatuses(current => current.filter(status => status.id !== statusId));
+  }
+
+  async function replyToStatus(status) {
+    const body = prompt(`Reply privately to ${status.username}:`);
+    if (!body) return;
+    const conversationId = cid(me.id, status.userId);
+    const encrypted = await encryptMessage(status.userId, conversationId, body);
+    await api('/api/messages', {
+      method: 'POST',
+      body: JSON.stringify({
+        recipientId: status.userId,
+        body: '[Encrypted message]',
+        kind: 'text',
+        ...encrypted
+      })
+    });
+    await viewStatus(status);
+    alert('Private encrypted reply sent.');
+  }
+
+  async function toggleStatusMute(status) {
+    const muted = !status.muted;
+    await api(`/api/status/mute/${status.userId}`, {
+      method: 'PATCH', body: JSON.stringify({ muted })
+    });
+    setStatuses(current => current.map(item => item.userId === status.userId ? { ...item, muted } : item));
   }
 
   async function createGroup() {
@@ -2649,10 +2682,25 @@ export default function App() {
               <label><Video /> Video<input hidden type="file" accept="video/*" capture="environment" onChange={e => createMediaStatus(e, 'video')} /></label>
               <label><Mic /> Voice<input hidden type="file" accept="audio/*" capture onChange={e => createMediaStatus(e, 'audio')} /></label>
             </div>
+            <details className="statusPrivacy">
+              <summary>Status audience · {contacts.length - statusExcluded.length} contacts</summary>
+              {contacts.map(contact => (
+                <label key={contact.id}>
+                  <input
+                    type="checkbox"
+                    checked={!statusExcluded.includes(contact.id)}
+                    onChange={e => setStatusExcluded(current => e.target.checked
+                      ? current.filter(id => id !== contact.id)
+                      : [...current, contact.id])}
+                  />
+                  {contact.username}
+                </label>
+              ))}
+            </details>
             <div className="statusList">
               {statuses.length === 0 && <p className="empty">No active Status updates.</p>}
               {statuses.map(status => (
-                <div className={status.viewed ? 'statusItem viewed' : 'statusItem'} key={status.id} onClick={() => viewStatus(status)}>
+                <div className={(status.viewed ? 'statusItem viewed' : 'statusItem') + (status.muted ? ' muted' : '')} key={status.id} onClick={() => viewStatus(status)}>
                   <Avatar user={{ username: status.username, avatarUrl: status.avatarUrl }} />
                   <div>
                     <b>{status.userId === me.id ? 'My Status' : status.username}</b>
@@ -2678,6 +2726,18 @@ export default function App() {
                         viewStatus(status, reaction);
                       }}>{reaction}</button>
                     ))}
+                    {status.userId !== me.id && (
+                      <>
+                        <button title="Reply privately" onClick={e => {
+                          e.stopPropagation();
+                          replyToStatus(status);
+                        }}><Reply /></button>
+                        <button title={status.muted ? 'Unmute Status' : 'Mute Status'} onClick={e => {
+                          e.stopPropagation();
+                          toggleStatusMute(status);
+                        }}><BellOff /></button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}

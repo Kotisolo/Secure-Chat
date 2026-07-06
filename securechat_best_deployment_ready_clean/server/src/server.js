@@ -569,7 +569,8 @@ app.get('/api/status', auth, asyncRoute(async (req, res) => {
     `SELECT s.id,s.user_id,u.username,u.avatar_url,s.kind,s.created_at,s.expires_at,
       s.encrypted_payloads->($1::text) payload,
       (SELECT COUNT(*)::int FROM status_views v WHERE v.status_id=s.id) view_count,
-      EXISTS(SELECT 1 FROM status_views v WHERE v.status_id=s.id AND v.viewer_id=$1) viewed
+      EXISTS(SELECT 1 FROM status_views v WHERE v.status_id=s.id AND v.viewer_id=$1) viewed,
+      EXISTS(SELECT 1 FROM status_mutes sm WHERE sm.user_id=$1 AND sm.muted_user_id=s.user_id) muted
      FROM status_updates s JOIN users u ON u.id=s.user_id
      WHERE s.deleted_at IS NULL AND s.expires_at>NOW()
        AND (s.user_id=$1 OR s.encrypted_payloads ? ($1::text))
@@ -580,7 +581,7 @@ app.get('/api/status', auth, asyncRoute(async (req, res) => {
     id: String(row.id), userId: String(row.user_id), username: row.username,
     avatarUrl: row.avatar_url, kind: row.kind, createdAt: row.created_at,
     expiresAt: row.expires_at, payload: row.payload,
-    viewCount: row.view_count, viewed: row.viewed
+    viewCount: row.view_count, viewed: row.viewed, muted: row.muted
   })));
 }));
 
@@ -622,6 +623,15 @@ app.post('/api/status/:statusId/view', auth, asyncRoute(async (req, res) => {
 app.delete('/api/status/:statusId', auth, asyncRoute(async (req, res) => {
   await pool.query('UPDATE status_updates SET deleted_at=NOW() WHERE id=$1 AND user_id=$2', [req.params.statusId, req.user.id]);
   res.json({ ok: true });
+}));
+
+app.patch('/api/status/mute/:userId', auth, asyncRoute(async (req, res) => {
+  if (req.body.muted === false) {
+    await pool.query('DELETE FROM status_mutes WHERE user_id=$1 AND muted_user_id=$2', [req.user.id, req.params.userId]);
+  } else {
+    await pool.query('INSERT INTO status_mutes(user_id,muted_user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [req.user.id, req.params.userId]);
+  }
+  res.json({ muted: req.body.muted !== false });
 }));
 
 app.get('/api/groups', auth, asyncRoute(async (req, res) => {

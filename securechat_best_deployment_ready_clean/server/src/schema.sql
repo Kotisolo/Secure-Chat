@@ -69,6 +69,11 @@ CREATE TABLE IF NOT EXISTS status_views(
  reaction VARCHAR(16),
  PRIMARY KEY(status_id,viewer_id));
 CREATE INDEX IF NOT EXISTS idx_status_updates_active ON status_updates(user_id,expires_at DESC) WHERE deleted_at IS NULL;
+CREATE TABLE IF NOT EXISTS status_mutes(
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ muted_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(user_id,muted_user_id));
 ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_token TEXT UNIQUE;
 ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE TABLE IF NOT EXISTS conversations(
