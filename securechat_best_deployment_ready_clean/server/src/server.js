@@ -634,6 +634,97 @@ app.patch('/api/status/mute/:userId', auth, asyncRoute(async (req, res) => {
   res.json({ muted: req.body.muted !== false });
 }));
 
+app.get('/api/channels', auth, asyncRoute(async (req, res) => {
+  const query = clean(req.query.q || '');
+  const result = await pool.query(
+    `SELECT c.*,u.username owner_name,
+      EXISTS(SELECT 1 FROM channel_followers f WHERE f.channel_id=c.id AND f.user_id=$1) following,
+      (SELECT COUNT(*)::int FROM channel_followers f WHERE f.channel_id=c.id) follower_count
+     FROM channels c JOIN users u ON u.id=c.owner_id
+     WHERE $2='' OR LOWER(c.name) LIKE LOWER($3)
+     ORDER BY follower_count DESC,c.created_at DESC LIMIT 100`,
+    [req.user.id, query, `%${query}%`]
+  );
+  res.json(result.rows.map(row => ({
+    id: String(row.id), name: row.name, description: row.description,
+    avatarUrl: row.avatar_url, ownerId: String(row.owner_id), ownerName: row.owner_name,
+    following: row.following, followerCount: row.follower_count
+  })));
+}));
+
+app.post('/api/channels', auth, asyncRoute(async (req, res) => {
+  const name = clean(req.body.name);
+  if (name.length < 2) return res.status(400).json({ error: 'Channel name must be at least 2 characters.' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const channel = await client.query(
+      'INSERT INTO channels(name,description,owner_id) VALUES($1,$2,$3) RETURNING id',
+      [name.slice(0, 120), clean(req.body.description).slice(0, 500), req.user.id]
+    );
+    await client.query('INSERT INTO channel_followers(channel_id,user_id) VALUES($1,$2)', [channel.rows[0].id, req.user.id]);
+    await client.query('COMMIT');
+    res.status(201).json({ id: String(channel.rows[0].id), name });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}));
+
+app.post('/api/channels/:channelId/follow', auth, asyncRoute(async (req, res) => {
+  await pool.query('INSERT INTO channel_followers(channel_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [req.params.channelId, req.user.id]);
+  res.json({ following: true });
+}));
+
+app.delete('/api/channels/:channelId/follow', auth, asyncRoute(async (req, res) => {
+  await pool.query('DELETE FROM channel_followers WHERE channel_id=$1 AND user_id=$2', [req.params.channelId, req.user.id]);
+  res.json({ following: false });
+}));
+
+app.get('/api/channels/:channelId/posts', auth, asyncRoute(async (req, res) => {
+  const result = await pool.query(
+    `SELECT p.*,u.username author_name,
+      COALESCE((SELECT json_agg(json_build_object('userId',r.user_id::text,'emoji',r.emoji))
+        FROM channel_reactions r WHERE r.post_id=p.id),'[]'::json) reactions
+     FROM channel_posts p JOIN users u ON u.id=p.author_id
+     WHERE p.channel_id=$1 AND p.deleted_at IS NULL ORDER BY p.created_at DESC LIMIT 200`,
+    [req.params.channelId]
+  );
+  res.json(result.rows.map(row => ({
+    id: String(row.id), channelId: String(row.channel_id), authorId: String(row.author_id),
+    authorName: row.author_name, body: row.body, kind: row.kind,
+    fileUrl: row.file_url, fileName: row.file_name, fileMime: row.file_mime,
+    createdAt: row.created_at, reactions: row.reactions
+  })));
+}));
+
+app.post('/api/channels/:channelId/posts', auth, asyncRoute(async (req, res) => {
+  const body = String(req.body.body || '').trim();
+  const owner = await pool.query('SELECT 1 FROM channels WHERE id=$1 AND owner_id=$2', [req.params.channelId, req.user.id]);
+  if (!owner.rows.length) return res.status(403).json({ error: 'Only the channel owner can publish.' });
+  if (!body && !req.body.fileUrl) return res.status(400).json({ error: 'Channel update cannot be empty.' });
+  const result = await pool.query(
+    `INSERT INTO channel_posts(channel_id,author_id,body,kind,file_url,file_name,file_mime)
+     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [req.params.channelId, req.user.id, body, clean(req.body.kind || 'text'),
+      req.body.fileUrl || null, req.body.fileName || null, req.body.fileMime || null]
+  );
+  res.status(201).json({ id: String(result.rows[0].id), createdAt: result.rows[0].created_at });
+}));
+
+app.post('/api/channels/:channelId/posts/:postId/reaction', auth, asyncRoute(async (req, res) => {
+  const emoji = clean(req.body.emoji);
+  if (!emoji || emoji.length > 16) return res.status(400).json({ error: 'Invalid reaction.' });
+  await pool.query(
+    `INSERT INTO channel_reactions(post_id,user_id,emoji) VALUES($1,$2,$3)
+     ON CONFLICT(post_id,user_id) DO UPDATE SET emoji=$3,created_at=NOW()`,
+    [req.params.postId, req.user.id, emoji]
+  );
+  res.json({ userId: String(req.user.id), emoji });
+}));
+
 app.get('/api/groups', auth, asyncRoute(async (req, res) => {
   const result = await pool.query(
     `SELECT g.*,gm.role,rs.muted_until,
