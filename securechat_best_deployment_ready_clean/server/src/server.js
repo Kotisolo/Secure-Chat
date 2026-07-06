@@ -83,6 +83,7 @@ const upload = multer({
 });
 
 const online = new Map();
+const groupCallParticipants = new Map();
 const { Server } = require('socket.io');
 
 const io = new Server(server, {
@@ -109,6 +110,10 @@ function userRoom(userId) {
 
 function groupRoom(groupId) {
   return 'group:' + String(groupId);
+}
+
+function groupCallRoom(groupId) {
+  return 'group-call:' + String(groupId);
 }
 
 function validUuid(value) {
@@ -1390,7 +1395,54 @@ io.on('connection', async socket => {
     io.to(userRoom(callerId)).emit('call:ended', { peerId: userId });
   });
 
+  socket.on('group-call:join', async ({ groupId, callType } = {}) => {
+    if (!validUuid(groupId) || !['audio', 'video'].includes(callType)) return;
+    const member = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2', [groupId, userId]);
+    if (!member.rows.length) return socket.emit('group-call:error', { message: 'You are not a group member.' });
+    const participants = groupCallParticipants.get(groupId) || new Map();
+    if (!participants.has(userId) && participants.size >= 8) {
+      return socket.emit('group-call:error', { message: 'This group call is full.' });
+    }
+    const existing = [...participants.entries()].map(([id, value]) => ({
+      userId: id, username: value.username, callType: value.callType
+    }));
+    participants.set(userId, { socketId: socket.id, username: socket.user.username, callType });
+    groupCallParticipants.set(groupId, participants);
+    socket.join(groupCallRoom(groupId));
+    socket.emit('group-call:participants', { groupId, participants: existing });
+    socket.to(groupCallRoom(groupId)).emit('group-call:participant-joined', {
+      groupId, userId, username: socket.user.username, callType
+    });
+  });
+
+  for (const eventName of ['group-call:offer', 'group-call:answer', 'group-call:ice']) {
+    socket.on(eventName, ({ groupId, targetUserId, data } = {}) => {
+      const participants = groupCallParticipants.get(groupId);
+      if (!participants?.has(userId)) return;
+      const target = participants.get(String(targetUserId));
+      if (!target || !data) return;
+      io.to(target.socketId).emit(eventName, {
+        groupId, fromUserId: userId, fromUsername: socket.user.username, data
+      });
+    });
+  }
+
+  socket.on('group-call:leave', ({ groupId } = {}) => {
+    const participants = groupCallParticipants.get(groupId);
+    participants?.delete(userId);
+    if (!participants?.size) groupCallParticipants.delete(groupId);
+    socket.leave(groupCallRoom(groupId));
+    socket.to(groupCallRoom(groupId)).emit('group-call:participant-left', { groupId, userId });
+  });
+
   socket.on('disconnect', async () => {
+    for (const [groupId, participants] of groupCallParticipants.entries()) {
+      if (participants.get(userId)?.socketId === socket.id) {
+        participants.delete(userId);
+        socket.to(groupCallRoom(groupId)).emit('group-call:participant-left', { groupId, userId });
+        if (!participants.size) groupCallParticipants.delete(groupId);
+      }
+    }
     const current = online.get(userId);
     current?.delete(socket.id);
 
