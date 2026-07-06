@@ -45,6 +45,20 @@ const Avatar = ({ user, big = false, className = '', ...props }) => (
     {!user?.avatarUrl && initials(user?.username)}
   </div>
 );
+const StreamVideo = ({ stream, muted = false }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.srcObject = stream || null;
+  }, [stream]);
+  return <video ref={ref} autoPlay playsInline muted={muted} />;
+};
+const StreamAudio = ({ stream }) => {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.srcObject = stream || null;
+  }, [stream]);
+  return <audio ref={ref} autoPlay />;
+};
 const cid = (a, b) => [String(a), String(b)].sort().join('-');
 const t = v => {
   try {
@@ -126,7 +140,14 @@ export default function App() {
   const [groupInvite, setGroupInvite] = useState(null);
   const [selectedGroupMessage, setSelectedGroupMessage] = useState(null);
   const [groupRecording, setGroupRecording] = useState(false);
+  const [groupTyping, setGroupTyping] = useState({});
+  const [groupCall, setGroupCall] = useState(null);
+  const [groupRemoteStreams, setGroupRemoteStreams] = useState({});
+  const groupTypingTimer = useRef(null);
+  const groupCallStream = useRef(null);
+  const groupPeers = useRef(new Map());
   const selectedGroupRef = useRef(null);
+  const groupsRef = useRef([]);
 
   const [call, setCall] = useState({
     active: false,
@@ -220,6 +241,10 @@ export default function App() {
   useEffect(() => {
     selectedGroupRef.current = selectedGroup;
   }, [selectedGroup]);
+
+  useEffect(() => {
+    groupsRef.current = groups;
+  }, [groups]);
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -487,13 +512,19 @@ export default function App() {
     s.on('group:message', async message => {
       try {
         const display = await decodeGroupMessage(message, message.groupId);
+        display.mentioned = display.body?.toLowerCase().includes(`@${getStoredUser()?.username?.toLowerCase()}`);
         setGroupMessages(current => {
           const rows = current[message.groupId] || [];
           if (rows.some(row => row.id === message.id)) return current;
           return { ...current, [message.groupId]: [...rows, display] };
         });
         if (String(selectedGroupRef.current?.id) !== String(message.groupId)) {
-          showNotification(`New message in ${selectedGroupRef.current?.name || 'a group'}`, display.body);
+          const group = groupsRef.current.find(item => String(item.id) === String(message.groupId));
+          const muted = group?.mutedUntil && new Date(group.mutedUntil) > new Date();
+          if (!muted || display.mentioned) {
+            showNotification(display.mentioned ? `You were mentioned in ${group?.name || 'a group'}` : `New message in ${group?.name || 'a group'}`, display.body);
+          }
+          loadGroups();
         }
       } catch (error) {
         console.error('Group message decryption failed', error);
@@ -508,6 +539,8 @@ export default function App() {
       const history = await api(`/api/groups/${group.id}/messages`);
       const decrypted = await Promise.all(history.map(message => decodeGroupMessage(message, group.id)));
       setGroupMessages(current => ({ ...current, [group.id]: decrypted }));
+      await api(`/api/groups/${group.id}/read`, { method: 'POST', body: '{}' });
+      loadGroups();
     } catch (error) {
       alert('Could not open encrypted group chat: ' + error.message);
     }
@@ -563,6 +596,25 @@ export default function App() {
     } catch {
       return { ...message, body: plaintext };
     }
+  }
+
+  function emitGroupTyping() {
+    if (!selectedGroup) return;
+    getSocket()?.emit('group:typing', { groupId: selectedGroup.id, typing: true });
+    clearTimeout(groupTypingTimer.current);
+    groupTypingTimer.current = setTimeout(() => {
+      getSocket()?.emit('group:typing', { groupId: selectedGroup.id, typing: false });
+    }, 900);
+  }
+
+  async function toggleGroupMute() {
+    const muted = selectedGroup.mutedUntil && new Date(selectedGroup.mutedUntil) > new Date();
+    const mutedUntil = muted ? null : new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString();
+    await api(`/api/groups/${selectedGroup.id}/mute`, {
+      method: 'PATCH', body: JSON.stringify({ mutedUntil })
+    });
+    setSelectedGroup(current => ({ ...current, mutedUntil }));
+    loadGroups();
   }
 
   async function sendGroupFile(event, kind) {
@@ -635,6 +687,86 @@ export default function App() {
     mediaRecorder.current = null;
   }
 
+  async function startGroupCall(type) {
+    if (!selectedGroup || groupCall) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true, video: type === 'video'
+      });
+      groupCallStream.current = stream;
+      setGroupRemoteStreams({});
+      setGroupCall({
+        groupId: selectedGroup.id, title: selectedGroup.name,
+        type, micOn: true, camOn: type === 'video'
+      });
+      getSocket()?.emit('group-call:join', { groupId: selectedGroup.id, callType: type });
+    } catch (error) {
+      alert(mediaErrorMessage(error, type));
+    }
+  }
+
+  function createGroupPeer(userId, makeOffer) {
+    if (groupPeers.current.has(userId)) return groupPeers.current.get(userId);
+    const peer = new RTCPeerConnection(rtcConfig);
+    groupCallStream.current?.getTracks().forEach(track => peer.addTrack(track, groupCallStream.current));
+    peer.onicecandidate = event => {
+      if (event.candidate) getSocket()?.emit('group-call:ice', {
+        groupId: groupCall?.groupId || selectedGroupRef.current?.id,
+        targetUserId: userId, data: event.candidate
+      });
+    };
+    peer.ontrack = event => {
+      setGroupRemoteStreams(current => ({ ...current, [userId]: event.streams[0] }));
+    };
+    groupPeers.current.set(userId, peer);
+    if (makeOffer) {
+      (async () => {
+        const offer = await peer.createOffer();
+        await peer.setLocalDescription(offer);
+        getSocket()?.emit('group-call:offer', {
+          groupId: groupCall?.groupId || selectedGroupRef.current?.id,
+          targetUserId: userId, data: offer
+        });
+      })();
+    }
+    return peer;
+  }
+
+  function removeGroupPeer(userId) {
+    groupPeers.current.get(userId)?.close();
+    groupPeers.current.delete(userId);
+    setGroupRemoteStreams(current => {
+      const next = { ...current };
+      delete next[userId];
+      return next;
+    });
+  }
+
+  function leaveGroupCall() {
+    const groupId = groupCall?.groupId;
+    if (groupId) getSocket()?.emit('group-call:leave', { groupId });
+    groupPeers.current.forEach(peer => peer.close());
+    groupPeers.current.clear();
+    groupCallStream.current?.getTracks().forEach(track => track.stop());
+    groupCallStream.current = null;
+    setGroupRemoteStreams({});
+    setGroupCall(null);
+  }
+
+  function toggleGroupCallMic() {
+    const track = groupCallStream.current?.getAudioTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setGroupCall(current => ({ ...current, micOn: track.enabled }));
+  }
+
+  function toggleGroupCallCamera() {
+    const track = groupCallStream.current?.getVideoTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    setGroupCall(current => ({ ...current, camOn: track.enabled }));
+  }
+
   async function reactGroupMessage(emoji) {
     await api(`/api/groups/${selectedGroup.id}/messages/${selectedGroupMessage.id}/reaction`, {
       method: 'POST', body: JSON.stringify({ emoji })
@@ -671,6 +803,35 @@ export default function App() {
           }]
         })
       }));
+    });
+    s.on('group:typing', event => {
+      setGroupTyping(current => ({ ...current, [event.groupId]: event.typing ? event.username : '' }));
+    });
+
+    s.on('group-call:participant-joined', participant => {
+      createGroupPeer(participant.userId, true);
+    });
+    s.on('group-call:offer', async event => {
+      const peer = createGroupPeer(event.fromUserId, false);
+      await peer.setRemoteDescription(new RTCSessionDescription(event.data));
+      const answer = await peer.createAnswer();
+      await peer.setLocalDescription(answer);
+      getSocket()?.emit('group-call:answer', {
+        groupId: event.groupId, targetUserId: event.fromUserId, data: answer
+      });
+    });
+    s.on('group-call:answer', async event => {
+      await groupPeers.current.get(event.fromUserId)?.setRemoteDescription(new RTCSessionDescription(event.data));
+    });
+    s.on('group-call:ice', async event => {
+      try {
+        await groupPeers.current.get(event.fromUserId)?.addIceCandidate(new RTCIceCandidate(event.data));
+      } catch {}
+    });
+    s.on('group-call:participant-left', event => removeGroupPeer(event.userId));
+    s.on('group-call:error', event => {
+      alert(event.message);
+      leaveGroupCall();
     });
     await loadGroups();
     setSelectedGroup(current => ({ ...current, name, description }));
@@ -1701,6 +1862,7 @@ export default function App() {
           <button className="groupRow" key={group.id} onClick={() => openGroup(group)}>
             <div className="avatar"><Users /></div>
             <div><b>{group.name}</b><small>{group.members.length} members</small></div>
+            {group.unreadCount > 0 && <strong className="unreadBadge">{group.unreadCount}</strong>}
           </button>
         ))}
 
@@ -2237,6 +2399,13 @@ export default function App() {
             <div className="avatar big"><Users /></div>
             <h2>{selectedGroup.name}</h2>
             <p>{selectedGroup.description}</p>
+            <div className="groupCallLaunch">
+              <button onClick={() => startGroupCall('audio')}><Phone /> Voice call</button>
+              <button onClick={() => startGroupCall('video')}><Video /> Video call</button>
+            </div>
+            <button className="groupMute" onClick={toggleGroupMute}>
+              <BellOff /> {selectedGroup.mutedUntil && new Date(selectedGroup.mutedUntil) > new Date() ? 'Unmute group' : 'Mute 8 hours'}
+            </button>
             {selectedGroup.role === 'admin' && (
               <div className="groupAdminActions">
                 <button onClick={editGroup}>Edit group</button>
@@ -2255,7 +2424,8 @@ export default function App() {
               <div className="groupMessageList">
                 {(groupMessages[selectedGroup.id] || []).map(message => (
                   <div
-                    className={'groupBubble ' + (String(message.senderId) === String(me.id) ? 'mine' : 'theirs')}
+                    className={'groupBubble ' + (String(message.senderId) === String(me.id) ? 'mine' : 'theirs') +
+                      (message.body?.toLowerCase().includes(`@${me.username?.toLowerCase()}`) ? ' mentioned' : '')}
                     key={message.id}
                     onClick={() => setSelectedGroupMessage(message)}
                   >
@@ -2292,7 +2462,10 @@ export default function App() {
                 </button>
                 <input
                   value={groupText}
-                  onChange={e => setGroupText(e.target.value)}
+                  onChange={e => {
+                    setGroupText(e.target.value);
+                    emitGroupTyping();
+                  }}
                   onKeyDown={e => {
                     if (e.key === 'Enter') sendGroupMessage();
                   }}
@@ -2300,6 +2473,7 @@ export default function App() {
                 />
                 <button onClick={sendGroupMessage}><Send /></button>
               </div>
+              {groupTyping[selectedGroup.id] && <div className="groupTyping">{groupTyping[selectedGroup.id]} is typing…</div>}
               <div className="groupStickers">
                 {stickers.slice(0, 8).map(value => (
                   <button key={value} onClick={() => sendGroupMessage(value, 'sticker')}>{value}</button>
@@ -2338,6 +2512,37 @@ export default function App() {
               <button className="danger menuCancel" onClick={deleteGroupMessage}><Trash2 /> Delete message</button>
             )}
             <button className="menuCancel" onClick={() => setSelectedGroupMessage(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {groupCall && (
+        <div className="groupCallScreen">
+          <h2>{groupCall.type === 'video' ? 'Video' : 'Voice'} call · {groupCall.title}</h2>
+          <div className="groupCallGrid">
+            <div className="groupCallTile">
+              {groupCall.type === 'video' ? <StreamVideo stream={groupCallStream.current} muted /> : <Avatar user={me} big />}
+              <b>You</b>
+            </div>
+            {Object.entries(groupRemoteStreams).map(([userId, stream]) => (
+              <div className="groupCallTile" key={userId}>
+                {groupCall.type === 'video' ? <StreamVideo stream={stream} /> : (
+                  <><div className="avatar big"><User /></div><StreamAudio stream={stream} /></>
+                )}
+                <b>Participant</b>
+              </div>
+            ))}
+          </div>
+          <div className="groupCallControls">
+            <button className={groupCall.micOn ? '' : 'off'} onClick={toggleGroupCallMic}>
+              {groupCall.micOn ? <Mic /> : <MicOff />}
+            </button>
+            {groupCall.type === 'video' && (
+              <button className={groupCall.camOn ? '' : 'off'} onClick={toggleGroupCallCamera}>
+                {groupCall.camOn ? <Video /> : <VideoOff />}
+              </button>
+            )}
+            <button className="danger" onClick={leaveGroupCall}><PhoneOff /></button>
           </div>
         </div>
       )}

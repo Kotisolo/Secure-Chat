@@ -48,6 +48,12 @@ CREATE TABLE IF NOT EXISTS group_message_reactions(
  emoji VARCHAR(16) NOT NULL,
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  PRIMARY KEY(message_id,user_id));
+CREATE TABLE IF NOT EXISTS group_read_states(
+ group_id UUID NOT NULL REFERENCES chat_groups(id) ON DELETE CASCADE,
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ last_read_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ muted_until TIMESTAMPTZ,
+ PRIMARY KEY(group_id,user_id));
 ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_token TEXT UNIQUE;
 ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE TABLE IF NOT EXISTS conversations(
