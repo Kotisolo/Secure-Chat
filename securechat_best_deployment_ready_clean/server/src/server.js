@@ -73,6 +73,7 @@ const upload = multer({
     const allowed = new Set([
       'image/jpeg', 'image/png', 'image/gif', 'image/webp',
       'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
+      'video/mp4', 'video/webm', 'video/quicktime',
       'application/octet-stream',
       'application/pdf', 'text/plain',
       'application/msword',

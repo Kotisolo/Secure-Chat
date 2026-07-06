@@ -505,14 +505,27 @@ export default function App() {
   async function loadStatuses() {
     try {
       const rows = await api('/api/status');
-      const decrypted = await Promise.all(rows.map(async status => ({
-        ...status,
-        body: await decryptGroupMessage(status.userId, `status:${status.id}`, status.payload)
-      })));
+      const decrypted = await Promise.all(rows.map(decodeStatus));
       setStatuses(decrypted);
       setShowStatuses(true);
     } catch (error) {
       alert('Could not load Status: ' + error.message);
+    }
+  }
+
+  async function decodeStatus(status) {
+    const plaintext = await decryptGroupMessage(status.userId, `status:${status.id}`, status.payload);
+    try {
+      const content = JSON.parse(plaintext);
+      if (!content.fileUrl) return { ...status, body: plaintext };
+      const mediaUrl = await decryptAttachment({
+        ...content,
+        senderId: status.userId,
+        recipientId: me.id
+      }, `status:${status.id}`);
+      return { ...status, ...content, mediaUrl };
+    } catch {
+      return { ...status, body: plaintext };
     }
   }
 
@@ -532,6 +545,33 @@ export default function App() {
       await loadStatuses();
     } catch (error) {
       alert('Status failed: ' + error.message);
+    }
+  }
+
+  async function createMediaStatus(event, kind) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    const id = crypto.randomUUID();
+    const audience = [...new Map([me, ...contacts].filter(user => user?.id).map(user => [user.id, user])).values()];
+    try {
+      const entries = await Promise.all(audience.map(async user => {
+        const encrypted = await encryptAttachment(user.id, `status:${id}`, file);
+        const uploaded = await uploadFile(encrypted.file);
+        const content = JSON.stringify({
+          body: kind === 'image' ? 'Photo Status' : kind === 'video' ? 'Video Status' : 'Voice Status',
+          kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type,
+          fileEncryption: encrypted.fileEncryption, senderDeviceId: encrypted.senderDeviceId
+        });
+        return [user.id, await encryptGroupMessage(user.id, `status:${id}`, content)];
+      }));
+      await api('/api/status', {
+        method: 'POST',
+        body: JSON.stringify({ id, kind, payloads: Object.fromEntries(entries) })
+      });
+      await loadStatuses();
+    } catch (error) {
+      alert('Media Status failed: ' + error.message);
     }
   }
 
@@ -2604,6 +2644,11 @@ export default function App() {
             <button className="historyClose" onClick={() => setShowStatuses(false)}><X /></button>
             <h2>Status</h2>
             <button className="createStatus" onClick={createTextStatus}><Plus /> Add text Status</button>
+            <div className="statusMediaButtons">
+              <label><Image /> Photo<input hidden type="file" accept="image/*" capture="environment" onChange={e => createMediaStatus(e, 'image')} /></label>
+              <label><Video /> Video<input hidden type="file" accept="video/*" capture="environment" onChange={e => createMediaStatus(e, 'video')} /></label>
+              <label><Mic /> Voice<input hidden type="file" accept="audio/*" capture onChange={e => createMediaStatus(e, 'audio')} /></label>
+            </div>
             <div className="statusList">
               {statuses.length === 0 && <p className="empty">No active Status updates.</p>}
               {statuses.map(status => (
@@ -2611,7 +2656,13 @@ export default function App() {
                   <Avatar user={{ username: status.username, avatarUrl: status.avatarUrl }} />
                   <div>
                     <b>{status.userId === me.id ? 'My Status' : status.username}</b>
-                    <p>{status.body}</p>
+                    {status.kind === 'image' && status.mediaUrl ? (
+                      <img className="statusMedia" src={status.mediaUrl} alt="Status" />
+                    ) : status.kind === 'video' && status.mediaUrl ? (
+                      <video className="statusMedia" src={status.mediaUrl} controls onClick={e => e.stopPropagation()} />
+                    ) : status.kind === 'audio' && status.mediaUrl ? (
+                      <audio src={status.mediaUrl} controls onClick={e => e.stopPropagation()} />
+                    ) : <p>{status.body}</p>}
                     <small>{new Date(status.createdAt).toLocaleString()} · expires in 24h</small>
                     {status.userId === me.id && <small>{status.viewCount} views</small>}
                   </div>
