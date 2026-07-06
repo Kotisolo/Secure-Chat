@@ -1845,3 +1845,273 @@ body{background:var(--bg);color:var(--text)}
     min-width:0;
   }
 }
+
+/* Groups refresh */
+.groupHeader{
+  padding:10px 18px 8px;
+}
+.groupHeader b{
+  color:#171326;
+  font-size:15px;
+}
+.groupHeader button{
+  border-radius:13px;
+  background:#f4f2f9;
+  color:var(--primary);
+  font-weight:900;
+}
+.groupRow{
+  margin:0 12px 8px;
+  padding:12px;
+  border-radius:20px;
+  background:#fff;
+  color:#171326;
+  box-shadow:0 8px 22px rgba(35,28,66,.04);
+}
+.groupRow:hover{
+  background:#fbfaff;
+}
+.groupRow .avatar{
+  width:50px;
+  height:50px;
+  border-radius:18px;
+}
+.groupRow small{
+  color:#8f8aa1;
+}
+.groupCard{
+  width:760px;
+  padding:28px;
+  border-radius:34px;
+  background:#fff;
+  color:#171326;
+  border:1px solid #ece9f2;
+  text-align:left;
+}
+.groupCard>.avatar.big{
+  width:96px;
+  height:96px;
+  margin:8px auto 14px;
+  border-radius:32px;
+  color:#fff;
+  box-shadow:0 18px 44px rgba(117,73,238,.24);
+}
+.groupCard>h2{
+  margin:0;
+  text-align:center;
+  font-size:30px;
+  letter-spacing:-.04em;
+}
+.groupCard>p{
+  margin:6px 0 16px;
+  text-align:center;
+  color:#8f8aa1;
+}
+.groupCallLaunch{
+  gap:10px;
+  margin:16px 0 10px;
+}
+.groupCallLaunch button{
+  height:52px;
+  border-radius:18px;
+  background:#f6f4fb;
+  color:#171326;
+  font-weight:900;
+}
+.groupCallLaunch button svg{
+  color:var(--primary);
+}
+.groupMute{
+  width:100%;
+  height:48px;
+  justify-content:center;
+  border-radius:17px;
+  background:#f4f2f9;
+  color:#625d74;
+  font-weight:900;
+}
+.groupAdminActions{
+  gap:10px;
+  margin:12px 0;
+}
+.groupAdminActions button{
+  height:46px;
+  border-radius:16px;
+  background:#fbfaff;
+  border:1px solid #ece9f2;
+  color:var(--primary);
+  font-weight:900;
+}
+.inviteCard{
+  margin:12px 0;
+  padding:16px;
+  border:1px solid #ece9f2;
+  border-radius:22px;
+  background:#fbfaff;
+}
+.inviteCard img{
+  width:170px;
+  height:170px;
+  border-radius:18px;
+}
+.inviteCard input{
+  height:44px;
+  border-radius:15px;
+  background:#fff;
+  color:#171326;
+  border:1px solid #ece9f2;
+}
+.inviteCard button{
+  height:38px;
+  border-radius:13px;
+  background:#f4f2f9;
+  color:var(--primary);
+  font-weight:800;
+}
+.groupConversation{
+  margin:16px 0;
+  border:1px solid #ece9f2;
+  border-radius:24px;
+  overflow:hidden;
+  background:#fff;
+}
+.groupMessageList{
+  height:320px;
+  padding:14px;
+  background-color:#faf9fd;
+  background-image:radial-gradient(circle at 1px 1px,rgba(109,74,255,.055) 1px,transparent 0);
+  background-size:24px 24px;
+}
+.groupBubble{
+  max-width:78%;
+  padding:10px 12px;
+  border-radius:18px;
+  box-shadow:0 8px 20px rgba(35,28,66,.06);
+}
+.groupBubble.mine{
+  color:#fff;
+  background:linear-gradient(135deg,#704cff,#9347ed);
+  border-bottom-right-radius:7px;
+}
+.groupBubble.theirs{
+  color:#171326;
+  background:#fff;
+  border:1px solid #ece9f2;
+  border-bottom-left-radius:7px;
+}
+.groupBubble b{
+  color:inherit;
+  opacity:.7;
+}
+.groupBubble small{
+  color:inherit;
+  opacity:.62;
+  text-align:right;
+}
+.groupBubble.mentioned{
+  outline:2px solid var(--primary);
+}
+.groupBubble img{
+  max-width:260px;
+  border-radius:16px;
+}
+.groupBubble a{
+  color:inherit;
+  font-weight:900;
+}
+.groupCompose{
+  gap:8px;
+  padding:10px;
+  border-top:1px solid #ece9f2;
+  background:#fff;
+}
+.groupCompose label,.groupCompose button{
+  width:42px;
+  height:42px;
+  border-radius:15px;
+  background:#f4f2f9;
+  color:var(--primary);
+}
+.groupCompose input{
+  height:42px;
+  border-radius:18px;
+  background:#f4f3f8;
+  color:#171326;
+}
+.groupCompose button:last-child{
+  color:#fff;
+  background:linear-gradient(135deg,var(--primary),var(--secondary));
+}
+.groupCompose .groupRecord.active{
+  background:#ef476f;
+  color:#fff;
+}
+.groupTyping{
+  padding:8px 14px;
+  background:#fff;
+  color:#8f8aa1;
+}
+.groupStickers{
+  padding:8px 10px 10px;
+  background:#fff;
+}
+.groupStickers button{
+  min-width:38px;
+  height:38px;
+  border-radius:13px;
+  background:#f5f3fa;
+}
+.addMember,.leaveGroup{
+  height:48px;
+  border-radius:17px;
+}
+.addMember{
+  color:var(--primary);
+  background:#f4f2f9;
+}
+.memberList{
+  margin:14px 0;
+  border:1px solid #ece9f2;
+  border-radius:22px;
+  overflow:hidden;
+}
+.memberList>div{
+  padding:12px 14px;
+  border-bottom:1px solid #f0edf6;
+}
+.memberList span{
+  color:#171326;
+  font-weight:700;
+}
+.memberList button{
+  border-radius:13px;
+  background:#f4f2f9;
+  color:var(--primary);
+  font-weight:800;
+}
+
+@media(max-width:900px){
+  .groupCard{
+    width:100vw;
+    max-width:none;
+    height:100dvh;
+    max-height:none;
+    border:0;
+    border-radius:0;
+    padding:28px 16px 96px;
+  }
+  .groupCallLaunch,.groupAdminActions{
+    flex-direction:column;
+  }
+  .groupMessageList{
+    height:42vh;
+  }
+  .groupBubble{
+    max-width:84%;
+  }
+  .memberList>div{
+    align-items:flex-start;
+    gap:8px;
+    flex-direction:column;
+  }
+}
