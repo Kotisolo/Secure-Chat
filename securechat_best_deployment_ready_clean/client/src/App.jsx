@@ -121,6 +121,7 @@ export default function App() {
   const [messages, setMessages] = useState({});
   const [active, setActive] = useState(null);
   const [mobileTab, setMobileTab] = useState('chats');
+  const [chatListFilter, setChatListFilter] = useState('all');
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
@@ -1967,6 +1968,11 @@ export default function App() {
     return item.direction === callFilter;
   });
   const callContactName = call.title.split(' with ').pop() || call.title;
+  const visibleContacts = contacts.filter(user => {
+    if (Boolean(user.chat?.archived) !== showArchived) return false;
+    if (chatListFilter === 'unread') return Number(user.chat?.unreadCount || 0) > 0;
+    return true;
+  });
 
   useEffect(() => {
     if (!active || !me) return;
@@ -2100,6 +2106,19 @@ export default function App() {
           <Search />
           <input placeholder="Search name or phone" onChange={e => search(e.target.value)} />
         </div>
+        <div className="chatFilterChips">
+          <button className={chatListFilter === 'all' ? 'active' : ''} onClick={() => setChatListFilter('all')}>
+            All
+          </button>
+          <button className={chatListFilter === 'unread' ? 'active' : ''} onClick={() => setChatListFilter('unread')}>
+            Unread
+            {contacts.some(user => Number(user.chat?.unreadCount || 0) > 0) && (
+              <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0)}</span>
+            )}
+          </button>
+          <button onClick={() => setMobileTab('chats')}>Groups</button>
+          <button onClick={() => { setMobileTab('discover'); loadChannels(); }}>Channels</button>
+        </div>
         <div className="contactStories">
           <button onClick={() => setProfile(me)}>
             <span className="storyAvatar"><Avatar user={me} /><Plus /></span>
@@ -2140,8 +2159,11 @@ export default function App() {
 
         <div className="list">
           {contacts.length === 0 && <p className="empty">Search a user to start chatting.</p>}
+          {contacts.length > 0 && visibleContacts.length === 0 && (
+            <p className="empty">{showArchived ? 'No archived chats yet.' : 'No chats in this view.'}</p>
+          )}
 
-          {contacts.filter(u => Boolean(u.chat?.archived) === showArchived).map(u => {
+          {visibleContacts.map(u => {
             const c = me && u && u.id ? cid(me.id, u.id) : '';
             const p = messages[c]?.slice?.(-1)?.[0] || messages[c]?.preview || {};
 

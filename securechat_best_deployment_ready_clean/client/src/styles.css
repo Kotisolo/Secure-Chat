@@ -557,3 +557,203 @@ body{background:var(--bg);color:var(--text)}
   .local{width:118px!important;height:156px!important;right:14px;bottom:104px}
   .callAvatar{width:96px;height:96px;border-radius:30px}
 }
+
+/* Chat list refresh inspired by the reference screens */
+.side{
+  width:390px;
+  min-width:390px;
+  background:
+    radial-gradient(circle at 24px 24px,rgba(139,92,246,.08),transparent 30%),
+    #fff;
+}
+.appTitle{
+  height:88px;
+  padding:18px 22px 12px;
+  border-bottom:0;
+}
+.appTitle b{font-size:24px;letter-spacing:-.03em}
+.appTitle small{font-size:12px;color:#8f8aa1}
+.brandMark{
+  width:52px;
+  height:52px;
+  border-radius:18px;
+  background:conic-gradient(from 210deg,#121827,#704cff,#00c8ff,#ff8a3d,#704cff,#121827);
+}
+.mobileTitleAction{
+  margin-left:auto;
+  display:grid;
+  place-items:center;
+  width:46px;
+  height:46px;
+  border-radius:50%;
+  background:#fff;
+  box-shadow:0 10px 24px rgba(35,28,66,.12);
+}
+.search{
+  height:48px;
+  margin:8px 18px 10px;
+  border:0;
+  border-radius:17px;
+  background:#f5f4f8;
+}
+.search svg{color:#aaa5b6}
+.chatFilterChips{
+  display:flex;
+  gap:8px;
+  padding:0 18px 14px;
+  overflow-x:auto;
+  scrollbar-width:none;
+}
+.chatFilterChips::-webkit-scrollbar{display:none}
+.chatFilterChips button{
+  min-width:max-content;
+  height:36px;
+  padding:0 14px;
+  border-radius:13px;
+  background:#f4f2f9;
+  color:#625d74;
+  font-weight:800;
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+}
+.chatFilterChips button.active{
+  color:#fff;
+  background:linear-gradient(135deg,var(--primary),var(--secondary));
+  box-shadow:0 10px 20px rgba(117,73,238,.22);
+}
+.chatFilterChips span{
+  min-width:20px;
+  height:20px;
+  padding:0 6px;
+  border-radius:999px;
+  display:grid;
+  place-items:center;
+  color:var(--primary);
+  background:#fff;
+  font-size:11px;
+}
+.contactStories{
+  display:flex;
+  gap:14px;
+  padding:2px 18px 15px;
+  overflow-x:auto;
+  border-bottom:1px solid #f0edf6;
+  scrollbar-width:none;
+}
+.contactStories::-webkit-scrollbar{display:none}
+.contactStories button{
+  min-width:62px;
+  padding:0;
+  background:transparent;
+  color:var(--text);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:6px;
+}
+.storyAvatar{
+  position:relative;
+  padding:2px;
+  border:2px solid var(--primary);
+  border-radius:50%;
+  background:#fff;
+}
+.storyAvatar .avatar{width:52px;height:52px}
+.storyAvatar>svg{
+  position:absolute;
+  right:-2px;
+  bottom:-2px;
+  width:18px;
+  height:18px;
+  padding:3px;
+  border:2px solid #fff;
+  border-radius:50%;
+  color:#fff;
+  background:var(--primary);
+}
+.contactStories small{
+  width:62px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  font-size:10px;
+  color:#625d74;
+}
+.list{
+  padding:8px 12px 98px;
+}
+.chat{
+  margin-bottom:6px;
+  border:0;
+  border-radius:22px;
+  background:#fff;
+  box-shadow:0 8px 22px rgba(35,28,66,.04);
+}
+.chat:hover{background:#fbfaff}
+.chatMain{
+  padding:13px 8px 13px 10px;
+  gap:12px;
+}
+.chatMain .avatar{
+  width:54px;
+  height:54px;
+  box-shadow:inset 0 0 0 2px rgba(255,255,255,.58);
+}
+.chatMain b{
+  display:block;
+  color:#171326;
+  font-size:15px;
+  letter-spacing:-.01em;
+}
+.chatMain span{
+  max-width:165px;
+  margin-top:4px;
+  color:#8f8aa1;
+  font-size:12px;
+}
+.chatMain time{
+  min-width:48px;
+  color:#aaa5b6;
+  font-size:10px;
+  text-align:right;
+}
+.unreadBadge{
+  min-width:22px;
+  height:22px;
+  padding:0 7px;
+  border-radius:999px;
+  display:grid;
+  place-items:center;
+  font-size:11px;
+  box-shadow:0 8px 18px rgba(117,73,238,.22);
+}
+.chatMore{
+  width:34px;
+  height:34px;
+  margin-right:8px;
+  border-radius:50%;
+}
+.archiveToggle{
+  margin:10px 18px 8px;
+  padding:10px 12px;
+  border-radius:15px;
+  background:#f8f6fb;
+}
+
+@media(max-width:900px){
+  .side{width:100vw;min-width:100vw}
+  .appTitle{height:78px;padding:14px 18px 8px}
+  .appTitle .brandMark{width:46px;height:46px;border-radius:16px}
+  .appTitle b{font-size:22px}
+  .search{margin-top:8px}
+  .contactStories{display:flex}
+  .chatMain span{max-width:44vw}
+  .bottomNav{
+    height:74px;
+    border-radius:22px 22px 0 0;
+  }
+  .bottomNav button.active svg{
+    filter:drop-shadow(0 8px 12px rgba(117,73,238,.24));
+  }
+}
