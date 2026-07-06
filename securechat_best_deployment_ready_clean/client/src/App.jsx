@@ -1996,9 +1996,22 @@ export default function App() {
           <p>{BRAND.tagline}</p>
 
           {screen === 'welcome' ? (
-            <button className="primary" onClick={() => setScreen('auth')}>
-              Get Started
-            </button>
+            <>
+              <div className="authFeatures">
+                <span><Languages /> AI-ready translation</span>
+                <span><Lock /> Secure messaging</span>
+                <span><Video /> Voice & video calls</span>
+              </div>
+              <button className="primary" onClick={() => setScreen('auth')}>
+                Get Started
+              </button>
+              <button className="ghostLogin" onClick={() => {
+                setScreen('auth');
+                setAuthMode('login');
+              }}>
+                Log In
+              </button>
+            </>
           ) : (
             <>
               <div className="tabs">
