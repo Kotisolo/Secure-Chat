@@ -121,6 +121,7 @@ export default function App() {
   const [messages, setMessages] = useState({});
   const [active, setActive] = useState(null);
   const [mobileTab, setMobileTab] = useState('chats');
+  const [chatListFilter, setChatListFilter] = useState('all');
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
@@ -139,6 +140,7 @@ export default function App() {
   const [attachmentUrls, setAttachmentUrls] = useState({});
   const [callHistory, setCallHistory] = useState([]);
   const [showCallHistory, setShowCallHistory] = useState(false);
+  const [callFilter, setCallFilter] = useState('all');
   const [privacy, setPrivacy] = useState(null);
   const [security, setSecurity] = useState(null);
   const [groups, setGroups] = useState([]);
@@ -1960,6 +1962,17 @@ export default function App() {
   const displayRows = messageSearch.trim()
     ? rows.filter(message => (message.body || '').toLowerCase().includes(messageSearch.trim().toLowerCase()))
     : rows;
+  const filteredCalls = callHistory.filter(item => {
+    if (callFilter === 'all') return true;
+    if (callFilter === 'missed') return ['missed', 'declined', 'failed'].includes(item.status);
+    return item.direction === callFilter;
+  });
+  const callContactName = call.title.split(' with ').pop() || call.title;
+  const visibleContacts = contacts.filter(user => {
+    if (Boolean(user.chat?.archived) !== showArchived) return false;
+    if (chatListFilter === 'unread') return Number(user.chat?.unreadCount || 0) > 0;
+    return true;
+  });
 
   useEffect(() => {
     if (!active || !me) return;
@@ -1983,9 +1996,22 @@ export default function App() {
           <p>{BRAND.tagline}</p>
 
           {screen === 'welcome' ? (
-            <button className="primary" onClick={() => setScreen('auth')}>
-              Get Started
-            </button>
+            <>
+              <div className="authFeatures">
+                <span><Languages /> AI-ready translation</span>
+                <span><Lock /> Secure messaging</span>
+                <span><Video /> Voice & video calls</span>
+              </div>
+              <button className="primary" onClick={() => setScreen('auth')}>
+                Get Started
+              </button>
+              <button className="ghostLogin" onClick={() => {
+                setScreen('auth');
+                setAuthMode('login');
+              }}>
+                Log In
+              </button>
+            </>
           ) : (
             <>
               <div className="tabs">
@@ -2093,6 +2119,19 @@ export default function App() {
           <Search />
           <input placeholder="Search name or phone" onChange={e => search(e.target.value)} />
         </div>
+        <div className="chatFilterChips">
+          <button className={chatListFilter === 'all' ? 'active' : ''} onClick={() => setChatListFilter('all')}>
+            All
+          </button>
+          <button className={chatListFilter === 'unread' ? 'active' : ''} onClick={() => setChatListFilter('unread')}>
+            Unread
+            {contacts.some(user => Number(user.chat?.unreadCount || 0) > 0) && (
+              <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0)}</span>
+            )}
+          </button>
+          <button onClick={() => setMobileTab('chats')}>Groups</button>
+          <button onClick={() => { setMobileTab('discover'); loadChannels(); }}>Channels</button>
+        </div>
         <div className="contactStories">
           <button onClick={() => setProfile(me)}>
             <span className="storyAvatar"><Avatar user={me} /><Plus /></span>
@@ -2133,8 +2172,11 @@ export default function App() {
 
         <div className="list">
           {contacts.length === 0 && <p className="empty">Search a user to start chatting.</p>}
+          {contacts.length > 0 && visibleContacts.length === 0 && (
+            <p className="empty">{showArchived ? 'No archived chats yet.' : 'No chats in this view.'}</p>
+          )}
 
-          {contacts.filter(u => Boolean(u.chat?.archived) === showArchived).map(u => {
+          {visibleContacts.map(u => {
             const c = me && u && u.id ? cid(me.id, u.id) : '';
             const p = messages[c]?.slice?.(-1)?.[0] || messages[c]?.preview || {};
 
@@ -2422,8 +2464,11 @@ export default function App() {
       )}
 
       {call.active && !call.minimized && (
-        <div className="call">
+        <div className={`call ${call.type === 'video' ? 'videoCall' : 'audioCall'}`}>
           <div className="callInfo">
+            {call.type !== 'video' && (
+              <div className="callAvatar">{initials(callContactName)}</div>
+            )}
             <h2>{call.title}</h2>
             <p>
               {call.status}{' '}
@@ -2571,18 +2616,42 @@ export default function App() {
         <div className="modal" onClick={() => setShowCallHistory(false)}>
           <div className="historyCard" onClick={e => e.stopPropagation()}>
             <button className="historyClose" onClick={() => setShowCallHistory(false)}><X /></button>
-            <h2>Call history</h2>
+            <div className="callsHero">
+              <div className="callsHeroIcon"><Phone /></div>
+              <div>
+                <h2>Calls</h2>
+                <p>Voice and video activity</p>
+              </div>
+            </div>
+            <div className="callFilters">
+              {[
+                ['all', 'All'],
+                ['missed', 'Missed'],
+                ['incoming', 'Incoming'],
+                ['outgoing', 'Outgoing']
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  className={callFilter === value ? 'active' : ''}
+                  onClick={() => setCallFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="historyList">
-              {callHistory.length === 0 && <p className="empty">No calls yet.</p>}
-              {callHistory.map(item => (
+              {filteredCalls.length === 0 && <p className="empty">No calls here yet.</p>}
+              {filteredCalls.map(item => (
                 <div className="historyItem" key={item.id}>
-                  <div className="avatar">{initials(item.contactName)}</div>
-                  <div>
+                  <Avatar user={{ username: item.contactName, avatarUrl: item.contactAvatar }} />
+                  <div className="callMeta">
                     <b>{item.contactName}</b>
                     <small>{item.direction} · {item.type} · {item.status}</small>
                     <small>{new Date(item.startedAt).toLocaleString()}</small>
                   </div>
-                  {item.type === 'video' ? <Video /> : <Phone />}
+                  <div className="callTypeIcon">
+                    {item.type === 'video' ? <Video /> : <Phone />}
+                  </div>
                 </div>
               ))}
             </div>
@@ -2833,7 +2902,13 @@ export default function App() {
         <div className="modal" onClick={() => setShowStatuses(false)}>
           <div className="statusCard" onClick={e => e.stopPropagation()}>
             <button className="historyClose" onClick={() => setShowStatuses(false)}><X /></button>
-            <h2>Status</h2>
+            <div className="statusHero">
+              <div className="statusHeroIcon"><History /></div>
+              <div>
+                <h2>Status</h2>
+                <p>Share moments that disappear after 24 hours.</p>
+              </div>
+            </div>
             <button className="createStatus" onClick={createTextStatus}><Plus /> Add text Status</button>
             <div className="statusMediaButtons">
               <label><Image /> Photo<input hidden type="file" accept="image/*" capture="environment" onChange={e => createMediaStatus(e, 'image')} /></label>
@@ -2916,7 +2991,13 @@ export default function App() {
             }}><X /></button>
             {!selectedChannel ? (
               <>
-                <h2>Channels</h2>
+                <div className="channelHero">
+                  <div className="channelHeroIcon"><MessageCircle /></div>
+                  <div>
+                    <h2>Channels</h2>
+                    <p>Discover updates from people and communities.</p>
+                  </div>
+                </div>
                 <div className="channelSearch">
                   <Search />
                   <input placeholder="Discover channels" onChange={e => loadChannels(e.target.value)} />
@@ -2940,11 +3021,16 @@ export default function App() {
             ) : (
               <>
                 <button className="channelBack" onClick={() => setSelectedChannel(null)}><ArrowLeft /> Channels</button>
-                <h2>{selectedChannel.name}</h2>
-                <p>{selectedChannel.description}</p>
-                <button onClick={() => toggleChannelFollow(selectedChannel)}>
-                  {selectedChannel.following ? 'Unfollow' : 'Follow'}
-                </button>
+                <div className="selectedChannelHero">
+                  <div className="avatar"><MessageCircle /></div>
+                  <div>
+                    <h2>{selectedChannel.name}</h2>
+                    <p>{selectedChannel.description}</p>
+                  </div>
+                  <button onClick={() => toggleChannelFollow(selectedChannel)}>
+                    {selectedChannel.following ? 'Unfollow' : 'Follow'}
+                  </button>
+                </div>
                 {selectedChannel.ownerId === me.id && (
                   <div className="channelPublish">
                     <button className="publishChannel" onClick={publishChannelPost}><Plus /> Text</button>
