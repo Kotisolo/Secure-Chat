@@ -2902,7 +2902,13 @@ export default function App() {
         <div className="modal" onClick={() => setShowStatuses(false)}>
           <div className="statusCard" onClick={e => e.stopPropagation()}>
             <button className="historyClose" onClick={() => setShowStatuses(false)}><X /></button>
-            <h2>Status</h2>
+            <div className="statusHero">
+              <div className="statusHeroIcon"><History /></div>
+              <div>
+                <h2>Status</h2>
+                <p>Share moments that disappear after 24 hours.</p>
+              </div>
+            </div>
             <button className="createStatus" onClick={createTextStatus}><Plus /> Add text Status</button>
             <div className="statusMediaButtons">
               <label><Image /> Photo<input hidden type="file" accept="image/*" capture="environment" onChange={e => createMediaStatus(e, 'image')} /></label>

@@ -1473,3 +1473,167 @@ body{background:var(--bg);color:var(--text)}
   }
   .card h1{font-size:36px}
 }
+
+/* Status / stories refresh */
+.statusCard{
+  width:620px;
+  padding:24px;
+  border-radius:34px;
+  background:#fff;
+  color:#171326;
+  border:1px solid #ece9f2;
+}
+.statusHero{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  padding-right:44px;
+  margin-bottom:18px;
+}
+.statusHeroIcon{
+  width:60px;
+  height:60px;
+  border-radius:21px;
+  display:grid;
+  place-items:center;
+  color:#fff;
+  background:linear-gradient(135deg,var(--primary),var(--secondary));
+  box-shadow:0 14px 30px rgba(117,73,238,.24);
+}
+.statusHero h2{
+  margin:0 0 3px;
+  font-size:30px;
+  letter-spacing:-.04em;
+}
+.statusHero p{
+  margin:0;
+  color:#8f8aa1;
+}
+.createStatus{
+  height:52px;
+  border-radius:18px;
+  background:linear-gradient(135deg,var(--primary),var(--secondary));
+  color:#fff;
+  font-weight:900;
+  box-shadow:0 14px 28px rgba(117,73,238,.22);
+}
+.statusMediaButtons{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:9px;
+  margin:12px 0;
+}
+.statusMediaButtons label{
+  height:50px;
+  border-radius:17px;
+  background:#f6f4fb;
+  color:#625d74;
+  font-weight:800;
+}
+.statusMediaButtons label svg{
+  color:var(--primary);
+}
+.statusPrivacy{
+  margin:12px 0 16px;
+  padding:13px;
+  border:1px solid #ece9f2;
+  border-radius:20px;
+  background:#fbfaff;
+}
+.statusPrivacy summary{
+  color:#171326;
+}
+.statusPrivacy label{
+  align-items:center;
+  color:#625d74;
+}
+.statusList{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.statusItem{
+  position:relative;
+  padding:13px;
+  border:1px solid #ece9f2;
+  border-radius:22px;
+  background:#fff;
+  box-shadow:0 10px 24px rgba(35,28,66,.05);
+}
+.statusItem:hover{
+  background:#fbfaff;
+}
+.statusItem.viewed{
+  opacity:.72;
+}
+.statusItem.muted{
+  filter:saturate(.45);
+}
+.statusItem .avatar{
+  width:56px;
+  height:56px;
+  outline:3px solid rgba(112,76,255,.18);
+  outline-offset:2px;
+}
+.statusItem>div:nth-child(2){
+  flex:1;
+}
+.statusItem b{
+  display:block;
+  color:#171326;
+  font-size:15px;
+}
+.statusItem p{
+  margin:6px 0 5px;
+  color:#625d74;
+}
+.statusItem small{
+  color:#8f8aa1;
+}
+.statusMedia{
+  max-width:300px;
+  max-height:220px;
+  border-radius:18px;
+  border:1px solid #ece9f2;
+}
+.statusActions{
+  max-width:112px;
+  justify-content:flex-end;
+  gap:6px;
+}
+.statusActions button{
+  width:38px;
+  height:38px;
+  border-radius:14px;
+  background:#f4f2f9;
+  color:#625d74;
+  display:grid;
+  place-items:center;
+}
+.statusActions button:hover{
+  color:#fff;
+  background:linear-gradient(135deg,var(--primary),var(--secondary));
+}
+.statusActions .danger:hover{
+  background:#ef476f!important;
+}
+
+@media(max-width:900px){
+  .statusCard{
+    width:100vw;
+    max-width:none;
+    height:100dvh;
+    max-height:none;
+    border:0;
+    border-radius:0;
+    padding:24px 16px 96px;
+  }
+  .statusHero h2{font-size:28px}
+  .statusMediaButtons{grid-template-columns:1fr}
+  .statusItem{
+    align-items:flex-start;
+  }
+  .statusActions{
+    max-width:92px;
+  }
+}
