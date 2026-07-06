@@ -702,16 +702,32 @@ app.get('/api/channels/:channelId/posts', auth, asyncRoute(async (req, res) => {
 
 app.post('/api/channels/:channelId/posts', auth, asyncRoute(async (req, res) => {
   const body = String(req.body.body || '').trim();
+  const fileUrl = req.body.fileUrl || null;
   const owner = await pool.query('SELECT 1 FROM channels WHERE id=$1 AND owner_id=$2', [req.params.channelId, req.user.id]);
   if (!owner.rows.length) return res.status(403).json({ error: 'Only the channel owner can publish.' });
-  if (!body && !req.body.fileUrl) return res.status(400).json({ error: 'Channel update cannot be empty.' });
+  if (!body && !fileUrl) return res.status(400).json({ error: 'Channel update cannot be empty.' });
+  if (fileUrl && (!String(fileUrl).startsWith('/uploads/') || !req.body.fileName)) {
+    return res.status(400).json({ error: 'Invalid channel attachment.' });
+  }
   const result = await pool.query(
     `INSERT INTO channel_posts(channel_id,author_id,body,kind,file_url,file_name,file_mime)
      VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
     [req.params.channelId, req.user.id, body, clean(req.body.kind || 'text'),
-      req.body.fileUrl || null, req.body.fileName || null, req.body.fileMime || null]
+      fileUrl, req.body.fileName || null, req.body.fileMime || null]
   );
-  res.status(201).json({ id: String(result.rows[0].id), createdAt: result.rows[0].created_at });
+  const followers = await pool.query(
+    'SELECT user_id FROM channel_followers WHERE channel_id=$1 AND user_id<>$2 AND notifications=TRUE',
+    [req.params.channelId, req.user.id]
+  );
+  const channel = await pool.query('SELECT name FROM channels WHERE id=$1', [req.params.channelId]);
+  const event = {
+    id: String(result.rows[0].id), channelId: req.params.channelId,
+    channelName: channel.rows[0]?.name, body, kind: clean(req.body.kind || 'text'),
+    fileUrl, fileName: req.body.fileName || null, fileMime: req.body.fileMime || null,
+    createdAt: result.rows[0].created_at
+  };
+  followers.rows.forEach(row => io.to(userRoom(row.user_id)).emit('channel:post', event));
+  res.status(201).json(event);
 }));
 
 app.post('/api/channels/:channelId/posts/:postId/reaction', auth, asyncRoute(async (req, res) => {

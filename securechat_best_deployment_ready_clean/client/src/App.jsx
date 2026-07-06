@@ -150,6 +150,7 @@ export default function App() {
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [channelPosts, setChannelPosts] = useState([]);
   const [showChannels, setShowChannels] = useState(false);
+  const selectedChannelRef = useRef(null);
   const groupTypingTimer = useRef(null);
   const groupCallStream = useRef(null);
   const groupPeers = useRef(new Map());
@@ -252,6 +253,10 @@ export default function App() {
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
+
+  useEffect(() => {
+    selectedChannelRef.current = selectedChannel;
+  }, [selectedChannel]);
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -534,6 +539,15 @@ export default function App() {
     await api('/api/channels', {
       method: 'POST', body: JSON.stringify({ name, description })
     });
+
+    s.on('channel:post', event => {
+      showNotification(`New update from ${event.channelName}`, event.body || `New ${event.kind}`);
+      if (String(selectedChannelRef.current?.id) === String(event.channelId)) {
+        setChannelPosts(current => current.some(post => post.id === event.id)
+          ? current
+          : [{ ...event, reactions: [] }, ...current]);
+      }
+    });
     await loadChannels();
   }
 
@@ -560,6 +574,25 @@ export default function App() {
       method: 'POST', body: JSON.stringify({ body, kind: 'text' })
     });
     setChannelPosts(await api(`/api/channels/${selectedChannel.id}/posts`));
+  }
+
+  async function publishChannelMedia(event, kind) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !selectedChannel) return;
+    try {
+      const uploaded = await uploadFile(file);
+      await api(`/api/channels/${selectedChannel.id}/posts`, {
+        method: 'POST',
+        body: JSON.stringify({
+          body: kind === 'image' ? 'Photo update' : kind === 'video' ? 'Video update' : file.name,
+          kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type
+        })
+      });
+      setChannelPosts(await api(`/api/channels/${selectedChannel.id}/posts`));
+    } catch (error) {
+      alert('Channel media failed: ' + error.message);
+    }
   }
 
   async function reactChannelPost(post, emoji) {
@@ -2850,12 +2883,26 @@ export default function App() {
                   {selectedChannel.following ? 'Unfollow' : 'Follow'}
                 </button>
                 {selectedChannel.ownerId === me.id && (
-                  <button className="publishChannel" onClick={publishChannelPost}><Plus /> Publish update</button>
+                  <div className="channelPublish">
+                    <button className="publishChannel" onClick={publishChannelPost}><Plus /> Text</button>
+                    <label><Image /> Photo<input hidden type="file" accept="image/*" onChange={e => publishChannelMedia(e, 'image')} /></label>
+                    <label><Video /> Video<input hidden type="file" accept="video/*" onChange={e => publishChannelMedia(e, 'video')} /></label>
+                    <label><Paperclip /> File<input hidden type="file" onChange={e => publishChannelMedia(e, 'file')} /></label>
+                  </div>
                 )}
                 <div className="channelFeed">
                   {channelPosts.length === 0 && <p className="empty">No updates yet.</p>}
                   {channelPosts.map(post => (
                     <article key={post.id}>
+                      {post.kind === 'image' && post.fileUrl && (
+                        <img src={resolveFileUrl(post.fileUrl)} alt={post.fileName || 'Channel photo'} />
+                      )}
+                      {post.kind === 'video' && post.fileUrl && (
+                        <video src={resolveFileUrl(post.fileUrl)} controls />
+                      )}
+                      {post.kind === 'file' && post.fileUrl && (
+                        <a href={resolveFileUrl(post.fileUrl)} target="_blank" rel="noopener noreferrer">📎 {post.fileName}</a>
+                      )}
                       <p>{post.body}</p>
                       <small>{new Date(post.createdAt).toLocaleString()}</small>
                       <div>
