@@ -2991,7 +2991,13 @@ export default function App() {
             }}><X /></button>
             {!selectedChannel ? (
               <>
-                <h2>Channels</h2>
+                <div className="channelHero">
+                  <div className="channelHeroIcon"><MessageCircle /></div>
+                  <div>
+                    <h2>Channels</h2>
+                    <p>Discover updates from people and communities.</p>
+                  </div>
+                </div>
                 <div className="channelSearch">
                   <Search />
                   <input placeholder="Discover channels" onChange={e => loadChannels(e.target.value)} />
@@ -3015,11 +3021,16 @@ export default function App() {
             ) : (
               <>
                 <button className="channelBack" onClick={() => setSelectedChannel(null)}><ArrowLeft /> Channels</button>
-                <h2>{selectedChannel.name}</h2>
-                <p>{selectedChannel.description}</p>
-                <button onClick={() => toggleChannelFollow(selectedChannel)}>
-                  {selectedChannel.following ? 'Unfollow' : 'Follow'}
-                </button>
+                <div className="selectedChannelHero">
+                  <div className="avatar"><MessageCircle /></div>
+                  <div>
+                    <h2>{selectedChannel.name}</h2>
+                    <p>{selectedChannel.description}</p>
+                  </div>
+                  <button onClick={() => toggleChannelFollow(selectedChannel)}>
+                    {selectedChannel.following ? 'Unfollow' : 'Follow'}
+                  </button>
+                </div>
                 {selectedChannel.ownerId === me.id && (
                   <div className="channelPublish">
                     <button className="publishChannel" onClick={publishChannelPost}><Plus /> Text</button>
