@@ -139,6 +139,7 @@ export default function App() {
   const [attachmentUrls, setAttachmentUrls] = useState({});
   const [callHistory, setCallHistory] = useState([]);
   const [showCallHistory, setShowCallHistory] = useState(false);
+  const [callFilter, setCallFilter] = useState('all');
   const [privacy, setPrivacy] = useState(null);
   const [security, setSecurity] = useState(null);
   const [groups, setGroups] = useState([]);
@@ -1960,6 +1961,12 @@ export default function App() {
   const displayRows = messageSearch.trim()
     ? rows.filter(message => (message.body || '').toLowerCase().includes(messageSearch.trim().toLowerCase()))
     : rows;
+  const filteredCalls = callHistory.filter(item => {
+    if (callFilter === 'all') return true;
+    if (callFilter === 'missed') return ['missed', 'declined', 'failed'].includes(item.status);
+    return item.direction === callFilter;
+  });
+  const callContactName = call.title.split(' with ').pop() || call.title;
 
   useEffect(() => {
     if (!active || !me) return;
@@ -2422,8 +2429,11 @@ export default function App() {
       )}
 
       {call.active && !call.minimized && (
-        <div className="call">
+        <div className={`call ${call.type === 'video' ? 'videoCall' : 'audioCall'}`}>
           <div className="callInfo">
+            {call.type !== 'video' && (
+              <div className="callAvatar">{initials(callContactName)}</div>
+            )}
             <h2>{call.title}</h2>
             <p>
               {call.status}{' '}
@@ -2571,18 +2581,42 @@ export default function App() {
         <div className="modal" onClick={() => setShowCallHistory(false)}>
           <div className="historyCard" onClick={e => e.stopPropagation()}>
             <button className="historyClose" onClick={() => setShowCallHistory(false)}><X /></button>
-            <h2>Call history</h2>
+            <div className="callsHero">
+              <div className="callsHeroIcon"><Phone /></div>
+              <div>
+                <h2>Calls</h2>
+                <p>Voice and video activity</p>
+              </div>
+            </div>
+            <div className="callFilters">
+              {[
+                ['all', 'All'],
+                ['missed', 'Missed'],
+                ['incoming', 'Incoming'],
+                ['outgoing', 'Outgoing']
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  className={callFilter === value ? 'active' : ''}
+                  onClick={() => setCallFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <div className="historyList">
-              {callHistory.length === 0 && <p className="empty">No calls yet.</p>}
-              {callHistory.map(item => (
+              {filteredCalls.length === 0 && <p className="empty">No calls here yet.</p>}
+              {filteredCalls.map(item => (
                 <div className="historyItem" key={item.id}>
-                  <div className="avatar">{initials(item.contactName)}</div>
-                  <div>
+                  <Avatar user={{ username: item.contactName, avatarUrl: item.contactAvatar }} />
+                  <div className="callMeta">
                     <b>{item.contactName}</b>
                     <small>{item.direction} · {item.type} · {item.status}</small>
                     <small>{new Date(item.startedAt).toLocaleString()}</small>
                   </div>
-                  {item.type === 'video' ? <Video /> : <Phone />}
+                  <div className="callTypeIcon">
+                    {item.type === 'video' ? <Video /> : <Phone />}
+                  </div>
                 </div>
               ))}
             </div>
