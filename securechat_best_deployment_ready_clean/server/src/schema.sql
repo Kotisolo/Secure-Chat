@@ -74,6 +74,38 @@ CREATE TABLE IF NOT EXISTS status_mutes(
  muted_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
  PRIMARY KEY(user_id,muted_user_id));
+CREATE TABLE IF NOT EXISTS channels(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ name VARCHAR(120) NOT NULL,
+ description VARCHAR(500) DEFAULT '',
+ avatar_url TEXT,
+ owner_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS channel_followers(
+ channel_id UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ notifications BOOLEAN NOT NULL DEFAULT TRUE,
+ followed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(channel_id,user_id));
+CREATE TABLE IF NOT EXISTS channel_posts(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ channel_id UUID NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+ author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ body TEXT NOT NULL,
+ kind VARCHAR(20) NOT NULL DEFAULT 'text',
+ file_url TEXT,
+ file_name TEXT,
+ file_mime TEXT,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ deleted_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS channel_reactions(
+ post_id UUID NOT NULL REFERENCES channel_posts(id) ON DELETE CASCADE,
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ emoji VARCHAR(16) NOT NULL,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(post_id,user_id));
+CREATE INDEX IF NOT EXISTS idx_channel_posts_feed ON channel_posts(channel_id,created_at DESC) WHERE deleted_at IS NULL;
 ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_token TEXT UNIQUE;
 ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_enabled BOOLEAN NOT NULL DEFAULT FALSE;
 CREATE TABLE IF NOT EXISTS conversations(

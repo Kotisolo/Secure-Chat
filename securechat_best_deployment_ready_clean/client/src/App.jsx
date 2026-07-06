@@ -146,6 +146,11 @@ export default function App() {
   const [statuses, setStatuses] = useState([]);
   const [showStatuses, setShowStatuses] = useState(false);
   const [statusExcluded, setStatusExcluded] = useState([]);
+  const [channels, setChannels] = useState([]);
+  const [selectedChannel, setSelectedChannel] = useState(null);
+  const [channelPosts, setChannelPosts] = useState([]);
+  const [showChannels, setShowChannels] = useState(false);
+  const selectedChannelRef = useRef(null);
   const groupTypingTimer = useRef(null);
   const groupCallStream = useRef(null);
   const groupPeers = useRef(new Map());
@@ -248,6 +253,10 @@ export default function App() {
   useEffect(() => {
     groupsRef.current = groups;
   }, [groups]);
+
+  useEffect(() => {
+    selectedChannelRef.current = selectedChannel;
+  }, [selectedChannel]);
 
   const f = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -512,6 +521,88 @@ export default function App() {
     } catch (error) {
       alert('Could not load Status: ' + error.message);
     }
+  }
+
+  async function loadChannels(query = '') {
+    try {
+      setChannels(await api('/api/channels?q=' + encodeURIComponent(query)));
+      setShowChannels(true);
+    } catch (error) {
+      alert('Could not load Channels: ' + error.message);
+    }
+  }
+
+  async function createChannel() {
+    const name = prompt('Channel name:');
+    if (!name) return;
+    const description = prompt('Channel description (optional):') || '';
+    await api('/api/channels', {
+      method: 'POST', body: JSON.stringify({ name, description })
+    });
+
+    s.on('channel:post', event => {
+      showNotification(`New update from ${event.channelName}`, event.body || `New ${event.kind}`);
+      if (String(selectedChannelRef.current?.id) === String(event.channelId)) {
+        setChannelPosts(current => current.some(post => post.id === event.id)
+          ? current
+          : [{ ...event, reactions: [] }, ...current]);
+      }
+    });
+    await loadChannels();
+  }
+
+  async function openChannel(channel) {
+    setSelectedChannel(channel);
+    setChannelPosts(await api(`/api/channels/${channel.id}/posts`));
+  }
+
+  async function toggleChannelFollow(channel) {
+    await api(`/api/channels/${channel.id}/follow`, {
+      method: channel.following ? 'DELETE' : 'POST',
+      body: channel.following ? undefined : '{}'
+    });
+    setChannels(current => current.map(item => item.id === channel.id
+      ? { ...item, following: !item.following, followerCount: item.followerCount + (item.following ? -1 : 1) }
+      : item));
+    setSelectedChannel(current => current?.id === channel.id ? { ...current, following: !current.following } : current);
+  }
+
+  async function publishChannelPost() {
+    const body = prompt('Write a channel update:');
+    if (!body || !selectedChannel) return;
+    await api(`/api/channels/${selectedChannel.id}/posts`, {
+      method: 'POST', body: JSON.stringify({ body, kind: 'text' })
+    });
+    setChannelPosts(await api(`/api/channels/${selectedChannel.id}/posts`));
+  }
+
+  async function publishChannelMedia(event, kind) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file || !selectedChannel) return;
+    try {
+      const uploaded = await uploadFile(file);
+      await api(`/api/channels/${selectedChannel.id}/posts`, {
+        method: 'POST',
+        body: JSON.stringify({
+          body: kind === 'image' ? 'Photo update' : kind === 'video' ? 'Video update' : file.name,
+          kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type
+        })
+      });
+      setChannelPosts(await api(`/api/channels/${selectedChannel.id}/posts`));
+    } catch (error) {
+      alert('Channel media failed: ' + error.message);
+    }
+  }
+
+  async function reactChannelPost(post, emoji) {
+    const reaction = await api(`/api/channels/${selectedChannel.id}/posts/${post.id}/reaction`, {
+      method: 'POST', body: JSON.stringify({ emoji })
+    });
+    setChannelPosts(current => current.map(item => item.id !== post.id ? item : {
+      ...item,
+      reactions: [...(item.reactions || []).filter(value => value.userId !== reaction.userId), reaction]
+    }));
   }
 
   async function decodeStatus(status) {
@@ -1975,6 +2066,10 @@ export default function App() {
           <button onClick={loadStatuses}><div className="statusRing"><Avatar user={me} /></div> Status</button>
           <button onClick={createTextStatus} title="Create Status"><Plus /></button>
         </div>
+        <div className="channelHeader">
+          <button onClick={() => loadChannels()}><MessageCircle /> Channels</button>
+          <button onClick={createChannel}><Plus /></button>
+        </div>
         <div className="groupHeader">
           <b><Users /> Groups</b>
           <div>
@@ -2742,6 +2837,85 @@ export default function App() {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {showChannels && (
+        <div className="modal" onClick={() => {
+          setShowChannels(false);
+          setSelectedChannel(null);
+        }}>
+          <div className="channelCard" onClick={e => e.stopPropagation()}>
+            <button className="historyClose" onClick={() => {
+              setShowChannels(false);
+              setSelectedChannel(null);
+            }}><X /></button>
+            {!selectedChannel ? (
+              <>
+                <h2>Channels</h2>
+                <div className="channelSearch">
+                  <Search />
+                  <input placeholder="Discover channels" onChange={e => loadChannels(e.target.value)} />
+                  <button onClick={createChannel}><Plus /> Create</button>
+                </div>
+                <div className="channelList">
+                  {channels.map(channel => (
+                    <div key={channel.id}>
+                      <div className="avatar"><MessageCircle /></div>
+                      <button className="channelName" onClick={() => openChannel(channel)}>
+                        <b>{channel.name}</b>
+                        <small>{channel.followerCount} followers · {channel.description}</small>
+                      </button>
+                      <button onClick={() => toggleChannelFollow(channel)}>
+                        {channel.following ? 'Following' : 'Follow'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <button className="channelBack" onClick={() => setSelectedChannel(null)}><ArrowLeft /> Channels</button>
+                <h2>{selectedChannel.name}</h2>
+                <p>{selectedChannel.description}</p>
+                <button onClick={() => toggleChannelFollow(selectedChannel)}>
+                  {selectedChannel.following ? 'Unfollow' : 'Follow'}
+                </button>
+                {selectedChannel.ownerId === me.id && (
+                  <div className="channelPublish">
+                    <button className="publishChannel" onClick={publishChannelPost}><Plus /> Text</button>
+                    <label><Image /> Photo<input hidden type="file" accept="image/*" onChange={e => publishChannelMedia(e, 'image')} /></label>
+                    <label><Video /> Video<input hidden type="file" accept="video/*" onChange={e => publishChannelMedia(e, 'video')} /></label>
+                    <label><Paperclip /> File<input hidden type="file" onChange={e => publishChannelMedia(e, 'file')} /></label>
+                  </div>
+                )}
+                <div className="channelFeed">
+                  {channelPosts.length === 0 && <p className="empty">No updates yet.</p>}
+                  {channelPosts.map(post => (
+                    <article key={post.id}>
+                      {post.kind === 'image' && post.fileUrl && (
+                        <img src={resolveFileUrl(post.fileUrl)} alt={post.fileName || 'Channel photo'} />
+                      )}
+                      {post.kind === 'video' && post.fileUrl && (
+                        <video src={resolveFileUrl(post.fileUrl)} controls />
+                      )}
+                      {post.kind === 'file' && post.fileUrl && (
+                        <a href={resolveFileUrl(post.fileUrl)} target="_blank" rel="noopener noreferrer">📎 {post.fileName}</a>
+                      )}
+                      <p>{post.body}</p>
+                      <small>{new Date(post.createdAt).toLocaleString()}</small>
+                      <div>
+                        {['❤️', '👍', '😂'].map(emoji => (
+                          <button key={emoji} onClick={() => reactChannelPost(post, emoji)}>{emoji}</button>
+                        ))}
+                        <span>{(post.reactions || []).map(value => value.emoji).join(' ')}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
