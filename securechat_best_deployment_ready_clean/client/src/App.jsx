@@ -40,6 +40,29 @@ const rtcConfig = {
   iceCandidatePoolSize: 10,
   iceTransportPolicy: import.meta.env.VITE_ICE_TRANSPORT_POLICY === 'relay' ? 'relay' : 'all'
 };
+const videoCallConstraints = {
+  width: { ideal: 640, max: 854 },
+  height: { ideal: 360, max: 480 },
+  frameRate: { ideal: 15, max: 24 },
+  facingMode: 'user'
+};
+const tuneMobileVideoSender = async peer => {
+  const sender = peer.getSenders?.().find(item => item.track?.kind === 'video');
+  if (!sender?.getParameters || !sender?.setParameters) return;
+  const params = sender.getParameters();
+  params.encodings = params.encodings?.length ? params.encodings : [{}];
+  params.encodings[0] = {
+    ...params.encodings[0],
+    maxBitrate: 450000,
+    maxFramerate: 18,
+    scaleResolutionDownBy: Math.max(params.encodings[0].scaleResolutionDownBy || 1, 1)
+  };
+  try {
+    await sender.setParameters(params);
+  } catch (error) {
+    console.warn('Could not tune video bitrate', error);
+  }
+};
 
 const initials = n => (n || '?').slice(0, 2).toUpperCase();
 const Avatar = ({ user, big = false, className = '', ...props }) => (
@@ -1713,7 +1736,7 @@ export default function App() {
         noiseSuppression: true,
         autoGainControl: true
       },
-      video: type === 'video'
+      video: type === 'video' ? videoCallConstraints : false
     });
 
     localStream.current = stream;
@@ -1722,6 +1745,7 @@ export default function App() {
     attachCallMedia();
 
     stream.getTracks().forEach(tr => p.addTrack(tr, stream));
+    if (type === 'video') await tuneMobileVideoSender(p);
 
     p.ontrack = e => {
       const rs = e.streams[0];
