@@ -186,6 +186,7 @@ export default function App() {
   const [callHistory, setCallHistory] = useState([]);
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [callFilter, setCallFilter] = useState('all');
+  const [selectedCallLog, setSelectedCallLog] = useState(null);
   const [privacy, setPrivacy] = useState(null);
   const [security, setSecurity] = useState(null);
   const [groups, setGroups] = useState([]);
@@ -1407,6 +1408,30 @@ export default function App() {
     }
   }
 
+  async function callBackFromLog(type = selectedCallLog?.type || 'audio') {
+    if (!selectedCallLog) return;
+    const contact = contacts.find(item => String(item.id) === String(selectedCallLog.contactId)) || {
+      id: selectedCallLog.contactId,
+      username: selectedCallLog.contactName,
+      avatarUrl: selectedCallLog.contactAvatar
+    };
+    setSelectedCallLog(null);
+    setShowCallHistory(false);
+    setActive(contact);
+    await startCall(type, contact);
+  }
+
+  async function deleteCallLog() {
+    if (!selectedCallLog) return;
+    try {
+      await api(`/api/calls/${encodeURIComponent(selectedCallLog.id)}`, { method: 'DELETE' });
+      setCallHistory(current => current.filter(item => item.id !== selectedCallLog.id));
+      setSelectedCallLog(null);
+    } catch (error) {
+      alert('Could not delete call log: ' + error.message);
+    }
+  }
+
   async function openPrivacy() {
     try {
       setPrivacy(await api('/api/privacy'));
@@ -1868,27 +1893,28 @@ export default function App() {
     }
   }
 
-  async function startCall(type) {
-    if (!active) return;
+  async function startCall(type, contactOverride = null) {
+    const callContact = contactOverride || active;
+    if (!callContact) return;
     setCallError('');
 
     setCall({
       active: true,
       minimized: false,
       type,
-      title: (type === 'video' ? 'Video' : 'Voice') + ' call with ' + active.username,
+      title: (type === 'video' ? 'Video' : 'Voice') + ' call with ' + callContact.username,
       status: 'Calling...',
       seconds: 0
     });
 
     try {
-      const p = await createPeer(type, active.id);
+      const p = await createPeer(type, callContact.id);
       const offer = await p.createOffer();
 
       await p.setLocalDescription(offer);
 
       getSocket()?.emit('call:offer', {
-        recipientId: active.id,
+        recipientId: callContact.id,
         offer,
         callType: type
       });
@@ -2836,7 +2862,7 @@ export default function App() {
             <div className="historyList">
               {filteredCalls.length === 0 && <p className="empty">No calls here yet.</p>}
               {filteredCalls.map(item => (
-                <div className="historyItem" key={item.id}>
+                <button className="historyItem" key={item.id} onClick={() => setSelectedCallLog(item)}>
                   <Avatar user={{ username: item.contactName, avatarUrl: item.contactAvatar }} />
                   <div className="callMeta">
                     <b>{item.contactName}</b>
@@ -2846,9 +2872,24 @@ export default function App() {
                   <div className="callTypeIcon">
                     {item.type === 'video' ? <Video /> : <Phone />}
                   </div>
-                </div>
+                </button>
               ))}
             </div>
+            {selectedCallLog && (
+              <div className="callLogActions">
+                <div>
+                  <b>{selectedCallLog.contactName}</b>
+                  <small>{selectedCallLog.type} call · {selectedCallLog.status}</small>
+                </div>
+                <button onClick={() => callBackFromLog(selectedCallLog.type)}>
+                  {selectedCallLog.type === 'video' ? <Video /> : <Phone />} Call back
+                </button>
+                <button className="danger" onClick={deleteCallLog}>
+                  <Trash2 /> Delete
+                </button>
+                <button onClick={() => setSelectedCallLog(null)}>Cancel</button>
+              </div>
+            )}
           </div>
         </div>
       )}

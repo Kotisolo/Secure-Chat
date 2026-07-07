@@ -1017,6 +1017,7 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
 app.get('/api/calls', auth, asyncRoute(async (req, res) => {
   const result = await pool.query(
     `SELECT c.*,
+      CASE WHEN c.caller_id=$1 THEN recipient.id ELSE caller.id END contact_id,
       CASE WHEN c.caller_id=$1 THEN recipient.username ELSE caller.username END contact_name,
       CASE WHEN c.caller_id=$1 THEN recipient.avatar_url ELSE caller.avatar_url END contact_avatar
      FROM call_history c
@@ -1029,6 +1030,7 @@ app.get('/api/calls', auth, asyncRoute(async (req, res) => {
   res.json(result.rows.map(row => ({
     id: String(row.id),
     direction: String(row.caller_id) === String(req.user.id) ? 'outgoing' : 'incoming',
+    contactId: String(row.contact_id),
     contactName: row.contact_name,
     contactAvatar: row.contact_avatar,
     type: row.call_type,
@@ -1037,6 +1039,17 @@ app.get('/api/calls', auth, asyncRoute(async (req, res) => {
     answeredAt: row.answered_at,
     endedAt: row.ended_at
   })));
+}));
+
+app.delete('/api/calls/:callId', auth, asyncRoute(async (req, res) => {
+  const result = await pool.query(
+    `DELETE FROM call_history
+     WHERE id=$1 AND (caller_id=$2 OR recipient_id=$2)
+     RETURNING id`,
+    [req.params.callId, req.user.id]
+  );
+  if (!result.rows.length) return res.status(404).json({ error: 'Call log not found.' });
+  res.json({ ok: true });
 }));
 
 app.patch('/api/chats/:conversationId/preferences', auth, asyncRoute(async (req, res) => {

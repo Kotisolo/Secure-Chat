@@ -446,13 +446,20 @@ body{background:var(--bg);color:var(--text)}
   overflow:auto;
 }
 .historyItem{
+  width:100%;
   padding:12px;
   border:1px solid #ece9f2;
   border-radius:20px;
   background:#fff;
   box-shadow:0 10px 24px rgba(35,28,66,.06);
+  display:flex;
+  align-items:center;
+  gap:12px;
+  color:inherit;
+  text-align:left;
+  transition:.18s ease;
 }
-.historyItem:hover{background:#fbfaff}
+.historyItem:hover{background:#fbfaff;transform:translateY(-1px)}
 .callMeta{flex:1;min-width:0}
 .callMeta b{display:block;color:var(--text)}
 .callMeta small{display:block;color:var(--muted);text-transform:capitalize}
@@ -467,6 +474,49 @@ body{background:var(--bg);color:var(--text)}
 }
 .callStatus.missed,.callStatus.declined,.callStatus.failed{color:#e33f64}
 .callStatus.answered,.callStatus.completed{color:#18a55b}
+.callLogActions{
+  position:sticky;
+  bottom:0;
+  margin-top:14px;
+  padding:14px;
+  border:1px solid #ece9f2;
+  border-radius:24px;
+  background:rgba(255,255,255,.96);
+  box-shadow:0 -12px 34px rgba(35,28,66,.12);
+  backdrop-filter:blur(16px);
+  animation:slideUpCallActions .18s ease;
+}
+.callLogActions>div{
+  margin-bottom:10px;
+}
+.callLogActions b,.callLogActions small{
+  display:block;
+}
+.callLogActions small{
+  color:#8f8aa1;
+  text-transform:capitalize;
+}
+.callLogActions button{
+  width:100%;
+  min-height:46px;
+  margin-top:8px;
+  border-radius:16px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  background:#f4f2f9;
+  color:#171326;
+  font-weight:900;
+}
+.callLogActions button:first-of-type{
+  color:#fff;
+  background:linear-gradient(135deg,var(--primary),var(--secondary));
+}
+@keyframes slideUpCallActions{
+  from{opacity:0;transform:translateY(12px)}
+  to{opacity:1;transform:translateY(0)}
+}
 .call.videoCall,.call.audioCall{
   background:
     radial-gradient(circle at 50% 12%,rgba(139,92,246,.32),transparent 30%),
