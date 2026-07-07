@@ -224,6 +224,7 @@ export default function App() {
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [miniCallPosition, setMiniCallPosition] = useState(null);
 
   const pc = useRef(null);
   const localStream = useRef(null);
@@ -235,6 +236,7 @@ export default function App() {
   const remoteStream = useRef(null);
   const miniLocalVideo = useRef(null);
   const miniRemoteVideo = useRef(null);
+  const miniDrag = useRef({ dragging: false, moved: false });
   const endRef = useRef(null);
   const typingTimer = useRef(null);
   const socketReady = useRef(false);
@@ -560,7 +562,14 @@ export default function App() {
   async function loadStatuses() {
     try {
       const rows = await api('/api/status');
-      const decrypted = await Promise.all(rows.map(decodeStatus));
+      const decrypted = (await Promise.all(rows.map(async status => {
+        try {
+          return await decodeStatus(status);
+        } catch (error) {
+          console.warn('Could not decode status', error);
+          return { ...status, body: 'Unable to load this Status update.' };
+        }
+      }))).filter(Boolean);
       setStatuses(decrypted);
       setShowStatuses(true);
     } catch (error) {
@@ -652,6 +661,7 @@ export default function App() {
   }
 
   async function decodeStatus(status) {
+    if (!status.payload) return { ...status, body: 'Status update is unavailable.' };
     const plaintext = await decryptGroupMessage(status.userId, `status:${status.id}`, status.payload);
     try {
       const content = JSON.parse(plaintext);
@@ -1953,6 +1963,61 @@ export default function App() {
     attach(remoteAudio.current, remoteStream.current);
   }
 
+  function miniCallStyle() {
+    if (!miniCallPosition) return undefined;
+    return {
+      left: miniCallPosition.x,
+      top: miniCallPosition.y,
+      right: 'auto',
+      bottom: 'auto'
+    };
+  }
+
+  function startMiniCallDrag(event) {
+    if (event.target.closest('button')) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    miniDrag.current = {
+      dragging: true,
+      moved: false,
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveMiniCallDrag(event) {
+    const drag = miniDrag.current;
+    if (!drag.dragging || drag.pointerId !== event.pointerId) return;
+    const moved = Math.abs(event.clientX - drag.startX) > 4 || Math.abs(event.clientY - drag.startY) > 4;
+    const maxX = Math.max(8, window.innerWidth - drag.width - 8);
+    const maxY = Math.max(8, window.innerHeight - drag.height - 8);
+    miniDrag.current = { ...drag, moved: drag.moved || moved };
+    setMiniCallPosition({
+      x: Math.min(Math.max(8, event.clientX - drag.offsetX), maxX),
+      y: Math.min(Math.max(8, event.clientY - drag.offsetY), maxY)
+    });
+  }
+
+  function endMiniCallDrag(event) {
+    if (miniDrag.current.pointerId === event.pointerId) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      miniDrag.current = { ...miniDrag.current, dragging: false };
+    }
+  }
+
+  function restoreMinimizedCall() {
+    if (miniDrag.current.moved) {
+      miniDrag.current = { dragging: false, moved: false };
+      return;
+    }
+    setCall(c => ({ ...c, minimized: false }));
+  }
+
   function endCall(skip = false) {
     if (!skip && callPeer.current) {
       getSocket()?.emit('call:end', { recipientId: callPeer.current });
@@ -1972,6 +2037,7 @@ export default function App() {
       status: '',
       seconds: 0
     });
+    setMiniCallPosition(null);
   }
 
   // Toggle microphone on/off (button reflects the state)
@@ -2642,7 +2708,15 @@ export default function App() {
 
       {call.active && call.minimized && (
         call.type === 'video' ? (
-          <div className="mini videoMini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
+          <div
+            className="mini videoMini draggableMini"
+            style={miniCallStyle()}
+            onClick={restoreMinimizedCall}
+            onPointerDown={startMiniCallDrag}
+            onPointerMove={moveMiniCallDrag}
+            onPointerUp={endMiniCallDrag}
+            onPointerCancel={endMiniCallDrag}
+          >
             <video ref={miniRemoteVideo} autoPlay muted playsInline />
             <video ref={miniLocalVideo} autoPlay muted playsInline className="miniLocalVideo" />
             <div className="miniOverlay">
@@ -2663,7 +2737,15 @@ export default function App() {
             </button>
           </div>
         ) : (
-          <div className="mini" onClick={() => setCall(c => ({ ...c, minimized: false }))}>
+          <div
+            className="mini draggableMini"
+            style={miniCallStyle()}
+            onClick={restoreMinimizedCall}
+            onPointerDown={startMiniCallDrag}
+            onPointerMove={moveMiniCallDrag}
+            onPointerUp={endMiniCallDrag}
+            onPointerCancel={endMiniCallDrag}
+          >
             <Phone />
             <div>
               <b>{call.title}</b>
