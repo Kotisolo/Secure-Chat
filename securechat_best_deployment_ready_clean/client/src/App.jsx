@@ -3,7 +3,7 @@ import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
-  MoreVertical, Pin, Archive, BellOff, CalendarClock, Timer, Languages, History, Bell,
+  Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, Plus, Settings
 } from 'lucide-react';
 import {
@@ -193,6 +193,8 @@ export default function App() {
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [channelPosts, setChannelPosts] = useState([]);
   const [showChannels, setShowChannels] = useState(false);
+  const chatPressTimer = useRef(null);
+  const chatPressTriggered = useRef(false);
   const selectedChannelRef = useRef(null);
   const groupTypingTimer = useRef(null);
   const groupCallStream = useRef(null);
@@ -566,10 +568,10 @@ export default function App() {
     }
   }
 
-  async function loadChannels(query = '') {
+  async function loadChannels(query = '', openModal = true) {
     try {
       setChannels(await api('/api/channels?q=' + encodeURIComponent(query)));
-      setShowChannels(true);
+      if (openModal) setShowChannels(true);
     } catch (error) {
       alert('Could not load Channels: ' + error.message);
     }
@@ -597,6 +599,7 @@ export default function App() {
   async function openChannel(channel) {
     setSelectedChannel(channel);
     setChannelPosts(await api(`/api/channels/${channel.id}/posts`));
+    setShowChannels(true);
   }
 
   async function toggleChannelFollow(channel) {
@@ -1520,6 +1523,25 @@ export default function App() {
     }
   }
 
+  async function deleteChatForMe(contact) {
+    if (!me || !contact) return;
+    if (!confirm(`Delete chat with ${contact.username}? This only removes it from your chat list.`)) return;
+    const conversationId = cid(me.id, contact.id);
+    try {
+      await api(`/api/chats/${encodeURIComponent(conversationId)}`, { method: 'DELETE' });
+      setChatMenu(null);
+      if (active?.id === contact.id) setActive(null);
+      setMessages(current => {
+        const next = { ...current };
+        delete next[conversationId];
+        return next;
+      });
+      await loadChats();
+    } catch (error) {
+      alert('Could not delete chat: ' + error.message);
+    }
+  }
+
   async function startVoiceRecording() {
     if (!active || recording) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
@@ -2005,6 +2027,7 @@ export default function App() {
   const visibleContacts = contacts.filter(user => {
     if (Boolean(user.chat?.archived) !== showArchived) return false;
     if (chatListFilter === 'unread') return Number(user.chat?.unreadCount || 0) > 0;
+    if (chatListFilter !== 'all') return false;
     return true;
   });
   const mobileTitle = {
@@ -2170,10 +2193,13 @@ export default function App() {
               <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0)}</span>
             )}
           </button>
-          <button onClick={() => setMobileTab('chats')}>Groups</button>
-          <button onClick={() => { setMobileTab('discover'); loadChannels(); }}>Channels</button>
+          <button className={chatListFilter === 'groups' ? 'active' : ''} onClick={() => setChatListFilter('groups')}>Groups</button>
+          <button className={chatListFilter === 'channels' ? 'active' : ''} onClick={() => {
+            setChatListFilter('channels');
+            loadChannels('', false);
+          }}>Channels</button>
         </div>
-        <div className="contactStories">
+        {['all', 'unread'].includes(chatListFilter) && <div className="contactStories">
           <button onClick={() => setProfile(me)}>
             <span className="storyAvatar"><Avatar user={me} /><Plus /></span>
             <small>Your story</small>
@@ -2184,7 +2210,7 @@ export default function App() {
               <small>{contact.username}</small>
             </button>
           ))}
-        </div>
+        </div>}
         <div className="aiOpalPanel">
           <div className="aiOrb"><Languages /></div>
           <h2>AI Opal</h2>
@@ -2196,33 +2222,48 @@ export default function App() {
             <button onClick={() => alert('Smart tools will be connected after go-live.')}><Settings /><span>Smart tools</span></button>
           </div>
         </div>
-        <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
+        {['all', 'unread'].includes(chatListFilter) && <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
-        </button>
-        <div className="statusHeader">
+        </button>}
+        {['all', 'unread'].includes(chatListFilter) && <div className="statusHeader">
           <button onClick={loadStatuses}><div className="statusRing"><Avatar user={me} /></div> Status</button>
           <button onClick={createTextStatus} title="Create Status"><Plus /></button>
-        </div>
-        <div className="channelHeader">
+        </div>}
+        {chatListFilter === 'channels' && <div className="channelHeader">
           <button onClick={() => loadChannels()}><MessageCircle /> Channels</button>
           <button onClick={createChannel}><Plus /></button>
-        </div>
-        <div className="groupHeader">
+        </div>}
+        {chatListFilter === 'groups' && <div className="groupHeader">
           <b><Users /> Groups</b>
           <div>
             <button onClick={joinGroup} title="Join group">Join</button>
             <button onClick={createGroup} title="Create group"><Plus /></button>
           </div>
-        </div>
-        {groups.map(group => (
+        </div>}
+        {chatListFilter === 'groups' && groups.map(group => (
           <button className="groupRow" key={group.id} onClick={() => openGroup(group)}>
             <div className="avatar"><Users /></div>
             <div><b>{group.name}</b><small>{group.members.length} members</small></div>
             {group.unreadCount > 0 && <strong className="unreadBadge">{group.unreadCount}</strong>}
           </button>
         ))}
+        {chatListFilter === 'channels' && (
+          <div className="channelMiniList">
+            {channels.length === 0 && <p className="empty">No channels yet. Create or search channels.</p>}
+            {channels.map(channel => (
+              <button key={channel.id} onClick={() => openChannel(channel)}>
+                <div className="avatar"><MessageCircle /></div>
+                <div>
+                  <b>{channel.name}</b>
+                  <small>{channel.followerCount} followers</small>
+                </div>
+                <span>{channel.following ? 'Following' : 'Open'}</span>
+              </button>
+            ))}
+          </div>
+        )}
 
-        <div className="list">
+        {['all', 'unread'].includes(chatListFilter) && <div className="list">
           {contacts.length === 0 && <p className="empty">Search a user to start chatting.</p>}
           {contacts.length > 0 && visibleContacts.length === 0 && (
             <p className="empty">{showArchived ? 'No archived chats yet.' : 'No chats in this view.'}</p>
@@ -2234,7 +2275,30 @@ export default function App() {
 
             return (
               <div className="chat" key={u.id}>
-                <button className="chatMain" onClick={() => openChat(u)}>
+                <button
+                  className="chatMain"
+                  onClick={() => {
+                    if (chatPressTriggered.current) {
+                      chatPressTriggered.current = false;
+                      return;
+                    }
+                    openChat(u);
+                  }}
+                  onContextMenu={e => {
+                    e.preventDefault();
+                    setChatMenu(u);
+                  }}
+                  onPointerDown={() => {
+                    clearTimeout(chatPressTimer.current);
+                    chatPressTriggered.current = false;
+                    chatPressTimer.current = setTimeout(() => {
+                      chatPressTriggered.current = true;
+                      setChatMenu(u);
+                    }, 550);
+                  }}
+                  onPointerUp={() => clearTimeout(chatPressTimer.current)}
+                  onPointerLeave={() => clearTimeout(chatPressTimer.current)}
+                >
                 <Avatar user={u} />
                 <div>
                   <b>{u.chat?.pinned ? '📌 ' : ''}{u.username}</b>
@@ -2243,35 +2307,20 @@ export default function App() {
                 {p.createdAt && <time>{t(p.createdAt)}</time>}
                 {u.chat?.unreadCount > 0 && <strong className="unreadBadge">{u.chat.unreadCount}</strong>}
                 </button>
-                <button className="chatMore" onClick={() => setChatMenu(chatMenu?.id === u.id ? null : u)}>
-                  <MoreVertical />
-                </button>
                 {chatMenu?.id === u.id && (
                   <div className="chatMenu">
-                    <button onClick={() => updateChatPreference(u, { pinned: !u.chat?.pinned })}>
-                      <Pin /> {u.chat?.pinned ? 'Unpin' : 'Pin'}
-                    </button>
                     <button onClick={() => updateChatPreference(u, { archived: !u.chat?.archived })}>
                       <Archive /> {u.chat?.archived ? 'Unarchive' : 'Archive'}
                     </button>
-                    <button onClick={() => updateChatPreference(u, {
-                      mutedUntil: u.chat?.mutedUntil && new Date(u.chat.mutedUntil) > new Date()
-                        ? null
-                        : new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
-                    })}>
-                      <BellOff /> {u.chat?.mutedUntil && new Date(u.chat.mutedUntil) > new Date() ? 'Unmute' : 'Mute 8 hours'}
-                    </button>
-                    <button onClick={() => updateChatPreference(u, {
-                      disappearingSeconds: u.chat?.disappearingSeconds ? 0 : 86400
-                    })}>
-                      <Timer /> {u.chat?.disappearingSeconds ? 'Turn off disappearing' : 'Disappear after 24h'}
+                    <button className="danger" onClick={() => deleteChatForMe(u)}>
+                      <Trash2 /> Delete chat
                     </button>
                   </div>
                 )}
               </div>
             );
           })}
-        </div>
+        </div>}
         <nav className="bottomNav" aria-label="Primary navigation">
           <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Chats</span></button>
           <button className={mobileTab === 'calls' ? 'active' : ''} onClick={() => { setMobileTab('calls'); loadCallHistory(); }}><Phone /><span>Calls</span></button>

@@ -1073,6 +1073,28 @@ app.patch('/api/chats/:conversationId/preferences', auth, asyncRoute(async (req,
   });
 }));
 
+app.delete('/api/chats/:conversationId', auth, asyncRoute(async (req, res) => {
+  const c = req.params.conversationId;
+  const conv = await pool.query('SELECT user_a,user_b FROM conversations WHERE id=$1', [c]);
+  if (!conv.rows.length) return res.status(404).json({ error: 'Chat not found.' });
+  const row = conv.rows[0];
+  if (String(row.user_a) !== String(req.user.id) && String(row.user_b) !== String(req.user.id)) {
+    return res.status(403).json({ error: 'Access denied.' });
+  }
+  await pool.query(
+    `INSERT INTO message_deletions(user_id,message_id)
+     SELECT $1,id FROM messages WHERE conversation_id=$2
+     ON CONFLICT(user_id,message_id) DO NOTHING`,
+    [req.user.id, c]
+  );
+  await pool.query(
+    `UPDATE chat_preferences SET archived=FALSE,updated_at=NOW()
+     WHERE user_id=$1 AND conversation_id=$2`,
+    [req.user.id, c]
+  );
+  res.json({ ok: true });
+}));
+
 app.post('/api/e2ee/devices', auth, asyncRoute(async (req, res) => {
   const deviceId = clean(req.body.deviceId);
   const fingerprint = clean(req.body.fingerprint);

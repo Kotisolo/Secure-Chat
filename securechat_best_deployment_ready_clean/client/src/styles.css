@@ -1879,6 +1879,84 @@ body{background:var(--bg);color:var(--text)}
 .groupRow small{
   color:#8f8aa1;
 }
+.channelMiniList{
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+  padding:4px 12px 98px;
+  overflow:auto;
+}
+.channelMiniList>button{
+  width:100%;
+  min-height:74px;
+  padding:12px;
+  border-radius:20px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  text-align:left;
+  background:#fff;
+  color:#171326;
+  box-shadow:0 8px 22px rgba(35,28,66,.04);
+}
+.channelMiniList .avatar{
+  width:50px;
+  height:50px;
+  border-radius:18px;
+}
+.channelMiniList>button>div:nth-child(2){
+  flex:1;
+  min-width:0;
+}
+.channelMiniList b,.channelMiniList small{
+  display:block;
+}
+.channelMiniList small{
+  margin-top:4px;
+  color:#8f8aa1;
+}
+.channelMiniList span{
+  min-width:max-content;
+  padding:8px 10px;
+  border-radius:999px;
+  background:#f4f2f9;
+  color:var(--primary);
+  font-size:11px;
+  font-weight:900;
+}
+.chatMenu{
+  right:14px;
+  top:56px;
+  width:190px;
+  padding:8px!important;
+  border:1px solid #ece9f2;
+  background:#fff;
+  box-shadow:0 18px 44px rgba(35,28,66,.16);
+}
+.chatMenu button{
+  color:#171326;
+  border-radius:12px;
+  font-weight:800;
+}
+.chatMenu button.danger{
+  background:#fff1f4!important;
+  color:#d72f57!important;
+}
+@media(max-width:900px){
+  .chatMenu{
+    position:fixed;
+    left:18px;
+    right:18px;
+    top:auto;
+    bottom:92px;
+    width:auto;
+    border-radius:24px;
+  }
+  .chatMenu button{
+    justify-content:center;
+    min-height:50px;
+  }
+}
 .groupCard{
   width:760px;
   padding:28px;
