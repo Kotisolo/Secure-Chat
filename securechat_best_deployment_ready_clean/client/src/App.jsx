@@ -483,6 +483,19 @@ export default function App() {
 
     s.on('message:reaction', applyReaction);
 
+    s.on('user:profile-updated', updatedUser => {
+      setContacts(current => current.map(contact => (
+        String(contact.id) === String(updatedUser.id) ? { ...contact, ...updatedUser } : contact
+      )));
+      setActive(current => (
+        String(current?.id) === String(updatedUser.id) ? { ...current, ...updatedUser } : current
+      ));
+      setProfile(current => (
+        String(current?.id) === String(updatedUser.id) ? { ...current, ...updatedUser } : current
+      ));
+      loadChats();
+    });
+
     s.on('message:updated', async message => {
       let displayMessage = message;
       if (E2EE_ENABLED && message.ciphertext) {
@@ -2675,27 +2688,13 @@ export default function App() {
               </button>
             )}
 
-            <div className="speakerControl">
-              <button
-                className={speakerMuted ? 'off' : ''}
-                onClick={() => setSpeakerMuted(value => !value)}
-                title={speakerMuted ? 'Turn speaker on' : 'Mute speaker'}
-              >
-                {speakerMuted ? <VolumeX /> : <Volume2 />}
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={speakerVolume}
-                aria-label="Speaker volume"
-                onChange={e => {
-                  setSpeakerVolume(Number(e.target.value));
-                  setSpeakerMuted(false);
-                }}
-              />
-            </div>
+            <button
+              className={speakerMuted ? 'off' : ''}
+              onClick={() => setSpeakerMuted(value => !value)}
+              title={speakerMuted ? 'Turn speaker on' : 'Mute speaker'}
+            >
+              {speakerMuted ? <VolumeX /> : <Volume2 />}
+            </button>
 
             <button className="danger" onClick={() => endCall()} title="End call">
               <PhoneOff />

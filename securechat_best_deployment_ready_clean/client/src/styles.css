@@ -325,8 +325,6 @@ body{background:var(--bg);color:var(--text)}
 .call{justify-content:flex-start}
 .callInfo{position:relative;z-index:2;margin-top:clamp(34px,10vh,100px);text-align:center}
 .callBtns{position:absolute;left:50%;bottom:max(28px,env(safe-area-inset-bottom));z-index:5;transform:translateX(-50%)}
-.speakerControl{position:relative}
-.speakerControl input{position:absolute;left:50%;bottom:66px;width:100px;transform:translateX(-50%);accent-color:var(--secondary)}
 .local{bottom:112px}
 .callAudio{display:none}
 .videoMini{width:280px;height:190px;padding:0;display:block;overflow:hidden;background:#000;border-color:rgba(255,255,255,.25)}
@@ -519,11 +517,6 @@ body{background:var(--bg);color:var(--text)}
 }
 .callBtns button:hover{transform:translateY(-2px);background:rgba(255,255,255,.16)}
 .callBtns button.off{background:rgba(255,255,255,.08);color:#a9b2ce}
-.speakerControl input{
-  bottom:74px;
-  height:8px;
-  border-radius:999px;
-}
 .videoStage:after{
   content:"";
   position:absolute;

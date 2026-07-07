@@ -1244,7 +1244,9 @@ app.post('/api/messages', auth, async (req, res) => {
       'SELECT disappearing_seconds FROM chat_preferences WHERE user_id=$1 AND conversation_id=$2',
       [req.user.id, c]
     );
-    const disappearingSeconds = Number(preference.rows[0]?.disappearing_seconds || 0);
+    const disappearingSeconds = kind === 'text'
+      ? Number(preference.rows[0]?.disappearing_seconds || 0)
+      : 0;
     const expiresAt = disappearingSeconds
       ? new Date((scheduledAt || new Date()).getTime() + disappearingSeconds * 1000)
       : null;
@@ -1431,7 +1433,9 @@ app.post('/api/profile/avatar', auth, uploadRateLimit, upload.single('file'), as
      RETURNING id,username,phone,about,avatar_url,last_seen`,
     [avatarUrl, req.user.id]
   );
-  res.json(user(result.rows[0]));
+  const updatedUser = user(result.rows[0]);
+  io.emit('user:profile-updated', updatedUser);
+  res.json(updatedUser);
 }));
 
 app.post('/api/upload', auth, uploadRateLimit, upload.single('file'), (req, res) => {
