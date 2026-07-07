@@ -21,19 +21,31 @@ const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢
 
 const stickers = ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '👍', '🙏', '❤️', '🔥', '🎉'];
 
-const turnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '')
+const defaultMeteredTurnUrls = [
+  'turn:global.relay.metered.ca:80',
+  'turn:global.relay.metered.ca:80?transport=tcp',
+  'turn:global.relay.metered.ca:443',
+  'turns:global.relay.metered.ca:443?transport=tcp'
+];
+const configuredTurnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '')
   .split(',')
   .map(url => url.trim())
-  .filter(Boolean);
-const hasTurnServer = turnUrls.length > 0;
+  .filter(Boolean)
+  .filter(url => /^(turns?|stun):/i.test(url));
+const turnUsername = import.meta.env.VITE_TURN_USERNAME || '';
+const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL || '';
+const turnUrls = configuredTurnUrls.length
+  ? configuredTurnUrls
+  : (turnUsername && turnCredential ? defaultMeteredTurnUrls : []);
+const hasTurnServer = turnUrls.length > 0 && Boolean(turnUsername && turnCredential);
 const rtcConfig = {
   iceServers: [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     ...(hasTurnServer
       ? [{
           urls: turnUrls,
-          username: import.meta.env.VITE_TURN_USERNAME || '',
-          credential: import.meta.env.VITE_TURN_CREDENTIAL || ''
+          username: turnUsername,
+          credential: turnCredential
         }]
       : [])
   ],
@@ -1809,8 +1821,8 @@ export default function App() {
 
     p.onicecandidateerror = event => {
       console.warn('ICE server error', event.errorCode, event.errorText);
-      if (event.url?.startsWith('turn')) {
-        setCall(c => ({ ...c, status: 'Relay server unavailable' }));
+      if (event.url?.startsWith('turn') && !hasTurnServer) {
+        setCall(c => ({ ...c, status: 'TURN relay is not configured' }));
       }
     };
 
