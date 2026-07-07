@@ -2007,6 +2007,13 @@ export default function App() {
     if (chatListFilter === 'unread') return Number(user.chat?.unreadCount || 0) > 0;
     return true;
   });
+  const mobileTitle = {
+    chats: 'Chats',
+    calls: 'Calls',
+    ai: 'AI Opal',
+    status: 'Status',
+    settings: 'Settings'
+  }[mobileTab] || 'Chats';
 
   useEffect(() => {
     if (!active || !me) return;
@@ -2132,7 +2139,7 @@ export default function App() {
       <aside className={`${active ? 'side hide' : 'side'} tab-${mobileTab}`}>
         <div className="appTitle">
           <div className="brandMark"><MessageCircle /></div>
-          <div><b className="desktopBrand">{BRAND.name}</b><b className="mobileBrand">Chats</b><small>{BRAND.tagline}</small></div>
+          <div><b className="desktopBrand">{BRAND.name}</b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
           <button className="mobileTitleAction" onClick={() => setProfile(me)} title="Open profile"><Avatar user={me} /></button>
         </div>
         <div className="me">
@@ -2177,6 +2184,17 @@ export default function App() {
               <small>{contact.username}</small>
             </button>
           ))}
+        </div>
+        <div className="aiOpalPanel">
+          <div className="aiOrb"><Languages /></div>
+          <h2>AI Opal</h2>
+          <p>AI language tools are planned for the next phase. Your chat, calls, files, and settings stay available while this screen is prepared.</p>
+          <div className="aiActionGrid">
+            <button onClick={() => alert('AI translation will be connected after go-live.')}><Languages /><span>Translate messages</span></button>
+            <button onClick={() => alert('Chat summary will be connected after go-live.')}><MessageCircle /><span>Summarize chats</span></button>
+            <button onClick={() => alert('AI writing help will be connected after go-live.')}><Pencil /><span>Write a message</span></button>
+            <button onClick={() => alert('Smart tools will be connected after go-live.')}><Settings /><span>Smart tools</span></button>
+          </div>
         </div>
         <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> {showArchived ? 'Back to chats' : 'Archived chats'}
@@ -2257,7 +2275,7 @@ export default function App() {
         <nav className="bottomNav" aria-label="Primary navigation">
           <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Chats</span></button>
           <button className={mobileTab === 'calls' ? 'active' : ''} onClick={() => { setMobileTab('calls'); loadCallHistory(); }}><Phone /><span>Calls</span></button>
-          <button className={mobileTab === 'discover' ? 'active' : ''} onClick={() => { setMobileTab('discover'); loadChannels(); }}><Users /><span>Discover</span></button>
+          <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Languages /><span>AI Opal</span></button>
           <button className={mobileTab === 'status' ? 'active' : ''} onClick={() => { setMobileTab('status'); loadStatuses(); }}><History /><span>Status</span></button>
           <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); openPrivacy(); }}><Settings /><span>Settings</span></button>
         </nav>

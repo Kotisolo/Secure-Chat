@@ -2115,3 +2115,103 @@ body{background:var(--bg);color:var(--text)}
     flex-direction:column;
   }
 }
+
+/* Reference correction: match the inserted mobile app screens more closely. */
+.mobileBrand{
+  letter-spacing:-.04em;
+}
+.aiOpalPanel{
+  display:none;
+  flex:1;
+  padding:30px 18px 110px;
+  overflow:auto;
+  text-align:center;
+}
+.aiOrb{
+  width:112px;
+  height:112px;
+  margin:26px auto 18px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  color:#fff;
+  background:
+    radial-gradient(circle at 50% 50%,rgba(255,255,255,.22),transparent 28%),
+    conic-gradient(from 210deg,#121827,#704cff,#00c8ff,#ff8a3d,#b63ee7,#121827);
+  box-shadow:0 24px 70px rgba(117,73,238,.28);
+}
+.aiOrb svg{width:42px;height:42px}
+.aiOpalPanel h2{
+  margin:0 0 8px;
+  font-size:28px;
+  letter-spacing:-.05em;
+  color:#171326;
+}
+.aiOpalPanel p{
+  margin:0 auto 22px;
+  max-width:320px;
+  color:#8f8aa1;
+  line-height:1.5;
+}
+.aiActionGrid{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+}
+.aiActionGrid button{
+  min-height:96px;
+  padding:12px;
+  border-radius:24px;
+  background:#fff;
+  border:1px solid #ece9f2;
+  color:#171326;
+  box-shadow:0 12px 26px rgba(35,28,66,.06);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  font-weight:800;
+}
+.aiActionGrid svg{
+  width:24px;
+  height:24px;
+  color:var(--primary);
+}
+.tab-ai .search,
+.tab-ai .chatFilterChips,
+.tab-ai .contactStories,
+.tab-ai .archiveToggle,
+.tab-ai .statusHeader,
+.tab-ai .channelHeader,
+.tab-ai .groupHeader,
+.tab-ai .groupRow,
+.tab-ai .list{
+  display:none!important;
+}
+.tab-ai .aiOpalPanel{
+  display:block;
+}
+.bottomNav button:nth-child(3).active{
+  color:#704cff;
+}
+@media(max-width:900px){
+  .appTitle{
+    box-shadow:0 8px 24px rgba(35,28,66,.04);
+  }
+  .mobileBrand{
+    font-size:24px!important;
+  }
+  .bottomNav{
+    max-width:520px;
+    margin:0 auto;
+    left:10px;
+    right:10px;
+    bottom:8px;
+    border:1px solid #ece9f2;
+    border-radius:26px;
+  }
+  .bottomNav button span{
+    font-weight:800;
+  }
+}
