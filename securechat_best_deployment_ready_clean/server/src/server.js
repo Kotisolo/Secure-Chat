@@ -1427,7 +1427,13 @@ app.post('/api/profile/avatar', auth, uploadRateLimit, upload.single('file'), as
   if (!req.file || !req.file.mimetype.startsWith('image/')) {
     return res.status(400).json({ error: 'Choose a valid image.' });
   }
-  const avatarUrl = '/uploads/' + req.file.filename;
+  if (req.file.size > 2 * 1024 * 1024) {
+    fs.unlink(req.file.path, () => {});
+    return res.status(400).json({ error: 'Profile picture must be smaller than 2 MB.' });
+  }
+  const avatarBuffer = await fs.promises.readFile(req.file.path);
+  fs.unlink(req.file.path, () => {});
+  const avatarUrl = `data:${req.file.mimetype};base64,${avatarBuffer.toString('base64')}`;
   const result = await pool.query(
     `UPDATE users SET avatar_url=$1 WHERE id=$2
      RETURNING id,username,phone,about,avatar_url,last_seen`,
