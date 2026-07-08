@@ -38,8 +38,7 @@ const turnUrls = configuredTurnUrls.length
   ? configuredTurnUrls
   : (turnUsername && turnCredential ? defaultMeteredTurnUrls : []);
 const hasTurnServer = turnUrls.length > 0 && Boolean(turnUsername && turnCredential);
-const shouldForceRelay = hasTurnServer && import.meta.env.VITE_ICE_TRANSPORT_POLICY !== 'all';
-const buildRtcConfig = (forceRelay = shouldForceRelay) => ({
+const buildRtcConfig = () => ({
   iceServers: [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     ...(hasTurnServer
@@ -52,7 +51,7 @@ const buildRtcConfig = (forceRelay = shouldForceRelay) => ({
       : [])
   ],
   iceCandidatePoolSize: 10,
-  iceTransportPolicy: forceRelay ? 'relay' : 'all'
+  iceTransportPolicy: 'all'
 });
 const videoCallConstraints = {
   width: { ideal: 640, max: 854 },
