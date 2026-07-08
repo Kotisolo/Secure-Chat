@@ -62,23 +62,44 @@ const buildRtcConfig = () => ({
   iceCandidatePoolSize: 10,
   iceTransportPolicy: 'all'
 });
-const videoCallConstraints = {
-  width: { ideal: 640, max: 854 },
-  height: { ideal: 360, max: 480 },
-  frameRate: { ideal: 15, max: 24 },
-  facingMode: 'user'
+const lowDataNetworkTypes = new Set(['slow-2g', '2g', '3g']);
+const isLowDataNetwork = () => {
+  const connection = typeof navigator !== 'undefined' ? navigator.connection || navigator.mozConnection || navigator.webkitConnection : null;
+  return Boolean(
+    connection?.saveData ||
+    connection?.type === 'cellular' ||
+    lowDataNetworkTypes.has(String(connection?.effectiveType || '').toLowerCase())
+  );
 };
-const tuneMobileVideoSender = async peer => {
+const standardVideoCallConstraints = {
+  width: { ideal: 426, max: 640 },
+  height: { ideal: 240, max: 360 },
+  frameRate: { ideal: 12, max: 15 },
+  facingMode: 'user',
+  resizeMode: 'crop-and-scale'
+};
+const mobileDataVideoCallConstraints = {
+  width: { ideal: 320, max: 426 },
+  height: { ideal: 180, max: 240 },
+  frameRate: { ideal: 8, max: 10 },
+  facingMode: 'user',
+  resizeMode: 'crop-and-scale'
+};
+const videoConstraintsForNetwork = () => (
+  isLowDataNetwork() ? mobileDataVideoCallConstraints : standardVideoCallConstraints
+);
+const tuneMobileVideoSender = async (peer, lowData = isLowDataNetwork()) => {
   const sender = peer.getSenders?.().find(item => item.track?.kind === 'video');
   if (!sender?.getParameters || !sender?.setParameters) return;
   const params = sender.getParameters();
   params.encodings = params.encodings?.length ? params.encodings : [{}];
   params.encodings[0] = {
     ...params.encodings[0],
-    maxBitrate: 450000,
-    maxFramerate: 18,
-    scaleResolutionDownBy: Math.max(params.encodings[0].scaleResolutionDownBy || 1, 1)
+    maxBitrate: lowData ? 160000 : 280000,
+    maxFramerate: lowData ? 10 : 15,
+    scaleResolutionDownBy: Math.max(params.encodings[0].scaleResolutionDownBy || 1, lowData ? 1.5 : 1)
   };
+  params.degradationPreference = 'maintain-framerate';
   try {
     await sender.setParameters(params);
   } catch (error) {
@@ -1016,7 +1037,13 @@ export default function App() {
     if (!selectedGroup || groupCall) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        audio: true, video: type === 'video'
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1
+        },
+        video: type === 'video' ? videoConstraintsForNetwork() : false
       });
       groupCallStream.current = stream;
       setGroupRemoteStreams({});
@@ -1034,6 +1061,7 @@ export default function App() {
     if (groupPeers.current.has(userId)) return groupPeers.current.get(userId);
     const peer = new RTCPeerConnection(buildRtcConfig());
     groupCallStream.current?.getTracks().forEach(track => peer.addTrack(track, groupCallStream.current));
+    if (groupCallStream.current?.getVideoTracks?.().length) tuneMobileVideoSender(peer);
     peer.onicecandidate = event => {
       if (event.candidate) getSocket()?.emit('group-call:ice', {
         groupId: groupCall?.groupId || selectedGroupRef.current?.id,
@@ -1848,9 +1876,10 @@ export default function App() {
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
-        autoGainControl: true
+        autoGainControl: true,
+        channelCount: 1
       },
-      video: type === 'video' ? videoCallConstraints : false
+      video: type === 'video' ? videoConstraintsForNetwork() : false
     });
 
     localStream.current = stream;
