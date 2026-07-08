@@ -1553,9 +1553,15 @@ io.on('connection', async socket => {
     });
   });
 
-  socket.on('call:offer', async ({ recipientId, offer, callType } = {}) => {
-    if (!validUuid(recipientId) || !offer || !['audio', 'video'].includes(callType)) return;
-    if (await usersBlocked(userId, recipientId)) return socket.emit('call:unavailable');
+  socket.on('call:offer', async ({ recipientId, offer, callType } = {}, callback) => {
+    const reply = typeof callback === 'function' ? callback : () => {};
+    if (!validUuid(recipientId) || !offer || !['audio', 'video'].includes(callType)) {
+      return reply({ ok: false, message: 'Invalid call request.' });
+    }
+    if (await usersBlocked(userId, recipientId)) {
+      socket.emit('call:unavailable');
+      return reply({ ok: false, message: 'This user cannot receive your call.' });
+    }
     const privacy = await pool.query(
       `SELECT p.silence_unknown_calls,
         EXISTS(SELECT 1 FROM conversations c WHERE c.id=$2) known
@@ -1563,7 +1569,8 @@ io.on('connection', async socket => {
       [recipientId, cid(userId, recipientId)]
     ).catch(() => ({ rows: [] }));
     if (privacy.rows[0]?.silence_unknown_calls && !privacy.rows[0]?.known) {
-      return socket.emit('call:unavailable');
+      socket.emit('call:unavailable');
+      return reply({ ok: false, message: 'This user is not accepting unknown calls.' });
     }
     const available = isOnline(recipientId);
     await pool.query(
@@ -1571,7 +1578,10 @@ io.on('connection', async socket => {
        VALUES($1,$2,$3,$4,$5)`,
       [userId, recipientId, callType, available ? 'ringing' : 'missed', available ? null : new Date()]
     ).catch(() => {});
-    if (!available) return socket.emit('call:unavailable');
+    if (!available) {
+      socket.emit('call:unavailable');
+      return reply({ ok: false, message: 'User is not online.' });
+    }
 
     io.to(userRoom(recipientId)).emit('call:incoming', {
       callerId: userId,
@@ -1579,16 +1589,20 @@ io.on('connection', async socket => {
       offer,
       callType
     });
+    return reply({ ok: true });
   });
 
-  socket.on('call:answer', async ({ callerId, answer } = {}) => {
-    if (!validUuid(callerId) || !answer) return;
+  socket.on('call:answer', async ({ callerId, answer } = {}, callback) => {
+    const reply = typeof callback === 'function' ? callback : () => {};
+    if (!validUuid(callerId) || !answer) return reply({ ok: false, message: 'Invalid call answer.' });
     await pool.query(
       `UPDATE call_history SET status='answered',answered_at=NOW()
        WHERE id=(SELECT id FROM call_history WHERE caller_id=$1 AND recipient_id=$2 AND status='ringing' ORDER BY started_at DESC LIMIT 1)`,
       [callerId, userId]
     ).catch(() => {});
+    if (!isOnline(callerId)) return reply({ ok: false, message: 'Caller is no longer online.' });
     io.to(userRoom(callerId)).emit('call:answer', { answer, peerId: userId });
+    return reply({ ok: true });
   });
 
   socket.on('call:ice-candidate', ({ recipientId, candidate } = {}) => {

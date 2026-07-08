@@ -22,9 +22,11 @@ const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢
 const stickers = ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '👍', '🙏', '❤️', '🔥', '🎉'];
 
 const defaultMeteredTurnUrls = [
+  'stun:stun.relay.metered.ca:80',
   'turn:global.relay.metered.ca:80',
   'turn:global.relay.metered.ca:80?transport=tcp',
   'turn:global.relay.metered.ca:443',
+  'turn:global.relay.metered.ca:443?transport=tcp',
   'turns:global.relay.metered.ca:443?transport=tcp'
 ];
 const configuredTurnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '')
@@ -34,19 +36,26 @@ const configuredTurnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.
   .filter(url => /^(turns?|stun):/i.test(url));
 const turnUsername = import.meta.env.VITE_TURN_USERNAME || '';
 const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL || '';
-const turnUrls = configuredTurnUrls.length
-  ? configuredTurnUrls
-  : (turnUsername && turnCredential ? defaultMeteredTurnUrls : []);
-const hasTurnServer = turnUrls.length > 0 && Boolean(turnUsername && turnCredential);
+const turnUrls = [
+  ...new Set([
+    ...configuredTurnUrls,
+    ...(turnUsername && turnCredential ? defaultMeteredTurnUrls : [])
+  ])
+];
+const hasTurnServer = turnUrls.some(url => /^turns?:/i.test(url)) && Boolean(turnUsername && turnCredential);
 const buildRtcConfig = () => ({
   iceServers: [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     ...(hasTurnServer
       ? turnUrls.map(url => ({
           urls: url,
-          username: turnUsername,
-          credential: turnCredential,
-          credentialType: 'password'
+          ...(/^(turns?):/i.test(url)
+            ? {
+                username: turnUsername,
+                credential: turnCredential,
+                credentialType: 'password'
+              }
+            : {})
         }))
       : [])
   ],
@@ -143,6 +152,24 @@ const mediaErrorMessage = (error, type) => {
   }
   return `The call could not start: ${error?.name || 'Unknown error'}${error?.message ? ` - ${error.message}` : ''}`;
 };
+
+const emitWithAck = (socket, eventName, payload, timeout = 8000) => new Promise((resolve, reject) => {
+  if (!socket?.connected) {
+    reject(new Error('Chat server is not connected. Please refresh the app and try again.'));
+    return;
+  }
+
+  if (typeof socket.timeout === 'function') {
+    socket.timeout(timeout).emit(eventName, payload, (error, response) => {
+      if (error) reject(new Error('Call signal timed out. Please check both users are online and try again.'));
+      else resolve(response || { ok: true });
+    });
+    return;
+  }
+
+  socket.emit(eventName, payload);
+  resolve({ ok: true });
+});
 
 export default function App() {
   const storedUser = getStoredUser();
@@ -244,6 +271,7 @@ export default function App() {
   const localStream = useRef(null);
   const callPeer = useRef(null);
   const timer = useRef(null);
+  const callTimeout = useRef(null);
   const localVideo = useRef(null);
   const remoteVideo = useRef(null);
   const remoteAudio = useRef(null);
@@ -543,10 +571,10 @@ export default function App() {
 
     s.on('call:answer', async ({ answer }) => {
       if (!pc.current) return;
+      clearTimeout(callTimeout.current);
       await pc.current.setRemoteDescription(new RTCSessionDescription(answer));
       await flushPendingIce();
-      setCall(p => ({ ...p, status: 'Connected' }));
-      startTimer();
+      setCall(p => ({ ...p, status: 'Connecting securely...' }));
     });
 
     s.on('call:ice-candidate', async ({ candidate }) => {
@@ -1868,11 +1896,13 @@ export default function App() {
 
     p.onconnectionstatechange = () => {
       if (p.connectionState === 'connected') {
+        clearTimeout(callTimeout.current);
         setCall(c => ({ ...c, status: 'Connected' }));
         startTimer();
       }
 
       if (p.connectionState === 'failed') {
+        clearTimeout(callTimeout.current);
         setCall(c => ({ ...c, status: 'Connection failed' }));
       }
     };
@@ -1898,6 +1928,7 @@ export default function App() {
     const callContact = contactOverride || active;
     if (!callContact) return;
     setCallError('');
+    clearTimeout(callTimeout.current);
 
     setCall({
       active: true,
@@ -1914,11 +1945,22 @@ export default function App() {
 
       await p.setLocalDescription(offer);
 
-      getSocket()?.emit('call:offer', {
+      const ack = await emitWithAck(getSocket(), 'call:offer', {
         recipientId: callContact.id,
         offer,
         callType: type
       });
+
+      if (ack && ack.ok === false) throw new Error(ack.message || 'Could not start the call.');
+
+      setCall(current => ({ ...current, status: 'Ringing...' }));
+      callTimeout.current = setTimeout(() => {
+        if (pc.current && pc.current.connectionState !== 'connected') {
+          setCall(current => ({ ...current, status: 'No answer or network blocked.' }));
+          setCallError('The call did not connect. Make sure both users are online, allow microphone/camera, and try again.');
+          endCall(true);
+        }
+      }, 45000);
     } catch (e) {
       endCall(true);
       setCallError(mediaErrorMessage(e, type));
@@ -1932,6 +1974,7 @@ export default function App() {
 
     setIncoming(null);
     setRecoveryCode('');
+    clearTimeout(callTimeout.current);
 
     setCall({
       active: true,
@@ -1952,10 +1995,21 @@ export default function App() {
 
       await p.setLocalDescription(answer);
 
-      getSocket()?.emit('call:answer', {
+      const ack = await emitWithAck(getSocket(), 'call:answer', {
         callerId: d.callerId,
         answer
       });
+
+      if (ack && ack.ok === false) throw new Error(ack.message || 'Could not answer the call.');
+
+      setCall(current => ({ ...current, status: 'Connecting securely...' }));
+      callTimeout.current = setTimeout(() => {
+        if (pc.current && pc.current.connectionState !== 'connected') {
+          setCall(current => ({ ...current, status: 'Network blocked the call.' }));
+          setCallError('The call answer was sent, but the devices could not connect. Please try again with both users online and permissions allowed.');
+          endCall(true);
+        }
+      }, 45000);
     } catch (e) {
       endCall(true);
       setCallError(mediaErrorMessage(e, d.callType));
@@ -1981,6 +2035,7 @@ export default function App() {
 
   function cleanupPeer() {
     clearInterval(timer.current);
+    clearTimeout(callTimeout.current);
     pendingIce.current = [];
 
     if (pc.current) {
