@@ -2819,7 +2819,7 @@ export default function App() {
             onPointerUp={endMiniCallDrag}
             onPointerCancel={endMiniCallDrag}
           >
-            <video ref={miniRemoteVideo} autoPlay muted playsInline />
+            <video ref={miniRemoteVideo} autoPlay muted playsInline className="miniRemoteVideo" />
             <video ref={miniLocalVideo} autoPlay muted playsInline className="miniLocalVideo" />
             <div className="miniOverlay">
               <b>{call.title}</b>
@@ -2827,16 +2827,18 @@ export default function App() {
                 {String(Math.floor(call.seconds / 60)).padStart(2, '0')}:{String(call.seconds % 60).padStart(2, '0')}
               </small>
             </div>
-            <button
-              className="danger miniEnd"
-              onClick={e => {
-                e.stopPropagation();
-                endCall();
-              }}
-              title="End call"
-            >
-              <PhoneOff />
-            </button>
+            <div className="miniVideoControls">
+              <button
+                className="danger miniEnd"
+                onClick={e => {
+                  e.stopPropagation();
+                  endCall();
+                }}
+                title="End call"
+              >
+                <PhoneOff />
+              </button>
+            </div>
           </div>
         ) : (
           <div

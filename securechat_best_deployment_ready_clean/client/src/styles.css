@@ -2361,12 +2361,16 @@ body{background:var(--bg);color:var(--text)}
   width:300px!important;
   height:244px!important;
   padding:0!important;
-  display:block!important;
+  display:flex!important;
+  flex-direction:column!important;
   overflow:hidden!important;
   background:#050914!important;
 }
-.videoMini>video:first-child{
+.videoMini .miniRemoteVideo{
+  width:100%!important;
   height:188px!important;
+  flex:0 0 188px!important;
+  display:block!important;
   object-fit:cover;
   object-position:center;
 }
@@ -2376,22 +2380,23 @@ body{background:var(--bg);color:var(--text)}
   background:linear-gradient(transparent,rgba(0,0,0,.72))!important;
 }
 .videoMini .miniEnd{
-  right:12px!important;
-  bottom:8px!important;
+  position:static!important;
   width:44px!important;
   height:44px!important;
   z-index:4;
 }
-.videoMini:after{
-  content:"";
-  position:absolute;
-  left:0;
-  right:0;
-  bottom:0;
+.videoMini .miniVideoControls{
+  position:relative;
+  z-index:4;
   height:56px;
+  flex:0 0 56px;
   background:rgba(11,18,32,.96);
   border-top:1px solid rgba(255,255,255,.12);
-  pointer-events:none;
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  padding:6px 10px;
+  pointer-events:auto;
 }
 .videoMini .miniLocalVideo{
   right:10px!important;
@@ -2403,7 +2408,8 @@ body{background:var(--bg);color:var(--text)}
 @media(max-width:900px){
   .videoCall .local{
     right:14px!important;
-    bottom:128px!important;
+    top:max(88px,env(safe-area-inset-top) + 64px)!important;
+    bottom:auto!important;
     width:124px!important;
     height:164px!important;
   }
@@ -2411,14 +2417,16 @@ body{background:var(--bg);color:var(--text)}
     width:230px!important;
     height:198px!important;
   }
-  .videoMini>video:first-child{
+  .videoMini .miniRemoteVideo{
     height:146px!important;
+    flex-basis:146px!important;
   }
   .videoMini .miniOverlay{
     bottom:52px!important;
   }
-  .videoMini:after{
+  .videoMini .miniVideoControls{
     height:52px;
+    flex-basis:52px;
   }
   .videoMini .miniLocalVideo{
     width:56px!important;
@@ -2427,6 +2435,5 @@ body{background:var(--bg);color:var(--text)}
   .videoMini .miniEnd{
     width:40px!important;
     height:40px!important;
-    bottom:6px!important;
   }
 }
