@@ -2344,3 +2344,89 @@ body{background:var(--bg);color:var(--text)}
     font-weight:800;
   }
 }
+
+/* Final call layout polish: keep controls away from the video picture. */
+.videoCall .callBtns{
+  bottom:max(24px,env(safe-area-inset-bottom));
+}
+.videoCall .local{
+  right:24px!important;
+  bottom:148px!important;
+  width:172px!important;
+  height:224px!important;
+  object-fit:cover;
+  object-position:center;
+}
+.videoMini{
+  width:300px!important;
+  height:244px!important;
+  padding:0!important;
+  display:block!important;
+  overflow:hidden!important;
+  background:#050914!important;
+}
+.videoMini>video:first-child{
+  height:188px!important;
+  object-fit:cover;
+  object-position:center;
+}
+.videoMini .miniOverlay{
+  bottom:56px!important;
+  padding:22px 12px 8px!important;
+  background:linear-gradient(transparent,rgba(0,0,0,.72))!important;
+}
+.videoMini .miniEnd{
+  right:12px!important;
+  bottom:8px!important;
+  width:44px!important;
+  height:44px!important;
+  z-index:4;
+}
+.videoMini:after{
+  content:"";
+  position:absolute;
+  left:0;
+  right:0;
+  bottom:0;
+  height:56px;
+  background:rgba(11,18,32,.96);
+  border-top:1px solid rgba(255,255,255,.12);
+  pointer-events:none;
+}
+.videoMini .miniLocalVideo{
+  right:10px!important;
+  top:10px!important;
+  width:72px!important;
+  height:92px!important;
+  z-index:3;
+}
+@media(max-width:900px){
+  .videoCall .local{
+    right:14px!important;
+    bottom:128px!important;
+    width:124px!important;
+    height:164px!important;
+  }
+  .videoMini{
+    width:230px!important;
+    height:198px!important;
+  }
+  .videoMini>video:first-child{
+    height:146px!important;
+  }
+  .videoMini .miniOverlay{
+    bottom:52px!important;
+  }
+  .videoMini:after{
+    height:52px;
+  }
+  .videoMini .miniLocalVideo{
+    width:56px!important;
+    height:72px!important;
+  }
+  .videoMini .miniEnd{
+    width:40px!important;
+    height:40px!important;
+    bottom:6px!important;
+  }
+}
