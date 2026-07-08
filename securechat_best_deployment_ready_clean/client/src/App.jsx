@@ -153,7 +153,7 @@ const mediaErrorMessage = (error, type) => {
   return `The call could not start: ${error?.name || 'Unknown error'}${error?.message ? ` - ${error.message}` : ''}`;
 };
 
-const emitWithAck = (socket, eventName, payload, timeout = 8000) => new Promise((resolve, reject) => {
+const emitWithAck = (socket, eventName, payload, timeout = 15000) => new Promise((resolve, reject) => {
   if (!socket?.connected) {
     reject(new Error('Chat server is not connected. Please refresh the app and try again.'));
     return;
@@ -161,7 +161,10 @@ const emitWithAck = (socket, eventName, payload, timeout = 8000) => new Promise(
 
   if (typeof socket.timeout === 'function') {
     socket.timeout(timeout).emit(eventName, payload, (error, response) => {
-      if (error) reject(new Error('Call signal timed out. Please check both users are online and try again.'));
+      if (error) {
+        console.warn(`${eventName} confirmation timed out; continuing because the signal may still be delivered.`);
+        resolve({ ok: true, timedOut: true });
+      }
       else resolve(response || { ok: true });
     });
     return;
@@ -1953,7 +1956,10 @@ export default function App() {
 
       if (ack && ack.ok === false) throw new Error(ack.message || 'Could not start the call.');
 
-      setCall(current => ({ ...current, status: 'Ringing...' }));
+      setCall(current => ({
+        ...current,
+        status: ack?.timedOut ? 'Ringing... waiting for server confirmation' : 'Ringing...'
+      }));
       callTimeout.current = setTimeout(() => {
         if (pc.current && pc.current.connectionState !== 'connected') {
           setCall(current => ({ ...current, status: 'No answer or network blocked.' }));
@@ -2002,7 +2008,10 @@ export default function App() {
 
       if (ack && ack.ok === false) throw new Error(ack.message || 'Could not answer the call.');
 
-      setCall(current => ({ ...current, status: 'Connecting securely...' }));
+      setCall(current => ({
+        ...current,
+        status: ack?.timedOut ? 'Connecting... waiting for server confirmation' : 'Connecting securely...'
+      }));
       callTimeout.current = setTimeout(() => {
         if (pc.current && pc.current.connectionState !== 'connected') {
           setCall(current => ({ ...current, status: 'Network blocked the call.' }));
