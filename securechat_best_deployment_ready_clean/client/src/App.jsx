@@ -38,20 +38,22 @@ const turnUrls = configuredTurnUrls.length
   ? configuredTurnUrls
   : (turnUsername && turnCredential ? defaultMeteredTurnUrls : []);
 const hasTurnServer = turnUrls.length > 0 && Boolean(turnUsername && turnCredential);
-const rtcConfig = {
+const shouldForceRelay = hasTurnServer && import.meta.env.VITE_ICE_TRANSPORT_POLICY !== 'all';
+const buildRtcConfig = (forceRelay = shouldForceRelay) => ({
   iceServers: [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
     ...(hasTurnServer
-      ? [{
-          urls: turnUrls,
+      ? turnUrls.map(url => ({
+          urls: url,
           username: turnUsername,
-          credential: turnCredential
-        }]
+          credential: turnCredential,
+          credentialType: 'password'
+        }))
       : [])
   ],
   iceCandidatePoolSize: 10,
-  iceTransportPolicy: import.meta.env.VITE_ICE_TRANSPORT_POLICY === 'relay' ? 'relay' : 'all'
-};
+  iceTransportPolicy: forceRelay ? 'relay' : 'all'
+});
 const videoCallConstraints = {
   width: { ideal: 640, max: 854 },
   height: { ideal: 360, max: 480 },
@@ -1000,7 +1002,7 @@ export default function App() {
 
   function createGroupPeer(userId, makeOffer) {
     if (groupPeers.current.has(userId)) return groupPeers.current.get(userId);
-    const peer = new RTCPeerConnection(rtcConfig);
+    const peer = new RTCPeerConnection(buildRtcConfig());
     groupCallStream.current?.getTracks().forEach(track => peer.addTrack(track, groupCallStream.current));
     peer.onicecandidate = event => {
       if (event.candidate) getSocket()?.emit('group-call:ice', {
@@ -1809,7 +1811,7 @@ export default function App() {
 
     callPeer.current = peerId;
 
-    const p = new RTCPeerConnection(rtcConfig);
+    const p = new RTCPeerConnection(buildRtcConfig());
     pc.current = p;
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -1853,13 +1855,13 @@ export default function App() {
 
     p.oniceconnectionstatechange = () => {
       if (p.iceConnectionState === 'checking') {
-        setCall(c => ({ ...c, status: 'Connecting securely…' }));
+        setCall(c => ({ ...c, status: 'Connecting securely...' }));
       }
       if (p.iceConnectionState === 'failed') {
         setCall(c => ({
           ...c,
           status: hasTurnServer
-            ? 'Network relay failed. Please try again.'
+            ? 'TURN relay connection failed. Check the relay settings and try again.'
             : 'A TURN relay is required for this mobile network.'
         }));
       }
