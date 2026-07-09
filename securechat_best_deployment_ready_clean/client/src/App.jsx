@@ -1985,17 +1985,14 @@ export default function App() {
 
       if (ack && ack.ok === false) throw new Error(ack.message || 'Could not start the call.');
 
-      setCall(current => ({
-        ...current,
-        status: ack?.timedOut ? 'Ringing... waiting for server confirmation' : 'Ringing...'
-      }));
+      setCall(current => ({ ...current, status: 'Ringing...' }));
       callTimeout.current = setTimeout(() => {
         if (pc.current && pc.current.connectionState !== 'connected') {
-          setCall(current => ({ ...current, status: 'No answer or network blocked.' }));
-          setCallError('The call did not connect. Make sure both users are online, allow microphone/camera, and try again.');
+          setCall(current => ({ ...current, status: 'Call did not connect.' }));
+          setCallError('The call did not connect. Make sure both users are online, keep the app open on both phones, allow microphone/camera, and try again.');
           endCall(true);
         }
-      }, 45000);
+      }, 70000);
     } catch (e) {
       endCall(true);
       setCallError(mediaErrorMessage(e, type));
@@ -2037,17 +2034,14 @@ export default function App() {
 
       if (ack && ack.ok === false) throw new Error(ack.message || 'Could not answer the call.');
 
-      setCall(current => ({
-        ...current,
-        status: ack?.timedOut ? 'Connecting... waiting for server confirmation' : 'Connecting securely...'
-      }));
+      setCall(current => ({ ...current, status: 'Connecting securely...' }));
       callTimeout.current = setTimeout(() => {
         if (pc.current && pc.current.connectionState !== 'connected') {
           setCall(current => ({ ...current, status: 'Network blocked the call.' }));
           setCallError('The call answer was sent, but the devices could not connect. Please try again with both users online and permissions allowed.');
           endCall(true);
         }
-      }, 45000);
+      }, 70000);
     } catch (e) {
       endCall(true);
       setCallError(mediaErrorMessage(e, d.callType));
