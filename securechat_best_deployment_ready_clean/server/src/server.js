@@ -346,7 +346,14 @@ async function init() {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, time: new Date().toISOString() });
+  res.json({
+    ok: true,
+    time: new Date().toISOString(),
+    realtime: {
+      redisConfigured: Boolean(REDIS_URL),
+      redisConnected: Boolean(redisPresence && redisPresence.status === 'ready')
+    }
+  });
 });
 
 app.post('/api/auth/register', authRateLimit, async (req, res) => {
