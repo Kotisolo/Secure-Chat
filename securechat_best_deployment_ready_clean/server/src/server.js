@@ -18,6 +18,9 @@ const PORT = process.env.PORT || 8080;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const JWT_SECRET = process.env.JWT_SECRET || (IS_PRODUCTION ? '' : 'local-development-secret-change-me-12345');
 const REDIS_URL = process.env.REDIS_URL || '';
+const METERED_API_KEY = process.env.METERED_API_KEY || '';
+const METERED_DOMAIN = process.env.METERED_DOMAIN || '';
+const METERED_TURN_API_URL = process.env.METERED_TURN_API_URL || process.env.METERED_TURN_CREDENTIALS_URL || '';
 const ONLINE_TTL_SECONDS = 180;
 const CLIENT_ORIGINS = (
   process.env.CLIENT_ORIGIN ||
@@ -98,6 +101,8 @@ const io = new Server(server, {
 });
 
 let redisPresence = null;
+let cachedTurnCredentials = null;
+let cachedTurnCredentialsUntil = 0;
 
 function onlineKey(userId) {
   return `securechat:online:${String(userId)}`;
@@ -216,6 +221,13 @@ function logCallEvent(event, details = {}) {
     at: new Date().toISOString(),
     ...details
   }));
+}
+
+function meteredTurnCredentialsUrl() {
+  if (METERED_TURN_API_URL) return METERED_TURN_API_URL;
+  if (!METERED_API_KEY || !METERED_DOMAIN) return '';
+  const host = METERED_DOMAIN.replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+  return `https://${host}/api/v1/turn/credentials?apiKey=${encodeURIComponent(METERED_API_KEY)}`;
 }
 
 function rateLimit({ windowMs, max }) {
@@ -362,9 +374,43 @@ app.get('/api/health', (req, res) => {
     realtime: {
       redisConfigured: Boolean(REDIS_URL),
       redisConnected: Boolean(redisPresence && redisPresence.status === 'ready')
+    },
+    turn: {
+      meteredConfigured: Boolean(meteredTurnCredentialsUrl())
     }
   });
 });
+
+app.get('/api/turn/credentials', auth, asyncRoute(async (req, res) => {
+  const url = meteredTurnCredentialsUrl();
+  if (!url) return res.status(503).json({ error: 'TURN credentials are not configured.' });
+
+  if (cachedTurnCredentials && cachedTurnCredentialsUntil > Date.now()) {
+    return res.json(cachedTurnCredentials);
+  }
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Metered TURN credentials request failed with ${response.status}`);
+  }
+
+  const iceServers = await response.json();
+  if (!Array.isArray(iceServers)) {
+    throw new Error('Metered TURN credentials response was not valid.');
+  }
+
+  const safeIceServers = iceServers
+    .filter(server => server && (typeof server.urls === 'string' || Array.isArray(server.urls)))
+    .map(server => ({
+      urls: server.urls,
+      ...(server.username ? { username: String(server.username) } : {}),
+      ...(server.credential ? { credential: String(server.credential) } : {})
+    }));
+
+  cachedTurnCredentials = { iceServers: safeIceServers };
+  cachedTurnCredentialsUntil = Date.now() + 5 * 60 * 1000;
+  res.json(cachedTurnCredentials);
+}));
 
 app.post('/api/auth/register', authRateLimit, async (req, res) => {
   const username = clean(req.body.username);
@@ -1658,7 +1704,7 @@ io.on('connection', async socket => {
     });
   });
 
-  socket.on('call:offer', async ({ recipientId, offer, callType, network } = {}, callback) => {
+  socket.on('call:offer', async ({ recipientId, offer, callType, videoIntent, network } = {}, callback) => {
     const reply = typeof callback === 'function' ? callback : () => {};
     if (!validUuid(recipientId) || !offer || !['audio', 'video'].includes(callType)) {
       return reply({ ok: false, message: 'Invalid call request.' });
@@ -1682,13 +1728,14 @@ io.on('connection', async socket => {
       callerId: userId,
       recipientId,
       callType,
+      videoIntent: Boolean(videoIntent),
       recipientOnline: available,
       network: callNetworkSummary(network)
     });
     await pool.query(
       `INSERT INTO call_history(caller_id,recipient_id,call_type,status,ended_at)
        VALUES($1,$2,$3,$4,$5)`,
-      [userId, recipientId, callType, available ? 'ringing' : 'missed', available ? null : new Date()]
+      [userId, recipientId, videoIntent ? 'video' : callType, available ? 'ringing' : 'missed', available ? null : new Date()]
     ).catch(() => {});
     if (!available) {
       socket.emit('call:unavailable');
@@ -1699,7 +1746,8 @@ io.on('connection', async socket => {
       callerId: userId,
       callerName: socket.user.username,
       offer,
-      callType
+      callType,
+      videoIntent: Boolean(videoIntent)
     });
     return reply({ ok: true });
   });

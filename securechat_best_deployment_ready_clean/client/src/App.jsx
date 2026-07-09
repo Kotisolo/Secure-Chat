@@ -43,21 +43,22 @@ const turnUrls = [
   ])
 ];
 const hasTurnServer = turnUrls.some(url => /^turns?:/i.test(url)) && Boolean(turnUsername && turnCredential);
-const buildRtcConfig = () => ({
+const staticTurnIceServers = hasTurnServer
+  ? turnUrls.map(url => ({
+      urls: url,
+      ...(/^(turns?):/i.test(url)
+        ? {
+            username: turnUsername,
+            credential: turnCredential,
+            credentialType: 'password'
+          }
+        : {})
+    }))
+  : [];
+const buildRtcConfig = (dynamicIceServers = []) => ({
   iceServers: [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-    ...(hasTurnServer
-      ? turnUrls.map(url => ({
-          urls: url,
-          ...(/^(turns?):/i.test(url)
-            ? {
-                username: turnUsername,
-                credential: turnCredential,
-                credentialType: 'password'
-              }
-            : {})
-        }))
-      : [])
+    ...(Array.isArray(dynamicIceServers) && dynamicIceServers.length ? dynamicIceServers : staticTurnIceServers)
   ],
   iceCandidatePoolSize: 10,
   iceTransportPolicy: 'all'
@@ -315,6 +316,7 @@ export default function App() {
   const miniDrag = useRef({ dragging: false, moved: false });
   const endRef = useRef(null);
   const typingTimer = useRef(null);
+  const turnCredentialCache = useRef({ iceServers: null, expiresAt: 0 });
   const socketReady = useRef(false);
   const activeRef = useRef(null);
   const pendingIce = useRef([]);
@@ -601,7 +603,7 @@ export default function App() {
     // Incoming call: show a non-blocking card instead of a popup
     s.on('call:incoming', d => {
       setIncoming(d);
-      showNotification(`Incoming ${d.callType} call`, d.callerName);
+      showNotification(`Incoming ${d.videoIntent ? 'video' : d.callType} call`, d.callerName);
     });
 
     s.on('security:new-login', d => {
@@ -1906,6 +1908,28 @@ export default function App() {
     }, 900);
   }
 
+  async function loadRtcConfig() {
+    if (turnCredentialCache.current.iceServers && turnCredentialCache.current.expiresAt > Date.now()) {
+      return buildRtcConfig(turnCredentialCache.current.iceServers);
+    }
+
+    try {
+      const result = await api('/api/turn/credentials');
+      const iceServers = Array.isArray(result?.iceServers) ? result.iceServers : [];
+      if (iceServers.length) {
+        turnCredentialCache.current = {
+          iceServers,
+          expiresAt: Date.now() + 4 * 60 * 1000
+        };
+        return buildRtcConfig(iceServers);
+      }
+    } catch (error) {
+      console.warn('Could not load dynamic TURN credentials; using fallback TURN settings.', error);
+    }
+
+    return buildRtcConfig();
+  }
+
   async function createPeer(type, peerId, preserveIce = false) {
     const queuedIce = preserveIce ? [...pendingIce.current] : [];
     cleanupPeer();
@@ -1914,7 +1938,7 @@ export default function App() {
     callPeer.current = peerId;
     const startAudioOnly = type === 'video';
 
-    const p = new RTCPeerConnection(buildRtcConfig());
+    const p = new RTCPeerConnection(await loadRtcConfig());
     pc.current = p;
 
     const stream = await navigator.mediaDevices.getUserMedia({
@@ -1938,6 +1962,9 @@ export default function App() {
     p.ontrack = e => {
       const rs = e.streams[0];
       remoteStream.current = rs;
+      if (rs?.getVideoTracks?.().length) {
+        setCall(current => ({ ...current, type: 'video', videoCapable: true }));
+      }
       attachCallMedia();
     };
 
@@ -2009,20 +2036,22 @@ export default function App() {
   async function startCall(type, contactOverride = null) {
     const callContact = contactOverride || active;
     if (!callContact) return;
+    const videoIntent = type === 'video';
     setCallError('');
     clearTimeout(callTimeout.current);
 
     setCall({
       active: true,
       minimized: false,
-      type,
-      title: (type === 'video' ? 'Video' : 'Voice') + ' call with ' + callContact.username,
+      type: videoIntent ? 'audio' : type,
+      videoCapable: videoIntent,
+      title: (videoIntent ? 'Video' : 'Voice') + ' call with ' + callContact.username,
       status: 'Calling...',
       seconds: 0
     });
 
     try {
-      const p = await createPeer(type, callContact.id);
+      const p = await createPeer('audio', callContact.id);
       const offer = await p.createOffer();
 
       await p.setLocalDescription(offer);
@@ -2030,7 +2059,8 @@ export default function App() {
       const ack = await emitWithAck(getSocket(), 'call:offer', {
         recipientId: callContact.id,
         offer,
-        callType: type,
+        callType: 'audio',
+        videoIntent,
         network: callNetworkInfo()
       });
 
@@ -2046,7 +2076,7 @@ export default function App() {
       }, 70000);
     } catch (e) {
       endCall(true);
-      setCallError(mediaErrorMessage(e, type));
+      setCallError(mediaErrorMessage(e, videoIntent ? 'video' : type));
     }
   }
 
@@ -2058,18 +2088,20 @@ export default function App() {
     setIncoming(null);
     setRecoveryCode('');
     clearTimeout(callTimeout.current);
+    const videoIntent = Boolean(d.videoIntent);
 
     setCall({
       active: true,
       minimized: false,
-      type: d.callType,
-      title: (d.callType === 'video' ? 'Video' : 'Voice') + ' call with ' + d.callerName,
+      type: videoIntent ? 'audio' : d.callType,
+      videoCapable: videoIntent,
+      title: (videoIntent ? 'Video' : 'Voice') + ' call with ' + d.callerName,
       status: 'Connecting...',
       seconds: 0
     });
 
     try {
-      const p = await createPeer(d.callType, d.callerId, true);
+      const p = await createPeer('audio', d.callerId, true);
 
       await p.setRemoteDescription(new RTCSessionDescription(d.offer));
       await flushPendingIce();
@@ -2096,7 +2128,7 @@ export default function App() {
       }, 70000);
     } catch (e) {
       endCall(true);
-      setCallError(mediaErrorMessage(e, d.callType));
+      setCallError(mediaErrorMessage(e, videoIntent ? 'video' : d.callType));
     }
   }
 
@@ -2224,6 +2256,7 @@ export default function App() {
       active: false,
       minimized: false,
       type: 'audio',
+      videoCapable: false,
       title: '',
       status: '',
       seconds: 0
@@ -2273,6 +2306,7 @@ export default function App() {
     localStream.current.addTrack(track);
     pc.current.addTrack(track, localStream.current);
     setCamOn(true);
+    setCall(current => ({ ...current, type: 'video', videoCapable: true }));
     attachCallMedia();
     await tuneMobileVideoSender(pc.current);
     await renegotiateCall('Starting camera...');
@@ -2289,6 +2323,7 @@ export default function App() {
       .filter(sender => sender.track?.kind === 'video')
       .forEach(sender => pc.current.removeTrack(sender));
     setCamOn(false);
+    setCall(current => ({ ...current, type: current.videoCapable ? 'audio' : current.type }));
     attachCallMedia();
     await renegotiateCall('Camera off');
   }
@@ -2333,6 +2368,7 @@ export default function App() {
     return item.direction === callFilter;
   });
   const callContactName = call.title.split(' with ').pop() || call.title;
+  const callCanUseVideo = call.type === 'video' || call.videoCapable;
   const visibleContacts = contacts.filter(user => {
     if (Boolean(user.chat?.archived) !== showArchived) return false;
     if (chatListFilter === 'unread') return Number(user.chat?.unreadCount || 0) > 0;
@@ -2908,11 +2944,11 @@ export default function App() {
               {micOn ? <Mic /> : <MicOff />}
             </button>
 
-            {call.type === 'video' && (
+            {callCanUseVideo && (
               <button
                 className={camOn ? '' : 'off'}
                 onClick={toggleCamera}
-                title={camOn ? 'Turn camera off' : 'Turn camera on'}
+                title={camOn ? 'Turn camera off' : 'Turn camera on after call connects'}
               >
                 {camOn ? <Video /> : <VideoOff />}
               </button>

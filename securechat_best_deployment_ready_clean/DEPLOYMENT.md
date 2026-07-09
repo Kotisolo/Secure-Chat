@@ -31,6 +31,9 @@ CLIENT_ORIGIN=https://your-vercel-domain.vercel.app
 NODE_ENV=production
 # Optional now, required when running more than one backend instance:
 REDIS_URL=your_private_redis_connection_string
+# Recommended for reliable TURN credentials. Keep this on Render only:
+METERED_DOMAIN=securechat-koti.metered.live
+METERED_API_KEY=your_metered_turn_api_key
 ```
 
 Health check: `/api/health`
@@ -50,6 +53,10 @@ VITE_ICE_TRANSPORT_POLICY=all
 ```
 
 Redeploy after changing any `VITE_` variable.
+
+Preferred TURN setup: add `METERED_DOMAIN` and `METERED_API_KEY` to Render. The
+backend exposes `/api/turn/credentials` to logged-in users and fetches temporary
+Metered TURN credentials securely. Do not put the Metered API key in Vercel.
 
 `VITE_TURN_URLS` must contain only `turn:` or `turns:` URLs. Do not paste the
 Metered dashboard page URL.
