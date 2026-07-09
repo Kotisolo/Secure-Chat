@@ -1,4 +1,6 @@
-export const API_URL=import.meta.env.VITE_API_URL||'http://localhost:8080';
+const PRODUCTION_API_URL='https://securechat-api-uogx.onrender.com';
+const isLocalHost=typeof window!=='undefined'&&['localhost','127.0.0.1'].includes(window.location.hostname);
+export const API_URL=import.meta.env.VITE_API_URL||(isLocalHost?'http://localhost:8080':PRODUCTION_API_URL);
 export const resolveFileUrl=value=>!value?'':/^(https?:|data:|blob:)/i.test(value)?value:API_URL+value;
 export const getToken=()=>localStorage.getItem('sc_token');
 export const getStoredUser=()=>{try{return JSON.parse(localStorage.getItem('sc_user')||'null')}catch{return null}};
