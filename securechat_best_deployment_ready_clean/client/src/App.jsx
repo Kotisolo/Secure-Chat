@@ -58,9 +58,9 @@ const staticTurnIceServers = hasTurnServer
 const buildRtcConfig = (dynamicIceServers = []) => ({
   iceServers: [
     { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
-    ...(Array.isArray(dynamicIceServers) && dynamicIceServers.length ? dynamicIceServers : staticTurnIceServers)
+    ...iceServersForNetwork(Array.isArray(dynamicIceServers) && dynamicIceServers.length ? dynamicIceServers : staticTurnIceServers)
   ],
-  iceCandidatePoolSize: 10,
+  iceCandidatePoolSize: isLowDataNetwork() ? 2 : 10,
   iceTransportPolicy: 'all'
 });
 const lowDataNetworkTypes = new Set(['slow-2g', '2g', '3g']);
@@ -71,6 +71,22 @@ const isLowDataNetwork = () => {
     connection?.type === 'cellular' ||
     lowDataNetworkTypes.has(String(connection?.effectiveType || '').toLowerCase())
   );
+};
+const isTcpOrTlsTurnUrl = url => /^(stun):/i.test(url) ||
+  (/^turns:/i.test(url)) ||
+  (/^turn:/i.test(url) && /transport=tcp/i.test(url)) ||
+  (/^turn:[^?]+:443($|\?)/i.test(url));
+const iceServersForNetwork = servers => {
+  if (!isLowDataNetwork()) return servers;
+  return servers
+    .map(server => {
+      if (!server?.urls) return null;
+      const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+      const safeUrls = urls.filter(url => isTcpOrTlsTurnUrl(String(url)));
+      if (!safeUrls.length) return null;
+      return { ...server, urls: Array.isArray(server.urls) ? safeUrls : safeUrls[0] };
+    })
+    .filter(Boolean);
 };
 const standardVideoCallConstraints = {
   width: { ideal: 426, max: 640 },
