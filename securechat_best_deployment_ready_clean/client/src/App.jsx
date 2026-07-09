@@ -327,9 +327,15 @@ export default function App() {
   }, [speakerMuted, speakerVolume, call.active]);
 
   useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
+    if (!('serviceWorker' in navigator)) return;
+
+    navigator.serviceWorker.getRegistrations?.()
+      .then(registrations => registrations.forEach(registration => registration.unregister()))
+      .catch(() => {});
+
+    window.caches?.keys?.()
+      .then(keys => Promise.all(keys.map(key => window.caches.delete(key))))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
