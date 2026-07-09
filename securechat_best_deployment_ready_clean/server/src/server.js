@@ -11,10 +11,14 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { Pool } = require('pg');
+const { createAdapter } = require('@socket.io/redis-adapter');
+const Redis = require('ioredis');
 
 const PORT = process.env.PORT || 8080;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const JWT_SECRET = process.env.JWT_SECRET || (IS_PRODUCTION ? '' : 'local-development-secret-change-me-12345');
+const REDIS_URL = process.env.REDIS_URL || '';
+const ONLINE_TTL_SECONDS = 180;
 const CLIENT_ORIGINS = (
   process.env.CLIENT_ORIGIN ||
   process.env.CLIENT_URL ||
@@ -93,6 +97,64 @@ const io = new Server(server, {
   maxHttpBufferSize: 25e6
 });
 
+let redisPresence = null;
+
+function onlineKey(userId) {
+  return `securechat:online:${String(userId)}`;
+}
+
+async function setupRealtimeScaling() {
+  if (!REDIS_URL) {
+    console.log('Socket.IO Redis adapter disabled: REDIS_URL is not configured.');
+    return;
+  }
+
+  const pubClient = new Redis(REDIS_URL, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false
+  });
+  const subClient = pubClient.duplicate();
+  redisPresence = pubClient.duplicate();
+
+  pubClient.on('error', error => console.error('Redis pub error', error.message));
+  subClient.on('error', error => console.error('Redis sub error', error.message));
+  redisPresence.on('error', error => console.error('Redis presence error', error.message));
+
+  await Promise.all([
+    new Promise((resolve, reject) => pubClient.once('ready', resolve).once('error', reject)),
+    new Promise((resolve, reject) => subClient.once('ready', resolve).once('error', reject)),
+    new Promise((resolve, reject) => redisPresence.once('ready', resolve).once('error', reject))
+  ]);
+
+  io.adapter(createAdapter(pubClient, subClient));
+  console.log('Socket.IO Redis adapter enabled.');
+}
+
+async function markUserOnline(userId, socketId) {
+  if (!redisPresence) return;
+  const key = onlineKey(userId);
+  await redisPresence.sadd(key, socketId).catch(error => console.error('presence add', error.message));
+  await redisPresence.expire(key, ONLINE_TTL_SECONDS).catch(() => {});
+}
+
+async function markUserOffline(userId, socketId) {
+  if (!redisPresence) return;
+  const key = onlineKey(userId);
+  await redisPresence.srem(key, socketId).catch(error => console.error('presence remove', error.message));
+  const remaining = await redisPresence.scard(key).catch(() => 0);
+  if (!remaining) await redisPresence.del(key).catch(() => {});
+}
+
+async function refreshOnlinePresence() {
+  if (!redisPresence) return;
+  const tasks = [];
+  for (const [userId, socketIds] of online.entries()) {
+    if (!socketIds?.size) continue;
+    tasks.push(redisPresence.expire(onlineKey(userId), ONLINE_TTL_SECONDS));
+  }
+  await Promise.all(tasks).catch(error => console.error('presence refresh', error.message));
+}
+
 function clean(v) {
   return typeof v === 'string' ? v.trim().replace(/[<>]/g, '') : '';
 }
@@ -103,6 +165,13 @@ function generateRecoveryCode() {
 
 function isOnline(userId) {
   return (online.get(String(userId))?.size || 0) > 0;
+}
+
+async function isUserOnline(userId) {
+  if (isOnline(userId)) return true;
+  if (!redisPresence) return false;
+  const count = await redisPresence.scard(onlineKey(userId)).catch(() => 0);
+  return count > 0;
 }
 
 function userRoom(userId) {
@@ -119,6 +188,24 @@ function groupCallRoom(groupId) {
 
 function validUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value));
+}
+
+function callNetworkSummary(network = {}) {
+  return {
+    type: clean(network.type || 'unknown').slice(0, 24),
+    effectiveType: clean(network.effectiveType || 'unknown').slice(0, 24),
+    saveData: Boolean(network.saveData),
+    downlink: typeof network.downlink === 'number' ? network.downlink : null,
+    rtt: typeof network.rtt === 'number' ? network.rtt : null
+  };
+}
+
+function logCallEvent(event, details = {}) {
+  console.log(JSON.stringify({
+    event,
+    at: new Date().toISOString(),
+    ...details
+  }));
 }
 
 function rateLimit({ windowMs, max }) {
@@ -1513,6 +1600,7 @@ io.on('connection', async socket => {
   const sockets = online.get(userId) || new Set();
   sockets.add(socket.id);
   online.set(userId, sockets);
+  await markUserOnline(userId, socket.id);
   socket.join(userRoom(userId));
   const groupRooms = await pool.query('SELECT group_id FROM group_members WHERE user_id=$1', [userId]).catch(() => ({ rows: [] }));
   groupRooms.rows.forEach(row => socket.join(groupRoom(row.group_id)));
@@ -1553,7 +1641,7 @@ io.on('connection', async socket => {
     });
   });
 
-  socket.on('call:offer', async ({ recipientId, offer, callType } = {}, callback) => {
+  socket.on('call:offer', async ({ recipientId, offer, callType, network } = {}, callback) => {
     const reply = typeof callback === 'function' ? callback : () => {};
     if (!validUuid(recipientId) || !offer || !['audio', 'video'].includes(callType)) {
       return reply({ ok: false, message: 'Invalid call request.' });
@@ -1572,7 +1660,14 @@ io.on('connection', async socket => {
       socket.emit('call:unavailable');
       return reply({ ok: false, message: 'This user is not accepting unknown calls.' });
     }
-    const available = isOnline(recipientId);
+    const available = await isUserOnline(recipientId);
+    logCallEvent('call.offer', {
+      callerId: userId,
+      recipientId,
+      callType,
+      recipientOnline: available,
+      network: callNetworkSummary(network)
+    });
     await pool.query(
       `INSERT INTO call_history(caller_id,recipient_id,call_type,status,ended_at)
        VALUES($1,$2,$3,$4,$5)`,
@@ -1592,7 +1687,7 @@ io.on('connection', async socket => {
     return reply({ ok: true });
   });
 
-  socket.on('call:answer', async ({ callerId, answer } = {}, callback) => {
+  socket.on('call:answer', async ({ callerId, answer, network } = {}, callback) => {
     const reply = typeof callback === 'function' ? callback : () => {};
     if (!validUuid(callerId) || !answer) return reply({ ok: false, message: 'Invalid call answer.' });
     await pool.query(
@@ -1600,7 +1695,14 @@ io.on('connection', async socket => {
        WHERE id=(SELECT id FROM call_history WHERE caller_id=$1 AND recipient_id=$2 AND status='ringing' ORDER BY started_at DESC LIMIT 1)`,
       [callerId, userId]
     ).catch(() => {});
-    if (!isOnline(callerId)) return reply({ ok: false, message: 'Caller is no longer online.' });
+    const callerOnline = await isUserOnline(callerId);
+    logCallEvent('call.answer', {
+      callerId,
+      recipientId: userId,
+      callerOnline,
+      network: callNetworkSummary(network)
+    });
+    if (!callerOnline) return reply({ ok: false, message: 'Caller is no longer online.' });
     io.to(userRoom(callerId)).emit('call:answer', { answer, peerId: userId });
     return reply({ ok: true });
   });
@@ -1610,18 +1712,20 @@ io.on('connection', async socket => {
     io.to(userRoom(recipientId)).emit('call:ice-candidate', { candidate, peerId: userId });
   });
 
-  socket.on('call:renegotiate-offer', ({ recipientId, offer } = {}, callback) => {
+  socket.on('call:renegotiate-offer', async ({ recipientId, offer } = {}, callback) => {
     const reply = typeof callback === 'function' ? callback : () => {};
     if (!validUuid(recipientId) || !offer) return reply({ ok: false, message: 'Invalid call update.' });
-    if (!isOnline(recipientId)) return reply({ ok: false, message: 'User is no longer online.' });
+    if (!(await isUserOnline(recipientId))) return reply({ ok: false, message: 'User is no longer online.' });
+    logCallEvent('call.renegotiate_offer', { fromUserId: userId, recipientId });
     io.to(userRoom(recipientId)).emit('call:renegotiate-offer', { offer, peerId: userId });
     return reply({ ok: true });
   });
 
-  socket.on('call:renegotiate-answer', ({ recipientId, answer } = {}, callback) => {
+  socket.on('call:renegotiate-answer', async ({ recipientId, answer } = {}, callback) => {
     const reply = typeof callback === 'function' ? callback : () => {};
     if (!validUuid(recipientId) || !answer) return reply({ ok: false, message: 'Invalid call update answer.' });
-    if (!isOnline(recipientId)) return reply({ ok: false, message: 'User is no longer online.' });
+    if (!(await isUserOnline(recipientId))) return reply({ ok: false, message: 'User is no longer online.' });
+    logCallEvent('call.renegotiate_answer', { fromUserId: userId, recipientId });
     io.to(userRoom(recipientId)).emit('call:renegotiate-answer', { answer, peerId: userId });
     return reply({ ok: true });
   });
@@ -1698,6 +1802,7 @@ io.on('connection', async socket => {
     }
     const current = online.get(userId);
     current?.delete(socket.id);
+    await markUserOffline(userId, socket.id);
 
     if (!current?.size) {
       online.delete(userId);
@@ -1723,6 +1828,10 @@ async function deliverScheduledMessages() {
 }
 
 init()
+  .then(() => setupRealtimeScaling().catch(error => {
+    redisPresence = null;
+    console.error('Socket.IO Redis adapter disabled:', error.message);
+  }))
   .then(() => {
     server.listen(PORT, () => {
       console.log('SecureChat server running on ' + PORT);
@@ -1730,6 +1839,7 @@ init()
     setInterval(() => deliverScheduledMessages().catch(error => {
       console.error('scheduled delivery', error.message);
     }), 15000);
+    setInterval(() => refreshOnlinePresence(), 60000);
   })
   .catch(e => {
     console.error('DB init failed', e);

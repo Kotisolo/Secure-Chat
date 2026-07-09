@@ -29,6 +29,8 @@ DATABASE_URL=your_neon_pooled_connection_string
 JWT_SECRET=a_random_secret_at_least_32_characters
 CLIENT_ORIGIN=https://your-vercel-domain.vercel.app
 NODE_ENV=production
+# Optional now, required when running more than one backend instance:
+REDIS_URL=your_private_redis_connection_string
 ```
 
 Health check: `/api/health`
@@ -62,5 +64,8 @@ available.
 
 - Render's local filesystem is temporary. Move uploads to Cloudinary, S3, or another persistent object-storage service before relying on attachments.
 - A TURN service is required for reliable voice/video calls across mobile and restricted networks.
+- `REDIS_URL` enables the Socket.IO Redis adapter and shared online presence for calls. Use it before scaling the backend to multiple instances.
+- When traffic grows, keep Socket.IO signaling on always-on backend instances and use Redis so call offers, answers, ICE candidates, and online status reach users connected to different instances.
+- For large public video traffic, add an SFU/media provider such as LiveKit, Metered SFU, Agora, Daily, or Twilio. Keep Socket.IO for signaling and app events; let the SFU carry heavy voice/video media.
 - Password recovery uses one-time recovery codes without SMS cost. Users must save their code securely.
 - Store secrets only in Render, Neon, and Vercel environment settings. Never commit `.env` files.

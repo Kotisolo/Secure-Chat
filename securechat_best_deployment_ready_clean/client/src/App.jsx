@@ -88,6 +88,16 @@ const mobileDataVideoCallConstraints = {
 const videoConstraintsForNetwork = () => (
   isLowDataNetwork() ? mobileDataVideoCallConstraints : standardVideoCallConstraints
 );
+const callNetworkInfo = () => {
+  const connection = typeof navigator !== 'undefined' ? navigator.connection || navigator.mozConnection || navigator.webkitConnection : null;
+  return {
+    type: connection?.type || 'unknown',
+    effectiveType: connection?.effectiveType || 'unknown',
+    saveData: Boolean(connection?.saveData),
+    downlink: typeof connection?.downlink === 'number' ? connection.downlink : null,
+    rtt: typeof connection?.rtt === 'number' ? connection.rtt : null
+  };
+};
 const tuneMobileVideoSender = async (peer, lowData = isLowDataNetwork()) => {
   const sender = peer.getSenders?.().find(item => item.track?.kind === 'video');
   if (!sender?.getParameters || !sender?.setParameters) return;
@@ -2020,7 +2030,8 @@ export default function App() {
       const ack = await emitWithAck(getSocket(), 'call:offer', {
         recipientId: callContact.id,
         offer,
-        callType: type
+        callType: type,
+        network: callNetworkInfo()
       });
 
       if (ack && ack.ok === false) throw new Error(ack.message || 'Could not start the call.');
@@ -2069,7 +2080,8 @@ export default function App() {
 
       const ack = await emitWithAck(getSocket(), 'call:answer', {
         callerId: d.callerId,
-        answer
+        answer,
+        network: callNetworkInfo()
       });
 
       if (ack && ack.ok === false) throw new Error(ack.message || 'Could not answer the call.');
