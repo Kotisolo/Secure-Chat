@@ -607,6 +607,34 @@ export default function App() {
       setCall(p => ({ ...p, status: 'Connecting securely...' }));
     });
 
+    s.on('call:renegotiate-offer', async ({ offer, peerId }) => {
+      if (!pc.current || !offer || !peerId) return;
+      try {
+        callPeer.current = peerId;
+        await pc.current.setRemoteDescription(new RTCSessionDescription(offer));
+        await flushPendingIce();
+        const answer = await pc.current.createAnswer();
+        await pc.current.setLocalDescription(answer);
+        await emitWithAck(getSocket(), 'call:renegotiate-answer', {
+          recipientId: peerId,
+          answer
+        });
+        setCall(current => ({ ...current, status: 'Video updated' }));
+      } catch (error) {
+        console.warn('Could not accept call video update', error);
+      }
+    });
+
+    s.on('call:renegotiate-answer', async ({ answer }) => {
+      if (!pc.current || !answer) return;
+      try {
+        await pc.current.setRemoteDescription(new RTCSessionDescription(answer));
+        setCall(current => ({ ...current, status: 'Video updated' }));
+      } catch (error) {
+        console.warn('Could not finish call video update', error);
+      }
+    });
+
     s.on('call:ice-candidate', async ({ candidate }) => {
       if (!candidate) return;
 
@@ -1874,6 +1902,7 @@ export default function App() {
     if (preserveIce) pendingIce.current = queuedIce;
 
     callPeer.current = peerId;
+    const startAudioOnly = type === 'video';
 
     const p = new RTCPeerConnection(buildRtcConfig());
     pc.current = p;
@@ -1885,16 +1914,16 @@ export default function App() {
         autoGainControl: true,
         channelCount: 1
       },
-      video: type === 'video' ? videoConstraintsForNetwork() : false
+      video: startAudioOnly ? false : type === 'video' ? videoConstraintsForNetwork() : false
     });
 
     localStream.current = stream;
     setMicOn(true);
-    setCamOn(type === 'video');
+    setCamOn(type === 'video' && !startAudioOnly);
     attachCallMedia();
 
     stream.getTracks().forEach(tr => p.addTrack(tr, stream));
-    if (type === 'video') await tuneMobileVideoSender(p);
+    if (type === 'video' && !startAudioOnly) await tuneMobileVideoSender(p);
 
     p.ontrack = e => {
       const rs = e.streams[0];
@@ -1935,7 +1964,12 @@ export default function App() {
     p.onconnectionstatechange = () => {
       if (p.connectionState === 'connected') {
         clearTimeout(callTimeout.current);
-        setCall(c => ({ ...c, status: 'Connected' }));
+        setCall(c => ({
+          ...c,
+          status: c.type === 'video' && !(localStream.current?.getVideoTracks?.().length)
+            ? 'Connected - tap camera to start video'
+            : 'Connected'
+        }));
         startTimer();
       }
 
@@ -2197,16 +2231,68 @@ export default function App() {
     setMicOn(next);
   }
 
-  // Toggle camera on/off during a video call
-  function toggleCamera() {
-    const tracks = localStream.current?.getVideoTracks() || [];
-    if (!tracks.length) return;
-
-    const next = !camOn;
-    tracks.forEach(x => {
-      x.enabled = next;
+  async function renegotiateCall(status = 'Updating video...') {
+    if (!pc.current || !callPeer.current) return;
+    setCall(current => ({ ...current, status }));
+    const offer = await pc.current.createOffer();
+    await pc.current.setLocalDescription(offer);
+    const ack = await emitWithAck(getSocket(), 'call:renegotiate-offer', {
+      recipientId: callPeer.current,
+      offer
     });
-    setCamOn(next);
+    if (ack && ack.ok === false) throw new Error(ack.message || 'Could not update the call.');
+  }
+
+  async function startCameraInCall() {
+    if (!pc.current || !localStream.current) return;
+    const existing = localStream.current.getVideoTracks()[0];
+    if (existing) {
+      existing.enabled = true;
+      setCamOn(true);
+      return;
+    }
+
+    const cameraStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: videoConstraintsForNetwork()
+    });
+    const track = cameraStream.getVideoTracks()[0];
+    if (!track) throw new Error('Camera did not start.');
+    localStream.current.addTrack(track);
+    pc.current.addTrack(track, localStream.current);
+    setCamOn(true);
+    attachCallMedia();
+    await tuneMobileVideoSender(pc.current);
+    await renegotiateCall('Starting camera...');
+  }
+
+  async function stopCameraInCall() {
+    if (!pc.current || !localStream.current) return;
+    const tracks = localStream.current.getVideoTracks();
+    tracks.forEach(track => {
+      track.stop();
+      localStream.current.removeTrack(track);
+    });
+    pc.current.getSenders?.()
+      .filter(sender => sender.track?.kind === 'video')
+      .forEach(sender => pc.current.removeTrack(sender));
+    setCamOn(false);
+    attachCallMedia();
+    await renegotiateCall('Camera off');
+  }
+
+  // Toggle camera on/off during a video call
+  async function toggleCamera() {
+    const tracks = localStream.current?.getVideoTracks() || [];
+    try {
+      if (!tracks.length || !camOn) {
+        await startCameraInCall();
+      } else {
+        await stopCameraInCall();
+      }
+    } catch (error) {
+      setCallError(mediaErrorMessage(error, 'video'));
+    }
   }
 
   function logout() {

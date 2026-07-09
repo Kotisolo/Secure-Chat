@@ -1610,6 +1610,22 @@ io.on('connection', async socket => {
     io.to(userRoom(recipientId)).emit('call:ice-candidate', { candidate, peerId: userId });
   });
 
+  socket.on('call:renegotiate-offer', ({ recipientId, offer } = {}, callback) => {
+    const reply = typeof callback === 'function' ? callback : () => {};
+    if (!validUuid(recipientId) || !offer) return reply({ ok: false, message: 'Invalid call update.' });
+    if (!isOnline(recipientId)) return reply({ ok: false, message: 'User is no longer online.' });
+    io.to(userRoom(recipientId)).emit('call:renegotiate-offer', { offer, peerId: userId });
+    return reply({ ok: true });
+  });
+
+  socket.on('call:renegotiate-answer', ({ recipientId, answer } = {}, callback) => {
+    const reply = typeof callback === 'function' ? callback : () => {};
+    if (!validUuid(recipientId) || !answer) return reply({ ok: false, message: 'Invalid call update answer.' });
+    if (!isOnline(recipientId)) return reply({ ok: false, message: 'User is no longer online.' });
+    io.to(userRoom(recipientId)).emit('call:renegotiate-answer', { answer, peerId: userId });
+    return reply({ ok: true });
+  });
+
   socket.on('call:end', async ({ recipientId } = {}) => {
     if (!validUuid(recipientId)) return;
     await pool.query(
