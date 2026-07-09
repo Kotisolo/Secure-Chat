@@ -431,24 +431,34 @@ app.get('/api/turn/health', asyncRoute(async (req, res) => {
     });
   }
 
-  const result = await fetchMeteredTurnCredentials();
-  const iceServers = result.iceServers || [];
-  const urls = iceServers.flatMap(server => Array.isArray(server.urls) ? server.urls : [server.urls]).filter(Boolean);
-  const relayServers = iceServers.filter(server => {
-    const serverUrls = Array.isArray(server.urls) ? server.urls : [server.urls];
-    return serverUrls.some(url => /^turns?:/i.test(String(url)));
-  });
+  try {
+    const result = await fetchMeteredTurnCredentials();
+    const iceServers = result.iceServers || [];
+    const urls = iceServers.flatMap(server => Array.isArray(server.urls) ? server.urls : [server.urls]).filter(Boolean);
+    const relayServers = iceServers.filter(server => {
+      const serverUrls = Array.isArray(server.urls) ? server.urls : [server.urls];
+      return serverUrls.some(url => /^turns?:/i.test(String(url)));
+    });
 
-  res.json({
-    configured: true,
-    credentialFetchOk: true,
-    iceServerCount: iceServers.length,
-    relayUrlCount: urls.filter(url => /^turns?:/i.test(String(url))).length,
-    relayUrlsFound: urls.some(url => /^turns?:/i.test(String(url))),
-    relayWithCredentialsFound: relayServers.some(server => server.username && server.credential),
-    hasTlsRelay: urls.some(url => /^turns:/i.test(String(url)) || /transport=tcp/i.test(String(url))),
-    cacheSecondsRemaining: Math.max(0, Math.round((cachedTurnCredentialsUntil - Date.now()) / 1000))
-  });
+    return res.json({
+      configured: true,
+      credentialFetchOk: true,
+      iceServerCount: iceServers.length,
+      relayUrlCount: urls.filter(url => /^turns?:/i.test(String(url))).length,
+      relayUrlsFound: urls.some(url => /^turns?:/i.test(String(url))),
+      relayWithCredentialsFound: relayServers.some(server => server.username && server.credential),
+      hasTlsRelay: urls.some(url => /^turns:/i.test(String(url)) || /transport=tcp/i.test(String(url))),
+      cacheSecondsRemaining: Math.max(0, Math.round((cachedTurnCredentialsUntil - Date.now()) / 1000))
+    });
+  } catch (error) {
+    return res.json({
+      configured: true,
+      credentialFetchOk: false,
+      relayUrlsFound: false,
+      relayWithCredentialsFound: false,
+      reason: error.message
+    });
+  }
 }));
 
 app.post('/api/auth/register', authRateLimit, async (req, res) => {
