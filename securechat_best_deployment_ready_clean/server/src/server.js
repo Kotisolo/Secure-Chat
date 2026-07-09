@@ -230,6 +230,41 @@ function meteredTurnCredentialsUrl() {
   return `https://${host}/api/v1/turn/credentials?apiKey=${encodeURIComponent(METERED_API_KEY)}`;
 }
 
+async function fetchMeteredTurnCredentials() {
+  const url = meteredTurnCredentialsUrl();
+  if (!url) {
+    const error = new Error('TURN credentials are not configured.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  if (cachedTurnCredentials && cachedTurnCredentialsUntil > Date.now()) {
+    return cachedTurnCredentials;
+  }
+
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Metered TURN credentials request failed with ${response.status}`);
+  }
+
+  const iceServers = await response.json();
+  if (!Array.isArray(iceServers)) {
+    throw new Error('Metered TURN credentials response was not valid.');
+  }
+
+  const safeIceServers = iceServers
+    .filter(server => server && (typeof server.urls === 'string' || Array.isArray(server.urls)))
+    .map(server => ({
+      urls: server.urls,
+      ...(server.username ? { username: String(server.username) } : {}),
+      ...(server.credential ? { credential: String(server.credential) } : {})
+    }));
+
+  cachedTurnCredentials = { iceServers: safeIceServers };
+  cachedTurnCredentialsUntil = Date.now() + 5 * 60 * 1000;
+  return cachedTurnCredentials;
+}
+
 function rateLimit({ windowMs, max }) {
   const attempts = new Map();
 
@@ -382,34 +417,38 @@ app.get('/api/health', (req, res) => {
 });
 
 app.get('/api/turn/credentials', auth, asyncRoute(async (req, res) => {
-  const url = meteredTurnCredentialsUrl();
-  if (!url) return res.status(503).json({ error: 'TURN credentials are not configured.' });
+  res.json(await fetchMeteredTurnCredentials());
+}));
 
-  if (cachedTurnCredentials && cachedTurnCredentialsUntil > Date.now()) {
-    return res.json(cachedTurnCredentials);
+app.get('/api/turn/health', asyncRoute(async (req, res) => {
+  const configured = Boolean(meteredTurnCredentialsUrl());
+  if (!configured) {
+    return res.json({
+      configured: false,
+      credentialFetchOk: false,
+      relayUrlsFound: false,
+      relayWithCredentialsFound: false
+    });
   }
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Metered TURN credentials request failed with ${response.status}`);
-  }
+  const result = await fetchMeteredTurnCredentials();
+  const iceServers = result.iceServers || [];
+  const urls = iceServers.flatMap(server => Array.isArray(server.urls) ? server.urls : [server.urls]).filter(Boolean);
+  const relayServers = iceServers.filter(server => {
+    const serverUrls = Array.isArray(server.urls) ? server.urls : [server.urls];
+    return serverUrls.some(url => /^turns?:/i.test(String(url)));
+  });
 
-  const iceServers = await response.json();
-  if (!Array.isArray(iceServers)) {
-    throw new Error('Metered TURN credentials response was not valid.');
-  }
-
-  const safeIceServers = iceServers
-    .filter(server => server && (typeof server.urls === 'string' || Array.isArray(server.urls)))
-    .map(server => ({
-      urls: server.urls,
-      ...(server.username ? { username: String(server.username) } : {}),
-      ...(server.credential ? { credential: String(server.credential) } : {})
-    }));
-
-  cachedTurnCredentials = { iceServers: safeIceServers };
-  cachedTurnCredentialsUntil = Date.now() + 5 * 60 * 1000;
-  res.json(cachedTurnCredentials);
+  res.json({
+    configured: true,
+    credentialFetchOk: true,
+    iceServerCount: iceServers.length,
+    relayUrlCount: urls.filter(url => /^turns?:/i.test(String(url))).length,
+    relayUrlsFound: urls.some(url => /^turns?:/i.test(String(url))),
+    relayWithCredentialsFound: relayServers.some(server => server.username && server.credential),
+    hasTlsRelay: urls.some(url => /^turns:/i.test(String(url)) || /transport=tcp/i.test(String(url))),
+    cacheSecondsRemaining: Math.max(0, Math.round((cachedTurnCredentialsUntil - Date.now()) / 1000))
+  });
 }));
 
 app.post('/api/auth/register', authRateLimit, async (req, res) => {
