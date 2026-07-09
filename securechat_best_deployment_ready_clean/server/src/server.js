@@ -103,16 +103,26 @@ function onlineKey(userId) {
   return `securechat:online:${String(userId)}`;
 }
 
+function createRedisClient() {
+  const redisUrl = REDIS_URL.trim();
+  const needsTls = /^rediss:\/\//i.test(redisUrl) ||
+    /\.upstash\.io(?::\d+)?/i.test(redisUrl) ||
+    process.env.REDIS_TLS === 'true';
+
+  return new Redis(redisUrl, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    ...(needsTls ? { tls: {} } : {})
+  });
+}
+
 async function setupRealtimeScaling() {
   if (!REDIS_URL) {
     console.log('Socket.IO Redis adapter disabled: REDIS_URL is not configured.');
     return;
   }
 
-  const pubClient = new Redis(REDIS_URL, {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false
-  });
+  const pubClient = createRedisClient();
   const subClient = pubClient.duplicate();
   redisPresence = pubClient.duplicate();
 
