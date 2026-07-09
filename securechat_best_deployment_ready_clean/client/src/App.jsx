@@ -1952,7 +1952,6 @@ export default function App() {
     if (preserveIce) pendingIce.current = queuedIce;
 
     callPeer.current = peerId;
-    const startAudioOnly = type === 'video';
 
     const p = new RTCPeerConnection(await loadRtcConfig());
     pc.current = p;
@@ -1964,16 +1963,16 @@ export default function App() {
         autoGainControl: true,
         channelCount: 1
       },
-      video: startAudioOnly ? false : type === 'video' ? videoConstraintsForNetwork() : false
+      video: type === 'video' ? videoConstraintsForNetwork() : false
     });
 
     localStream.current = stream;
     setMicOn(true);
-    setCamOn(type === 'video' && !startAudioOnly);
+    setCamOn(type === 'video');
     attachCallMedia();
 
     stream.getTracks().forEach(tr => p.addTrack(tr, stream));
-    if (type === 'video' && !startAudioOnly) await tuneMobileVideoSender(p);
+    if (type === 'video') await tuneMobileVideoSender(p);
 
     p.ontrack = e => {
       const rs = e.streams[0];
@@ -2052,16 +2051,15 @@ export default function App() {
   async function startCall(type, contactOverride = null) {
     const callContact = contactOverride || active;
     if (!callContact) return;
-    const videoIntent = type === 'video';
     setCallError('');
     clearTimeout(callTimeout.current);
 
     setCall({
       active: true,
       minimized: false,
-      type: videoIntent ? 'audio' : type,
-      videoCapable: videoIntent,
-      title: (videoIntent ? 'Video' : 'Voice') + ' call with ' + callContact.username,
+      type,
+      videoCapable: type === 'video',
+      title: (type === 'video' ? 'Video' : 'Voice') + ' call with ' + callContact.username,
       status: 'Calling...',
       seconds: 0
     });
@@ -2075,8 +2073,8 @@ export default function App() {
       const ack = await emitWithAck(getSocket(), 'call:offer', {
         recipientId: callContact.id,
         offer,
-        callType: 'audio',
-        videoIntent,
+        callType: type,
+        videoIntent: type === 'video',
         network: callNetworkInfo()
       });
 
@@ -2092,7 +2090,7 @@ export default function App() {
       }, 70000);
     } catch (e) {
       endCall(true);
-      setCallError(mediaErrorMessage(e, videoIntent ? 'video' : type));
+      setCallError(mediaErrorMessage(e, type));
     }
   }
 
@@ -2104,14 +2102,14 @@ export default function App() {
     setIncoming(null);
     setRecoveryCode('');
     clearTimeout(callTimeout.current);
-    const videoIntent = Boolean(d.videoIntent);
+    const callType = d.videoIntent ? 'video' : d.callType;
 
     setCall({
       active: true,
       minimized: false,
-      type: videoIntent ? 'audio' : d.callType,
-      videoCapable: videoIntent,
-      title: (videoIntent ? 'Video' : 'Voice') + ' call with ' + d.callerName,
+      type: callType,
+      videoCapable: callType === 'video',
+      title: (callType === 'video' ? 'Video' : 'Voice') + ' call with ' + d.callerName,
       status: 'Connecting...',
       seconds: 0
     });
@@ -2144,7 +2142,7 @@ export default function App() {
       }, 70000);
     } catch (e) {
       endCall(true);
-      setCallError(mediaErrorMessage(e, videoIntent ? 'video' : d.callType));
+      setCallError(mediaErrorMessage(e, callType));
     }
   }
 
@@ -2914,11 +2912,11 @@ export default function App() {
           <Avatar user={{ username: incoming.callerName }} big />
           <div className="who">
             <b>{incoming.callerName}</b>
-            <small>Incoming {incoming.callType === 'video' ? 'video' : 'voice'} call...</small>
+            <small>Incoming {incoming.videoIntent || incoming.callType === 'video' ? 'video' : 'voice'} call...</small>
           </div>
           <div className="incomingBtns">
             <button className="accept" onClick={acceptCall}>
-              {incoming.callType === 'video' ? <Video /> : <Phone />}
+              {incoming.videoIntent || incoming.callType === 'video' ? <Video /> : <Phone />}
             </button>
             <button className="danger" onClick={declineCall}><PhoneOff /></button>
           </div>
