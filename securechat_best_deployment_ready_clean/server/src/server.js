@@ -21,6 +21,24 @@ const REDIS_URL = process.env.REDIS_URL || '';
 const METERED_API_KEY = process.env.METERED_API_KEY || '';
 const METERED_DOMAIN = process.env.METERED_DOMAIN || '';
 const METERED_TURN_API_URL = process.env.METERED_TURN_API_URL || process.env.METERED_TURN_CREDENTIALS_URL || '';
+const STATIC_TURN_URLS = (
+  process.env.TURN_URLS ||
+  process.env.VITE_TURN_URLS ||
+  ''
+)
+  .split(',')
+  .map(url => url.trim())
+  .filter(Boolean)
+  .filter(url => /^(turns?|stun):/i.test(url));
+const STATIC_TURN_USERNAME = process.env.TURN_USERNAME || process.env.VITE_TURN_USERNAME || '';
+const STATIC_TURN_CREDENTIAL = process.env.TURN_CREDENTIAL || process.env.VITE_TURN_CREDENTIAL || '';
+const DEFAULT_METERED_TURN_URLS = [
+  'stun:stun.relay.metered.ca:80',
+  'turn:standard.relay.metered.ca:80',
+  'turn:standard.relay.metered.ca:80?transport=tcp',
+  'turn:standard.relay.metered.ca:443',
+  'turns:standard.relay.metered.ca:443?transport=tcp'
+];
 const ONLINE_TTL_SECONDS = 180;
 const CLIENT_ORIGINS = (
   process.env.CLIENT_ORIGIN ||
@@ -230,9 +248,32 @@ function meteredTurnCredentialsUrl() {
   return `https://${host}/api/v1/turn/credentials?apiKey=${encodeURIComponent(METERED_API_KEY)}`;
 }
 
+function staticTurnCredentials() {
+  if (!STATIC_TURN_USERNAME || !STATIC_TURN_CREDENTIAL) return null;
+  const urls = STATIC_TURN_URLS.length ? STATIC_TURN_URLS : DEFAULT_METERED_TURN_URLS;
+  const iceServers = urls.map(url => ({
+    urls: url,
+    ...(/^(turns?):/i.test(url)
+      ? {
+          username: STATIC_TURN_USERNAME,
+          credential: STATIC_TURN_CREDENTIAL,
+          credentialType: 'password'
+        }
+      : {})
+  }));
+
+  return { iceServers };
+}
+
+function turnCredentialsConfigured() {
+  return Boolean(meteredTurnCredentialsUrl() || staticTurnCredentials());
+}
+
 async function fetchMeteredTurnCredentials() {
   const url = meteredTurnCredentialsUrl();
+  const fallback = staticTurnCredentials();
   if (!url) {
+    if (fallback) return fallback;
     const error = new Error('TURN credentials are not configured.');
     error.statusCode = 503;
     throw error;
@@ -242,9 +283,18 @@ async function fetchMeteredTurnCredentials() {
     return cachedTurnCredentials;
   }
 
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Metered TURN credentials request failed with ${response.status}`);
+  let response;
+  try {
+    response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Metered TURN credentials request failed with ${response.status}`);
+    }
+  } catch (error) {
+    if (fallback) {
+      console.warn(`Metered dynamic TURN failed; using static TURN fallback: ${error.message}`);
+      return fallback;
+    }
+    throw error;
   }
 
   const iceServers = await response.json();
@@ -411,7 +461,9 @@ app.get('/api/health', (req, res) => {
       redisConnected: Boolean(redisPresence && redisPresence.status === 'ready')
     },
     turn: {
-      meteredConfigured: Boolean(meteredTurnCredentialsUrl())
+      meteredConfigured: Boolean(meteredTurnCredentialsUrl()),
+      staticConfigured: Boolean(staticTurnCredentials()),
+      configured: turnCredentialsConfigured()
     }
   });
 });
@@ -421,7 +473,7 @@ app.get('/api/turn/credentials', auth, asyncRoute(async (req, res) => {
 }));
 
 app.get('/api/turn/health', asyncRoute(async (req, res) => {
-  const configured = Boolean(meteredTurnCredentialsUrl());
+  const configured = turnCredentialsConfigured();
   if (!configured) {
     return res.json({
       configured: false,
