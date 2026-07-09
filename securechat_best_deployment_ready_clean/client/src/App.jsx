@@ -327,6 +327,7 @@ export default function App() {
   const remoteVideo = useRef(null);
   const remoteAudio = useRef(null);
   const remoteStream = useRef(null);
+  const remoteAudioStream = useRef(null);
   const miniLocalVideo = useRef(null);
   const miniRemoteVideo = useRef(null);
   const miniDrag = useRef({ dragging: false, moved: false });
@@ -1975,9 +1976,20 @@ export default function App() {
     if (type === 'video') await tuneMobileVideoSender(p);
 
     p.ontrack = e => {
-      const rs = e.streams[0];
-      remoteStream.current = rs;
-      if (rs?.getVideoTracks?.().length) {
+      const incomingStream = e.streams?.[0];
+      const nextStream = remoteStream.current || new MediaStream();
+      const incomingTracks = incomingStream?.getTracks?.().length
+        ? incomingStream.getTracks()
+        : [e.track].filter(Boolean);
+
+      incomingTracks.forEach(track => {
+        if (!nextStream.getTracks().some(existing => existing.id === track.id)) {
+          nextStream.addTrack(track);
+        }
+      });
+
+      remoteStream.current = nextStream;
+      if (nextStream.getVideoTracks?.().length) {
         setCall(current => ({ ...current, type: 'video', videoCapable: true }));
       }
       attachCallMedia();
@@ -2179,6 +2191,7 @@ export default function App() {
     }
 
     remoteStream.current = null;
+    remoteAudioStream.current = null;
     if (localVideo.current) localVideo.current.srcObject = null;
     if (remoteVideo.current) remoteVideo.current.srcObject = null;
     if (miniLocalVideo.current) miniLocalVideo.current.srcObject = null;
@@ -2193,11 +2206,22 @@ export default function App() {
       element.play?.().catch(() => {});
     };
 
+    const audioTracks = remoteStream.current?.getAudioTracks?.() || [];
+    if (audioTracks.length) {
+      const currentTracks = remoteAudioStream.current?.getTracks?.() || [];
+      const sameTracks = currentTracks.length === audioTracks.length &&
+        currentTracks.every(track => audioTracks.some(nextTrack => nextTrack.id === track.id));
+
+      if (!sameTracks) {
+        remoteAudioStream.current = new MediaStream(audioTracks);
+      }
+    }
+
     attach(localVideo.current, localStream.current);
     attach(miniLocalVideo.current, localStream.current);
     attach(remoteVideo.current, remoteStream.current);
     attach(miniRemoteVideo.current, remoteStream.current);
-    attach(remoteAudio.current, remoteStream.current);
+    attach(remoteAudio.current, remoteAudioStream.current || remoteStream.current);
   }
 
   function miniCallStyle() {
