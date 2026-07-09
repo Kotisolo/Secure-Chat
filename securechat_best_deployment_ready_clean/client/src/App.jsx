@@ -23,11 +23,10 @@ const stickers = ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '👍'
 
 const defaultMeteredTurnUrls = [
   'stun:stun.relay.metered.ca:80',
-  'turn:global.relay.metered.ca:80',
-  'turn:global.relay.metered.ca:80?transport=tcp',
-  'turn:global.relay.metered.ca:443',
-  'turn:global.relay.metered.ca:443?transport=tcp',
-  'turns:global.relay.metered.ca:443?transport=tcp'
+  'turn:standard.relay.metered.ca:80',
+  'turn:standard.relay.metered.ca:80?transport=tcp',
+  'turn:standard.relay.metered.ca:443',
+  'turns:standard.relay.metered.ca:443?transport=tcp'
 ];
 const configuredTurnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '')
   .split(',')
@@ -36,10 +35,11 @@ const configuredTurnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.
   .filter(url => /^(turns?|stun):/i.test(url));
 const turnUsername = import.meta.env.VITE_TURN_USERNAME || '';
 const turnCredential = import.meta.env.VITE_TURN_CREDENTIAL || '';
+const meteredFallbackUrls = configuredTurnUrls.length ? [] : defaultMeteredTurnUrls;
 const turnUrls = [
   ...new Set([
     ...configuredTurnUrls,
-    ...(turnUsername && turnCredential ? defaultMeteredTurnUrls : [])
+    ...(turnUsername && turnCredential ? meteredFallbackUrls : [])
   ])
 ];
 const hasTurnServer = turnUrls.some(url => /^turns?:/i.test(url)) && Boolean(turnUsername && turnCredential);
