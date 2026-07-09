@@ -18,9 +18,9 @@ const PORT = process.env.PORT || 8080;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 const JWT_SECRET = process.env.JWT_SECRET || (IS_PRODUCTION ? '' : 'local-development-secret-change-me-12345');
 const REDIS_URL = process.env.REDIS_URL || '';
-const METERED_API_KEY = process.env.METERED_API_KEY || '';
-const METERED_DOMAIN = process.env.METERED_DOMAIN || '';
-const METERED_TURN_API_URL = process.env.METERED_TURN_API_URL || process.env.METERED_TURN_CREDENTIALS_URL || '';
+const METERED_API_KEY = (process.env.METERED_API_KEY || '').trim();
+const METERED_DOMAIN = (process.env.METERED_DOMAIN || '').trim();
+const METERED_TURN_API_URL = (process.env.METERED_TURN_API_URL || process.env.METERED_TURN_CREDENTIALS_URL || '').trim();
 const STATIC_TURN_URLS = (
   process.env.TURN_URLS ||
   process.env.VITE_TURN_URLS ||
@@ -30,8 +30,8 @@ const STATIC_TURN_URLS = (
   .map(url => url.trim())
   .filter(Boolean)
   .filter(url => /^(turns?|stun):/i.test(url));
-const STATIC_TURN_USERNAME = process.env.TURN_USERNAME || process.env.VITE_TURN_USERNAME || '';
-const STATIC_TURN_CREDENTIAL = process.env.TURN_CREDENTIAL || process.env.VITE_TURN_CREDENTIAL || '';
+const STATIC_TURN_USERNAME = (process.env.TURN_USERNAME || process.env.VITE_TURN_USERNAME || '').trim();
+const STATIC_TURN_CREDENTIAL = (process.env.TURN_CREDENTIAL || process.env.VITE_TURN_CREDENTIAL || '').trim();
 const DEFAULT_METERED_TURN_URLS = [
   'stun:stun.relay.metered.ca:80',
   'turn:standard.relay.metered.ca:80',
