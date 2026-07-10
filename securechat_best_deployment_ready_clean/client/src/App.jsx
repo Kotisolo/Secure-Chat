@@ -10,6 +10,7 @@ import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
+import { Room, RoomEvent, Track, createLocalAudioTrack, createLocalVideoTrack } from 'livekit-client';
 import QRCode from 'qrcode';
 import { BRAND } from './branding';
 import {
@@ -319,6 +320,8 @@ export default function App() {
   const [miniCallPosition, setMiniCallPosition] = useState(null);
 
   const pc = useRef(null);
+  const liveKitRoom = useRef(null);
+  const liveKitLocalTracks = useRef([]);
   const localStream = useRef(null);
   const callPeer = useRef(null);
   const timer = useRef(null);
@@ -629,6 +632,11 @@ export default function App() {
     });
 
     s.on('call:answer', async ({ answer }) => {
+      if (answer?.livekit) {
+        clearTimeout(callTimeout.current);
+        setCall(p => ({ ...p, status: 'Connecting media...' }));
+        return;
+      }
       if (!pc.current) return;
       clearTimeout(callTimeout.current);
       await pc.current.setRemoteDescription(new RTCSessionDescription(answer));
@@ -2077,14 +2085,11 @@ export default function App() {
     });
 
     try {
-      const p = await createPeer('audio', callContact.id);
-      const offer = await p.createOffer();
-
-      await p.setLocalDescription(offer);
+      await connectLiveKitCall(callContact.id, type);
 
       const ack = await emitWithAck(getSocket(), 'call:offer', {
         recipientId: callContact.id,
-        offer,
+        offer: { livekit: true },
         callType: type,
         videoIntent: type === 'video',
         network: callNetworkInfo()
@@ -2094,7 +2099,7 @@ export default function App() {
 
       setCall(current => ({ ...current, status: 'Ringing...' }));
       callTimeout.current = setTimeout(() => {
-        if (pc.current && pc.current.connectionState !== 'connected') {
+        if (!remoteStream.current?.getTracks?.().length && !liveKitRoom.current?.remoteParticipants?.size) {
           setCall(current => ({ ...current, status: 'Call did not connect.' }));
           setCallError('The call did not connect. Make sure both users are online, keep the app open on both phones, allow microphone/camera, and try again.');
           endCall(true);
@@ -2127,26 +2132,19 @@ export default function App() {
     });
 
     try {
-      const p = await createPeer('audio', d.callerId, true);
-
-      await p.setRemoteDescription(new RTCSessionDescription(d.offer));
-      await flushPendingIce();
-
-      const answer = await p.createAnswer();
-
-      await p.setLocalDescription(answer);
+      await connectLiveKitCall(d.callerId, callType);
 
       const ack = await emitWithAck(getSocket(), 'call:answer', {
         callerId: d.callerId,
-        answer,
+        answer: { livekit: true },
         network: callNetworkInfo()
       });
 
       if (ack && ack.ok === false) throw new Error(ack.message || 'Could not answer the call.');
 
-      setCall(current => ({ ...current, status: 'Connecting securely...' }));
+      setCall(current => ({ ...current, status: 'Connecting media...' }));
       callTimeout.current = setTimeout(() => {
-        if (pc.current && pc.current.connectionState !== 'connected') {
+        if (!remoteStream.current?.getTracks?.().length && !liveKitRoom.current?.remoteParticipants?.size) {
           setCall(current => ({ ...current, status: 'Network blocked the call.' }));
           setCallError('The call answer was sent, but the devices could not connect. Please try again with both users online and permissions allowed.');
           endCall(true);
@@ -2184,6 +2182,7 @@ export default function App() {
       pc.current.close();
       pc.current = null;
     }
+    void disconnectLiveKit();
 
     if (localStream.current) {
       localStream.current.getTracks().forEach(t => t.stop());
@@ -2222,6 +2221,93 @@ export default function App() {
     attach(remoteVideo.current, remoteStream.current);
     attach(miniRemoteVideo.current, remoteStream.current);
     attach(remoteAudio.current, remoteAudioStream.current || remoteStream.current);
+  }
+
+  async function disconnectLiveKit() {
+    liveKitLocalTracks.current.forEach(track => {
+      try { track.stop(); } catch {}
+    });
+    liveKitLocalTracks.current = [];
+    if (liveKitRoom.current) {
+      const room = liveKitRoom.current;
+      liveKitRoom.current = null;
+      try { room.disconnect(); } catch {}
+    }
+  }
+
+  function rebuildLiveKitStreams() {
+    const room = liveKitRoom.current;
+    if (!room) return;
+
+    const localTracks = liveKitLocalTracks.current.map(track => track.mediaStreamTrack).filter(Boolean);
+    localStream.current = localTracks.length ? new MediaStream(localTracks) : null;
+
+    const remoteTracks = [];
+    room.remoteParticipants.forEach(participant => {
+      participant.trackPublications.forEach(publication => {
+        const track = publication.track;
+        if (track?.mediaStreamTrack) remoteTracks.push(track.mediaStreamTrack);
+      });
+    });
+
+    remoteStream.current = remoteTracks.length ? new MediaStream(remoteTracks) : null;
+    remoteAudioStream.current = null;
+
+    if (remoteTracks.length || room.remoteParticipants.size) {
+      clearTimeout(callTimeout.current);
+      setCall(current => ({ ...current, status: 'Connected' }));
+      startTimer();
+    }
+
+    if (remoteStream.current?.getVideoTracks?.().length) {
+      setCall(current => ({ ...current, type: 'video', videoCapable: true }));
+    }
+
+    attachCallMedia();
+  }
+
+  async function connectLiveKitCall(peerId, type) {
+    await disconnectLiveKit();
+    callPeer.current = peerId;
+    const credentials = await api('/api/calls/livekit-token', {
+      method: 'POST',
+      body: JSON.stringify({ peerId })
+    });
+
+    const room = new Room({
+      adaptiveStream: true,
+      dynacast: true
+    });
+    liveKitRoom.current = room;
+
+    room
+      .on(RoomEvent.TrackSubscribed, rebuildLiveKitStreams)
+      .on(RoomEvent.TrackUnsubscribed, rebuildLiveKitStreams)
+      .on(RoomEvent.ParticipantConnected, rebuildLiveKitStreams)
+      .on(RoomEvent.ParticipantDisconnected, rebuildLiveKitStreams)
+      .on(RoomEvent.Disconnected, () => {
+        if (liveKitRoom.current === room) endCall(true);
+      });
+
+    await room.connect(credentials.url, credentials.token);
+
+    const audioTrack = await createLocalAudioTrack({
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true
+    });
+    liveKitLocalTracks.current = [audioTrack];
+    await room.localParticipant.publishTrack(audioTrack);
+
+    if (type === 'video') {
+      const videoTrack = await createLocalVideoTrack(videoConstraintsForNetwork());
+      liveKitLocalTracks.current.push(videoTrack);
+      await room.localParticipant.publishTrack(videoTrack);
+    }
+
+    setMicOn(true);
+    setCamOn(type === 'video');
+    rebuildLiveKitStreams();
   }
 
   function miniCallStyle() {
@@ -2311,6 +2397,12 @@ export default function App() {
     tracks.forEach(x => {
       x.enabled = next;
     });
+    liveKitLocalTracks.current
+      .filter(track => track.kind === Track.Kind.Audio)
+      .forEach(track => {
+        if (next) track.unmute?.();
+        else track.mute?.();
+      });
     setMicOn(next);
   }
 
@@ -2327,6 +2419,26 @@ export default function App() {
   }
 
   async function startCameraInCall() {
+    if (liveKitRoom.current) {
+      const existingLiveKitVideo = liveKitLocalTracks.current.find(track => track.kind === Track.Kind.Video);
+      if (existingLiveKitVideo) {
+        existingLiveKitVideo.mediaStreamTrack.enabled = true;
+        existingLiveKitVideo.unmute?.();
+        setCamOn(true);
+        setCall(current => ({ ...current, type: 'video', videoCapable: true }));
+        rebuildLiveKitStreams();
+        return;
+      }
+
+      const videoTrack = await createLocalVideoTrack(videoConstraintsForNetwork());
+      liveKitLocalTracks.current.push(videoTrack);
+      await liveKitRoom.current.localParticipant.publishTrack(videoTrack);
+      setCamOn(true);
+      setCall(current => ({ ...current, type: 'video', videoCapable: true }));
+      rebuildLiveKitStreams();
+      return;
+    }
+
     if (!pc.current || !localStream.current) return;
     const existing = localStream.current.getVideoTracks()[0];
     if (existing) {
@@ -2351,6 +2463,19 @@ export default function App() {
   }
 
   async function stopCameraInCall() {
+    if (liveKitRoom.current) {
+      const videoTracks = liveKitLocalTracks.current.filter(track => track.kind === Track.Kind.Video);
+      videoTracks.forEach(track => {
+        try { liveKitRoom.current.localParticipant.unpublishTrack(track); } catch {}
+        try { track.stop(); } catch {}
+      });
+      liveKitLocalTracks.current = liveKitLocalTracks.current.filter(track => track.kind !== Track.Kind.Video);
+      setCamOn(false);
+      setCall(current => ({ ...current, type: 'video', videoCapable: true }));
+      rebuildLiveKitStreams();
+      return;
+    }
+
     if (!pc.current || !localStream.current) return;
     const tracks = localStream.current.getVideoTracks();
     tracks.forEach(track => {

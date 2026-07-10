@@ -13,6 +13,7 @@ const multer = require('multer');
 const { Pool } = require('pg');
 const { createAdapter } = require('@socket.io/redis-adapter');
 const Redis = require('ioredis');
+const { AccessToken } = require('livekit-server-sdk');
 
 const PORT = process.env.PORT || 8080;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -21,6 +22,9 @@ const REDIS_URL = process.env.REDIS_URL || '';
 const METERED_API_KEY = (process.env.METERED_API_KEY || '').trim();
 const METERED_DOMAIN = (process.env.METERED_DOMAIN || '').trim();
 const METERED_TURN_API_URL = (process.env.METERED_TURN_API_URL || process.env.METERED_TURN_CREDENTIALS_URL || '').trim();
+const LIVEKIT_URL = (process.env.LIVEKIT_URL || '').trim();
+const LIVEKIT_API_KEY = (process.env.LIVEKIT_API_KEY || '').trim();
+const LIVEKIT_API_SECRET = (process.env.LIVEKIT_API_SECRET || '').trim();
 const STATIC_TURN_URLS = (
   process.env.TURN_URLS ||
   process.env.VITE_TURN_URLS ||
@@ -346,6 +350,39 @@ function cid(a, b) {
   return [String(a), String(b)].sort().join('-');
 }
 
+function callRoomName(a, b) {
+  return 'securechat-call-' + cid(a, b).replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+async function createLiveKitToken({ userId, username, peerId }) {
+  if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
+    const error = new Error('LiveKit is not configured.');
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const room = callRoomName(userId, peerId);
+  const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
+    identity: String(userId),
+    name: username || 'SecureChat user',
+    ttl: '2h'
+  });
+
+  token.addGrant({
+    room,
+    roomJoin: true,
+    canPublish: true,
+    canSubscribe: true,
+    canPublishData: true
+  });
+
+  return {
+    url: LIVEKIT_URL,
+    token: await token.toJwt(),
+    room
+  };
+}
+
 async function usersBlocked(a, b) {
   const result = await pool.query(
     `SELECT 1 FROM user_blocks
@@ -464,6 +501,9 @@ app.get('/api/health', (req, res) => {
       meteredConfigured: Boolean(meteredTurnCredentialsUrl()),
       staticConfigured: Boolean(staticTurnCredentials()),
       configured: turnCredentialsConfigured()
+    },
+    livekit: {
+      configured: Boolean(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET)
     }
   });
 });
@@ -1263,6 +1303,22 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) ||
         new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt))
   );
+}));
+
+app.post('/api/calls/livekit-token', auth, asyncRoute(async (req, res) => {
+  const peerId = clean(req.body.peerId || '');
+  if (!validUuid(peerId)) return res.status(400).json({ error: 'Invalid call user.' });
+  if (peerId === String(req.user.id)) return res.status(400).json({ error: 'You cannot call yourself.' });
+
+  const peer = await pool.query('SELECT id FROM users WHERE id=$1', [peerId]);
+  if (!peer.rows.length) return res.status(404).json({ error: 'Call user not found.' });
+  if (await usersBlocked(req.user.id, peerId)) return res.status(403).json({ error: 'This user cannot receive your call.' });
+
+  res.json(await createLiveKitToken({
+    userId: req.user.id,
+    username: req.user.username,
+    peerId
+  }));
 }));
 
 app.get('/api/calls', auth, asyncRoute(async (req, res) => {
