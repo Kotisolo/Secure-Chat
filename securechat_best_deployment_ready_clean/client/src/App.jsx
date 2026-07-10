@@ -4,7 +4,7 @@ import {
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
-  Shield, Ban, Flag, Users, Plus, Settings
+  Shield, Ban, Flag, Users, Plus, Settings, Eye, EyeOff
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
@@ -234,11 +234,16 @@ export default function App() {
     username: '',
     phone: '',
     password: '',
+    confirmPassword: '',
     twoStepPin: '',
     resetPhone: '',
     recoveryCode: '',
     resetPassword: ''
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const [termsAccepted, setTermsAccepted] = useState(true);
 
   const [me, setMe] = useState(storedUser && storedUser.id ? storedUser : null);
   const [ready, setReady] = useState(false);
@@ -414,6 +419,17 @@ export default function App() {
   async function register(e) {
     e.preventDefault();
     setErr('');
+
+    if (form.password !== form.confirmPassword) {
+      setErr('Passwords do not match.');
+      return;
+    }
+
+    if (!termsAccepted) {
+      setErr('Please agree to the Terms of Service and Privacy Policy.');
+      return;
+    }
+
     setAuthLoading(true);
 
     try {
@@ -2561,110 +2577,126 @@ export default function App() {
 
   if (screen !== 'app') {
     return (
-      <div className="auth">
-        <div className="card">
-          <div className="badge"><MessageCircle /></div>
-          <h1>{BRAND.name}</h1>
-          <p>{BRAND.tagline}</p>
+      <div className={`auth opalAuth ${screen === 'welcome' ? 'welcomeMode' : 'formMode'}`}>
+        <div className="opalPhoneShell">
+          <div className="opalStatusBar"><span>9:41</span><span>5G</span></div>
+          <div className="card opalCard">
+            <div className="opalLogo badge"><MessageCircle /></div>
 
-          {screen === 'welcome' ? (
-            <>
-              <div className="authFeatures">
-                <span><Languages /> AI-ready translation</span>
-                <span><Lock /> Secure messaging</span>
-                <span><Video /> Voice & video calls</span>
-              </div>
-              <button className="primary" onClick={() => setScreen('auth')}>
-                Get Started
-              </button>
-              <button className="ghostLogin" onClick={() => {
-                setScreen('auth');
-                setAuthMode('login');
-              }}>
-                Log In
-              </button>
-            </>
-          ) : (
-            <>
-              <div className="tabs">
-                <button type="button" className={authMode === 'login' ? 'on' : ''} onClick={() => setAuthMode('login')}>
-                  Login
+            {screen === 'welcome' ? (
+              <>
+                <h1><span>Chat</span> <em>Opal</em></h1>
+                <p className="opalTagline">Communicate without barriers.</p>
+                <small className="opalSubtag">Talk to anyone, in any language.</small>
+
+                <div className="authFeatures opalFeatureGrid">
+                  <span><Languages /> <b>AI Translation</b><small>Real-time translation in any language.</small></span>
+                  <span><Shield /> <b>Secure Messaging</b><small>Private chats with strong protection.</small></span>
+                  <span><Video /> <b>Voice & Video Calls</b><small>High quality calls with anyone.</small></span>
+                  <span><Settings /> <b>Smart Features</b><small>AI assistant, weather, and more.</small></span>
+                </div>
+
+                <button className="primary opalPrimary" onClick={() => {
+                  setScreen('auth');
+                  setAuthMode('login');
+                }}>
+                  Get Started
                 </button>
-                <button type="button" className={authMode === 'register' ? 'on' : ''} onClick={() => setAuthMode('register')}>
-                  Register
+                <button className="ghostLogin opalGhost" onClick={() => {
+                  setScreen('auth');
+                  setAuthMode('login');
+                }}>
+                  Log In
                 </button>
-              </div>
+              </>
+            ) : (
+              <>
+                <button type="button" className="authBack" onClick={() => {
+                  setScreen('welcome');
+                  setErr('');
+                }}>
+                  <ArrowLeft />
+                </button>
 
-              {err && <div className="err" role="alert">{err}</div>}
+                <div className="authHeading">
+                  <h1>{authMode === 'register' ? 'Create Account' : authMode === 'reset' ? 'Reset Password' : 'Welcome Back'}</h1>
+                  <p>{authMode === 'register' ? "Let's get you started!" : authMode === 'reset' ? 'Use your recovery code to set a new password.' : 'Glad to see you again!'}</p>
+                </div>
 
-              {authMode === 'login' && (
-                <form onSubmit={login}>
-                  <input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} />
-                  <input placeholder="Password" type="password" value={form.password} onChange={e => f('password', e.target.value)} />
-                  <input placeholder="6-digit PIN (if enabled)" inputMode="numeric" maxLength="6" value={form.twoStepPin} onChange={e => f('twoStepPin', e.target.value.replace(/\D/g, ''))} />
-                  <button className="primary" disabled={authLoading}>
-                    {authLoading ? 'Signing in…' : 'Login'}
-                  </button>
-                  <button type="button" className="link" onClick={() => {
-                    setErr('');
-                    setAuthMode('reset');
-                  }}>
-                    Forgot password?
-                  </button>
-                </form>
-              )}
+                {authMode !== 'reset' && (
+                  <div className="tabs opalTabs">
+                    <button type="button" className={authMode === 'login' ? 'on' : ''} onClick={() => setAuthMode('login')}>
+                      Login
+                    </button>
+                    <button type="button" className={authMode === 'register' ? 'on' : ''} onClick={() => setAuthMode('register')}>
+                      Register
+                    </button>
+                  </div>
+                )}
 
-              {authMode === 'reset' && (
-                <form onSubmit={resetPassword}>
-                  <input
-                    placeholder="Registered phone number"
-                    value={form.resetPhone}
-                    onChange={e => f('resetPhone', e.target.value)}
-                    required
-                  />
-                  <input
-                    placeholder="Recovery code"
-                    value={form.recoveryCode}
-                    onChange={e => f('recoveryCode', e.target.value.toUpperCase())}
-                    required
-                  />
-                  <input
-                    placeholder="New password"
-                    type="password"
-                    value={form.resetPassword}
-                    onChange={e => f('resetPassword', e.target.value)}
-                    minLength={8}
-                    required
-                  />
-                  <button className="primary" disabled={authLoading}>
-                    {authLoading ? 'Changing password…' : 'Reset Password'}
-                  </button>
-                  <button type="button" className="link" onClick={() => {
-                    setErr('');
-                    setAuthMode('login');
-                  }}>
-                    Back to login
-                  </button>
-                </form>
-              )}
+                {err && <div className="err" role="alert">{err}</div>}
 
-              {authMode === 'register' && (
-                <form onSubmit={register}>
-                  <input placeholder="Full name" value={form.username} onChange={e => f('username', e.target.value)} />
-                  <input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} />
-                  <input placeholder="Password" type="password" value={form.password} onChange={e => f('password', e.target.value)} />
-                  <button className="primary" disabled={authLoading}>
-                    {authLoading ? 'Creating account…' : 'Create Account'}
-                  </button>
-                </form>
-              )}
-            </>
-          )}
+                {authMode === 'login' && (
+                  <form onSubmit={login} className="opalForm">
+                    <label className="opalInput"><Phone /><input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} /></label>
+                    <label className="opalInput"><Lock /><input placeholder="Password" type={showPassword ? 'text' : 'password'} value={form.password} onChange={e => f('password', e.target.value)} /><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></label>
+                    <label className="opalInput"><KeyRound /><input placeholder="6-digit PIN (if enabled)" inputMode="numeric" maxLength="6" value={form.twoStepPin} onChange={e => f('twoStepPin', e.target.value.replace(/\D/g, ''))} /></label>
+                    <div className="authOptions">
+                      <label><input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me</label>
+                      <button type="button" className="link" onClick={() => {
+                        setErr('');
+                        setAuthMode('reset');
+                      }}>
+                        Forgot password?
+                      </button>
+                    </div>
+                    <button className="primary opalPrimary" disabled={authLoading}>
+                      {authLoading ? 'Signing in...' : 'Log In'}
+                    </button>
+                    <div className="socialDivider"><span />or continue with<span /></div>
+                    <div className="socialLoginRow">
+                      <button type="button"><b>G</b> Google</button>
+                      <button type="button"><b>A</b> Apple</button>
+                    </div>
+                    <p className="authSwitch">Don't have an account? <button type="button" onClick={() => setAuthMode('register')}>Register</button></p>
+                  </form>
+                )}
+
+                {authMode === 'reset' && (
+                  <form onSubmit={resetPassword} className="opalForm">
+                    <label className="opalInput"><Phone /><input placeholder="Registered phone number" value={form.resetPhone} onChange={e => f('resetPhone', e.target.value)} required /></label>
+                    <label className="opalInput"><KeyRound /><input placeholder="Recovery code" value={form.recoveryCode} onChange={e => f('recoveryCode', e.target.value.toUpperCase())} required /></label>
+                    <label className="opalInput"><Lock /><input placeholder="New password" type={showPassword ? 'text' : 'password'} value={form.resetPassword} onChange={e => f('resetPassword', e.target.value)} minLength={8} required /><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></label>
+                    <button className="primary opalPrimary" disabled={authLoading}>
+                      {authLoading ? 'Changing password...' : 'Reset Password'}
+                    </button>
+                    <p className="authSwitch">Remembered it? <button type="button" onClick={() => {
+                      setErr('');
+                      setAuthMode('login');
+                    }}>Back to login</button></p>
+                  </form>
+                )}
+
+                {authMode === 'register' && (
+                  <form onSubmit={register} className="opalForm">
+                    <label className="opalInput"><User /><input placeholder="Full name" value={form.username} onChange={e => f('username', e.target.value)} /></label>
+                    <label className="opalInput"><Phone /><input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} /></label>
+                    <label className="opalInput"><Lock /><input placeholder="Password" type={showPassword ? 'text' : 'password'} value={form.password} onChange={e => f('password', e.target.value)} /><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></label>
+                    <label className="opalInput"><Lock /><input placeholder="Confirm password" type={showConfirmPassword ? 'text' : 'password'} value={form.confirmPassword} onChange={e => f('confirmPassword', e.target.value)} /><button type="button" onClick={() => setShowConfirmPassword(value => !value)}>{showConfirmPassword ? <EyeOff /> : <Eye />}</button></label>
+                    <label className="termsRow"><input type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} /> I agree to the <span>Terms of Service</span> and <span>Privacy Policy</span></label>
+                    <button className="primary opalPrimary" disabled={authLoading}>
+                      {authLoading ? 'Creating account...' : 'Create Account'}
+                    </button>
+                    <p className="authSwitch">Already have an account? <button type="button" onClick={() => setAuthMode('login')}>Login</button></p>
+                  </form>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
     );
   }
-
   return (
     <div className="app">
       <aside className={`${active ? 'side hide' : 'side'} tab-${mobileTab}`}>

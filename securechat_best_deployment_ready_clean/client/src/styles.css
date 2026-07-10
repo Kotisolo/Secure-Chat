@@ -2345,6 +2345,323 @@ body{background:var(--bg);color:var(--text)}
   }
 }
 
+/* Reference auth redesign based on the supplied Chat Opal mockup */
+.opalAuth{
+  min-height:100vh;
+  padding:24px;
+  overflow:auto;
+  background:
+    radial-gradient(circle at 18% 18%,rgba(124,58,237,.26),transparent 28%),
+    radial-gradient(circle at 84% 28%,rgba(14,165,233,.16),transparent 32%),
+    radial-gradient(circle at 55% 88%,rgba(139,92,246,.22),transparent 30%),
+    linear-gradient(135deg,#050814,#07111e 52%,#09111d);
+}
+.opalAuth.formMode{
+  background:
+    radial-gradient(circle at 16% 82%,rgba(142,116,255,.13),transparent 28%),
+    radial-gradient(circle at 85% 14%,rgba(34,211,238,.13),transparent 26%),
+    linear-gradient(135deg,#f8f7ff,#ffffff 48%,#f4fbff);
+}
+.opalPhoneShell{
+  position:relative;
+  z-index:1;
+  width:min(390px,100%);
+  min-height:min(760px,calc(100dvh - 48px));
+  margin:auto;
+  border-radius:40px;
+  padding:14px;
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:0 28px 90px rgba(0,0,0,.45);
+}
+.formMode .opalPhoneShell{
+  background:rgba(255,255,255,.78);
+  border-color:rgba(22,18,44,.08);
+  box-shadow:0 24px 80px rgba(39,33,75,.16);
+}
+.opalStatusBar{
+  height:30px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 18px;
+  color:#fff;
+  font-size:12px;
+  font-weight:800;
+}
+.formMode .opalStatusBar{color:#171326}
+.opalCard{
+  width:100%;
+  min-height:690px;
+  max-width:none;
+  padding:42px 22px 28px;
+  border-radius:30px;
+  overflow:hidden;
+}
+.welcomeMode .opalCard{
+  color:#fff;
+  background:
+    radial-gradient(circle at 70% 72%,rgba(124,58,237,.38),transparent 30%),
+    radial-gradient(circle at 20% 92%,rgba(37,99,235,.18),transparent 28%),
+    linear-gradient(180deg,rgba(7,14,32,.96),rgba(8,12,28,.96));
+  border-color:rgba(255,255,255,.12);
+}
+.formMode .opalCard{
+  background:rgba(255,255,255,.96);
+  color:#161326;
+  border-color:#ece9f4;
+}
+.opalLogo{
+  position:relative;
+  width:102px;
+  height:102px;
+  border-radius:34px;
+  margin-bottom:20px;
+  background:
+    radial-gradient(circle at 75% 25%,#20d3ff 0 18%,transparent 24%),
+    radial-gradient(circle at 25% 18%,#ff3fd4 0 18%,transparent 25%),
+    conic-gradient(from 210deg,#5327e7,#9b35f5,#24c8ff,#fb49cf,#5327e7);
+  box-shadow:0 24px 54px rgba(124,58,237,.38);
+}
+.opalLogo:after{
+  content:"";
+  position:absolute;
+  inset:28px;
+  border-radius:50%;
+  background:#07111e;
+}
+.formMode .opalLogo{display:none}
+.opalLogo svg{
+  position:relative;
+  z-index:1;
+  width:38px;
+  height:38px;
+  color:#fff;
+}
+.welcomeMode .opalCard h1{
+  color:#fff;
+  font-size:42px;
+  line-height:1;
+}
+.opalCard h1 em{
+  font-style:normal;
+  color:#9b5cff;
+}
+.opalTagline{
+  margin:10px 0 4px!important;
+  color:#fff!important;
+  font-size:17px!important;
+  font-weight:800;
+}
+.opalSubtag{
+  display:block;
+  color:rgba(255,255,255,.78);
+  margin-bottom:20px;
+}
+.opalFeatureGrid{
+  grid-template-columns:1fr 1fr;
+  gap:12px;
+  margin:26px 0;
+}
+.opalFeatureGrid span{
+  min-height:82px;
+  align-items:flex-start;
+  flex-direction:column;
+  gap:5px;
+  background:rgba(255,255,255,.07);
+  border-color:rgba(255,255,255,.1);
+  color:#fff;
+  text-align:left;
+  backdrop-filter:blur(14px);
+}
+.opalFeatureGrid span svg{
+  color:#9b5cff;
+  margin-bottom:2px;
+}
+.opalFeatureGrid b{
+  font-size:12px;
+}
+.opalFeatureGrid small{
+  color:rgba(255,255,255,.7);
+  font-size:10px;
+  line-height:1.25;
+}
+.authHeading{
+  margin:26px 0 18px;
+  text-align:center;
+}
+.authHeading h1{
+  margin:0;
+  color:#171326;
+  font-size:25px;
+  letter-spacing:-.03em;
+}
+.authHeading p{
+  margin:7px 0 0;
+  color:#6c667d;
+  font-size:14px;
+}
+.authBack{
+  position:absolute;
+  left:22px;
+  top:24px;
+  width:36px;
+  height:36px;
+  border-radius:50%;
+  background:#f6f4fb;
+  color:#171326;
+  display:grid;
+  place-items:center;
+}
+.authBack svg{width:18px;height:18px}
+.opalTabs{
+  margin:0 0 18px;
+  padding:5px;
+  background:#f1eff8;
+  border-radius:16px;
+}
+.opalTabs button{
+  height:42px;
+  border-radius:13px;
+}
+.opalForm{
+  margin-top:0!important;
+}
+.opalInput{
+  width:100%;
+  height:54px;
+  margin-bottom:12px;
+  padding:0 14px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  border:1px solid #ded9ea;
+  border-radius:16px;
+  background:#fbfaff;
+}
+.opalInput>svg{
+  width:18px;
+  height:18px;
+  color:#4d4964;
+  flex-shrink:0;
+}
+.opalInput input{
+  flex:1;
+  width:auto!important;
+  height:auto!important;
+  margin:0!important;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  color:#171326!important;
+  outline:0;
+}
+.opalInput button{
+  width:32px;
+  height:32px;
+  display:grid;
+  place-items:center;
+  border-radius:10px;
+  background:transparent;
+  color:#5f5a72;
+}
+.opalInput button svg{width:18px;height:18px}
+.authOptions,.termsRow{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin:4px 0 18px;
+  color:#5f5a72;
+  font-size:13px;
+}
+.authOptions label,.termsRow{
+  justify-content:flex-start;
+  text-align:left;
+}
+.authOptions input,.termsRow input{
+  width:16px!important;
+  height:16px!important;
+  margin:0 8px 0 0!important;
+  accent-color:#7549ee;
+}
+.termsRow{
+  line-height:1.45;
+}
+.termsRow span,.authSwitch button,.authOptions .link{
+  color:#5b3ff1;
+  font-weight:800;
+}
+.opalPrimary{
+  height:56px;
+  border-radius:17px;
+  box-shadow:0 14px 28px rgba(117,73,238,.24);
+}
+.opalGhost{
+  color:#a174ff;
+  border-color:transparent;
+  background:transparent;
+}
+.socialDivider{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin:18px 0 14px;
+  color:#8a8499;
+  font-size:12px;
+}
+.socialDivider span{
+  flex:1;
+  height:1px;
+  background:#e7e3ee;
+}
+.socialLoginRow{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.socialLoginRow button{
+  height:48px;
+  border-radius:14px;
+  background:#fff;
+  border:1px solid #ded9ea;
+  color:#171326;
+  font-weight:900;
+}
+.socialLoginRow b{
+  display:inline-block;
+  margin-right:7px;
+  color:#5b3ff1;
+}
+.authSwitch{
+  margin:18px 0 0!important;
+  color:#625d74!important;
+  font-size:14px!important;
+}
+.authSwitch button{
+  background:transparent;
+  padding:0;
+}
+@media(max-width:700px){
+  .opalAuth{padding:0}
+  .opalPhoneShell{
+    width:100%;
+    min-height:100dvh;
+    border-radius:0;
+    padding:0;
+    border:0;
+    box-shadow:none;
+  }
+  .opalCard{
+    min-height:calc(100dvh - 30px);
+    border-radius:0;
+    border:0;
+    box-shadow:none;
+  }
+  .opalFeatureGrid{gap:10px}
+}
+
 /* Final call layout polish: keep controls away from the video picture. */
 .videoCall .callBtns{
   bottom:max(24px,env(safe-area-inset-bottom));
