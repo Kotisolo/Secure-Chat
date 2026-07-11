@@ -18,9 +18,50 @@ import {
   encryptAttachment, decryptAttachment, encryptGroupMessage, decryptGroupMessage
 } from './e2ee';
 
-const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢 😭 😡 👍 👎 🙏 🔥 ❤️ 🎉 ✅ 💯'.split(' ');
-
-const stickers = ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '👍', '🙏', '❤️', '🔥', '🎉'];
+const emojiSections = [
+  {
+    id: 'recent',
+    title: 'Frequently Used',
+    icon: '◷',
+    values: ['😂', '❤️', '😍', '👍', '🔥', '🎉', '😀', '🙏', '✅', '💯', '😎', '😭']
+  },
+  {
+    id: 'smileys',
+    title: 'Smileys & People',
+    icon: '☺',
+    values: ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '🙂', '😊', '😉', '😍', '😘', '😗', '😚', '😋', '😜', '🤪', '🤨', '🧐', '😎', '🥹', '😢', '😭', '😡', '😴', '😇', '🥳', '🤔', '🤗', '👍', '👌', '👏', '👋', '🙏', '💪', '👈', '👉', '☝️', '✌️', '🤝']
+  },
+  {
+    id: 'animals',
+    title: 'Animals & Nature',
+    icon: '🐻',
+    values: ['🐶', '🐱', '🐰', '🐭', '🦊', '🐻', '🐼', '🐨', '🐯', '🦁', '🐮', '🐷', '🐸', '🐵', '🐔', '🐧', '🐦', '🦋', '🌸', '🌹', '🌻', '🌺', '🌷', '🌍', '🌈', '🌙', '☀️', '💧', '🌊', '🌲', '🌴', '🍀']
+  },
+  {
+    id: 'food',
+    title: 'Food & Drink',
+    icon: '🍎',
+    values: ['🍎', '🍌', '🍇', '🍓', '🍉', '🍊', '🍋', '🍒', '🥭', '🥝', '🥕', '🌽', '🍕', '🍔', '🍟', '🌭', '🍗', '🍰', '🍦', '🍩', '🍪', '🍫', '☕', '🥤', '🍽️', '🍜', '🍛', '🍯']
+  },
+  {
+    id: 'activities',
+    title: 'Activities',
+    icon: '⚽',
+    values: ['⚽', '🏀', '🏈', '⚾', '🎾', '🏐', '🏆', '🥇', '🎮', '🎲', '🎤', '🎧', '🎸', '🎹', '🎬', '🎯', '🎨', '🚴', '🏃', '🏋️', '🎁', '🎉', '🎊', '🧩']
+  },
+  {
+    id: 'travel',
+    title: 'Travel & Places',
+    icon: '🚗',
+    values: ['🚗', '🚕', '🚌', '🏎️', '🚓', '🚑', '🚒', '✈️', '🚀', '🚁', '⛵', '🚢', '🏠', '🏢', '🏥', '🏫', '⛪', '🕌', '🗽', '🗺️', '📍', '🌆', '🌃', '🏖️']
+  },
+  {
+    id: 'symbols',
+    title: 'Symbols',
+    icon: '♡',
+    values: ['❤️', '🧡', '💛', '💚', '💙', '💜', '🤍', '🤎', '💕', '💞', '💔', '✅', '☑️', '✔️', '❌', '⚠️', '❗', '❓', '‼️', '💲', '©️', '™️', '🔒', '🔔', '⭐', '💬']
+  }
+];
 
 const readOAuthPayload = () => {
   if (typeof window === 'undefined' || !window.location.hash.startsWith('#oauth=')) return null;
@@ -266,6 +307,8 @@ export default function App() {
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
+  const [emojiCategory, setEmojiCategory] = useState('recent');
+  const [emojiSearch, setEmojiSearch] = useState('');
   const [showComposerTools, setShowComposerTools] = useState(false);
   const [profile, setProfile] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
@@ -2600,6 +2643,17 @@ export default function App() {
     status: 'Status',
     settings: 'Settings'
   }[mobileTab] || 'Chats';
+  const emojiQuery = emojiSearch.trim().toLowerCase();
+  const visibleEmojiSections = emojiQuery
+    ? emojiSections
+        .map(section => ({
+          ...section,
+          values: section.values.filter(value => value.includes(emojiQuery) || section.title.toLowerCase().includes(emojiQuery))
+        }))
+        .filter(section => section.values.length)
+    : emojiCategory === 'recent'
+      ? emojiSections.slice(0, 2)
+      : emojiSections.filter(section => section.id === emojiCategory);
 
   useEffect(() => {
     if (!active || !me) return;
@@ -3104,6 +3158,18 @@ export default function App() {
                 placeholder={editingMessage ? 'Edit message' : 'Message'}
               />}
 
+              <button
+                className={emoji ? 'icon composeEmoji active' : 'icon composeEmoji'}
+                onClick={() => {
+                  setEmoji(value => !value);
+                  setShowComposerTools(false);
+                }}
+                title="Emoji"
+                type="button"
+              >
+                <Smile />
+              </button>
+
               <label className="icon composeCamera" title="Take photo">
                 <Camera />
                 <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
@@ -3124,28 +3190,52 @@ export default function App() {
 
             {emoji && (
               <div className="emoji">
-                {emojis.map(e => (
-                  <button key={e} onClick={() => setText(x => x + e)}>
-                    {e}
-                  </button>
-                ))}
-                <div className="stickerDivider">Stickers</div>
-                {stickers.map(value => (
-                  <button
-                    className="stickerChoice"
-                    key={'sticker-' + value}
-                    onClick={() => {
-                      send({ body: value, kind: 'sticker' });
-                      setEmoji(false);
-                    }}
-                  >
-                    {value}
-                  </button>
-                ))}
-                <label className="gifUpload">
-                  GIF
-                  <input hidden type="file" accept="image/gif" onChange={e => file(e, 'image')} />
-                </label>
+                <div className="emojiSearch">
+                  <Search />
+                  <input
+                    value={emojiSearch}
+                    onChange={e => setEmojiSearch(e.target.value)}
+                    placeholder="Search emoji"
+                    autoFocus
+                  />
+                  <Smile />
+                </div>
+                <div className="emojiScroll">
+                  {visibleEmojiSections.length === 0 && <p className="empty">No emoji found.</p>}
+                  {visibleEmojiSections.map(section => (
+                    <section className="emojiSection" key={section.id}>
+                      <h4>{section.title}</h4>
+                      <div className="emojiGrid">
+                        {section.values.map((value, index) => (
+                          <button
+                            key={`${section.id}-${value}-${index}`}
+                            type="button"
+                            onClick={() => setText(current => current + value)}
+                          >
+                            {value}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+                </div>
+                <div className="emojiCategoryBar">
+                  {emojiSections.map(section => (
+                    <button
+                      type="button"
+                      key={section.id}
+                      className={emojiCategory === section.id && !emojiSearch.trim() ? 'active' : ''}
+                      onClick={() => {
+                        setEmojiCategory(section.id);
+                        setEmojiSearch('');
+                      }}
+                      title={section.title}
+                    >
+                      {section.icon}
+                    </button>
+                  ))}
+                  <button type="button" onClick={() => setEmoji(false)} title="Close emoji picker"><X /></button>
+                </div>
               </div>
             )}
           </>
