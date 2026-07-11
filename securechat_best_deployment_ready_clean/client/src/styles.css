@@ -2379,17 +2379,6 @@ body{background:var(--bg);color:var(--text)}
   border-color:rgba(22,18,44,.08);
   box-shadow:0 24px 80px rgba(39,33,75,.16);
 }
-.opalStatusBar{
-  height:30px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  padding:0 18px;
-  color:#fff;
-  font-size:12px;
-  font-weight:800;
-}
-.formMode .opalStatusBar{color:#171326}
 .opalCard{
   width:100%;
   min-height:690px;
@@ -2654,7 +2643,7 @@ body{background:var(--bg);color:var(--text)}
     box-shadow:none;
   }
   .opalCard{
-    min-height:calc(100dvh - 30px);
+    min-height:100dvh;
     border-radius:0;
     border:0;
     box-shadow:none;

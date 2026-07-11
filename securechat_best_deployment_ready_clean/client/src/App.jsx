@@ -2579,7 +2579,6 @@ export default function App() {
     return (
       <div className={`auth opalAuth ${screen === 'welcome' ? 'welcomeMode' : 'formMode'}`}>
         <div className="opalPhoneShell">
-          <div className="opalStatusBar"><span>9:41</span><span>5G</span></div>
           <div className="card opalCard">
             <div className="opalLogo badge"><MessageCircle /></div>
 
