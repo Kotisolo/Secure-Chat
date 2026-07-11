@@ -7,7 +7,7 @@ import {
   Shield, Ban, Flag, Users, Plus, Settings, Eye, EyeOff
 } from 'lucide-react';
 import {
-  api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl
+  api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, API_URL
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import { Room, RoomEvent, Track, createLocalAudioTrack, createLocalVideoTrack } from 'livekit-client';
@@ -21,6 +21,17 @@ import {
 const emojis = '😀 😃 😄 😁 😆 😅 😂 🙂 😊 😍 😘 😎 😢 😭 😡 👍 👎 🙏 🔥 ❤️ 🎉 ✅ 💯'.split(' ');
 
 const stickers = ['😀', '😂', '😍', '🥳', '😎', '😭', '😡', '👍', '🙏', '❤️', '🔥', '🎉'];
+
+const readOAuthPayload = () => {
+  if (typeof window === 'undefined' || !window.location.hash.startsWith('#oauth=')) return null;
+  try {
+    const encoded = decodeURIComponent(window.location.hash.slice('#oauth='.length));
+    const padded = encoded.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - encoded.length % 4) % 4);
+    return JSON.parse(decodeURIComponent(escape(window.atob(padded))));
+  } catch {
+    return { ok: false, error: 'Social login response could not be read.' };
+  }
+};
 
 const defaultMeteredTurnUrls = [
   'stun:stun.relay.metered.ca:80',
@@ -376,6 +387,27 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const oauth = readOAuthPayload();
+    if (oauth) {
+      window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+      if (oauth.ok && oauth.token && oauth.user) {
+        setSession(oauth.token, oauth.user);
+        setMe(oauth.user);
+        setScreen('app');
+        setTimeout(() => enterApp(), 0);
+      } else {
+        clearSession();
+        setMe(null);
+        setErr(oauth.error || 'Social login failed.');
+        setAuthMode('login');
+        setScreen('auth');
+      }
+      return () => {
+        disconnectSocket();
+        cleanupPeer();
+      };
+    }
+
     const stored = getStoredUser();
 
     if (stored && stored.id) {
@@ -480,6 +512,13 @@ export default function App() {
     } finally {
       setAuthLoading(false);
     }
+  }
+
+  function socialLogin(provider) {
+    setErr('');
+    setAuthLoading(true);
+    const deviceName = encodeURIComponent(navigator.userAgent || 'SecureChat browser');
+    window.location.href = `${API_URL}/api/auth/oauth/${provider}/start?deviceName=${deviceName}`;
   }
 
   async function resetPassword(e) {
@@ -2654,8 +2693,8 @@ export default function App() {
                     </button>
                     <div className="socialDivider"><span />or continue with<span /></div>
                     <div className="socialLoginRow">
-                      <button type="button"><b>G</b> Google</button>
-                      <button type="button"><b>A</b> Apple</button>
+                      <button type="button" onClick={() => socialLogin('google')} disabled={authLoading}><b>G</b> Google</button>
+                      <button type="button" onClick={() => socialLogin('apple')} disabled={authLoading}><b>A</b> Apple</button>
                     </div>
                     <p className="authSwitch">Don't have an account? <button type="button" onClick={() => setAuthMode('register')}>Register</button></p>
                   </form>

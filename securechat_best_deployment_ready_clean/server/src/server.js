@@ -52,6 +52,14 @@ const CLIENT_ORIGINS = (
   .split(',')
   .map(x => x.trim())
   .filter(Boolean);
+const PUBLIC_CLIENT_URL = (process.env.PUBLIC_CLIENT_URL || CLIENT_ORIGINS[0] || 'http://localhost:5173').replace(/\/+$/, '');
+const PUBLIC_API_URL = (process.env.PUBLIC_API_URL || process.env.RENDER_EXTERNAL_URL || '').replace(/\/+$/, '');
+const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
+const GOOGLE_CLIENT_SECRET = (process.env.GOOGLE_CLIENT_SECRET || '').trim();
+const APPLE_CLIENT_ID = (process.env.APPLE_CLIENT_ID || '').trim();
+const APPLE_TEAM_ID = (process.env.APPLE_TEAM_ID || '').trim();
+const APPLE_KEY_ID = (process.env.APPLE_KEY_ID || '').trim();
+const APPLE_PRIVATE_KEY = (process.env.APPLE_PRIVATE_KEY || '').replace(/\\n/g, '\n').trim();
 
 const app = express();
 const server = http.createServer(app);
@@ -86,6 +94,7 @@ app.use(helmet({
 }));
 app.use(cors(corsOptions));
 app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: false }));
 
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
@@ -198,6 +207,78 @@ function clean(v) {
 
 function generateRecoveryCode() {
   return crypto.randomBytes(10).toString('hex').toUpperCase().match(/.{1,4}/g).join('-');
+}
+
+function base64UrlJson(value) {
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
+function decodeJwtPayload(token) {
+  const payload = String(token || '').split('.')[1];
+  if (!payload) throw new Error('Missing identity token.');
+  return JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+}
+
+function oauthCallbackUrl(req, provider) {
+  const base = PUBLIC_API_URL || `${req.protocol}://${req.get('host')}`;
+  return `${base}/api/auth/oauth/${provider}/callback`;
+}
+
+function redirectToClientAuth(payload) {
+  return `${PUBLIC_CLIENT_URL}/#oauth=${encodeURIComponent(base64UrlJson(payload))}`;
+}
+
+function signOAuthState(payload) {
+  const encoded = base64UrlJson(payload);
+  const sig = crypto.createHmac('sha256', JWT_SECRET).update(encoded).digest('base64url');
+  return `${encoded}.${sig}`;
+}
+
+function verifyOAuthState(state, provider) {
+  const [encoded, sig] = String(state || '').split('.');
+  if (!encoded || !sig) throw new Error('OAuth state is missing.');
+  const expected = crypto.createHmac('sha256', JWT_SECRET).update(encoded).digest('base64url');
+  if (sig.length !== expected.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+    throw new Error('OAuth state is invalid.');
+  }
+  const payload = JSON.parse(Buffer.from(encoded, 'base64url').toString('utf8'));
+  if (payload.provider !== provider || Date.now() - Number(payload.t || 0) > 10 * 60 * 1000) {
+    throw new Error('OAuth state expired.');
+  }
+  return payload;
+}
+
+async function exchangeOAuthCode(url, body) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(body)
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || data.error) {
+    throw new Error(data.error_description || data.error || 'OAuth provider rejected the sign-in.');
+  }
+  return data;
+}
+
+function appleClientSecret() {
+  if (!APPLE_CLIENT_ID || !APPLE_TEAM_ID || !APPLE_KEY_ID || !APPLE_PRIVATE_KEY) {
+    throw new Error('Apple login is not configured.');
+  }
+  return jwt.sign(
+    {
+      iss: APPLE_TEAM_ID,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30,
+      aud: 'https://appleid.apple.com',
+      sub: APPLE_CLIENT_ID
+    },
+    APPLE_PRIVATE_KEY,
+    {
+      algorithm: 'ES256',
+      keyid: APPLE_KEY_ID
+    }
+  );
 }
 
 function isOnline(userId) {
@@ -406,12 +487,65 @@ function sign(u) {
 }
 
 async function createSession(req, userId) {
-  const deviceName = clean(req.body.deviceName || req.get('user-agent') || 'Unknown device').slice(0, 160);
+  const deviceName = clean(req.body?.deviceName || req.query?.deviceName || req.get('user-agent') || 'Unknown device').slice(0, 160);
   const result = await pool.query(
     'INSERT INTO user_sessions(user_id,device_name,ip_address) VALUES($1,$2,$3) RETURNING id',
     [userId, deviceName, req.ip || null]
   );
   return String(result.rows[0].id);
+}
+
+async function completeOAuthLogin(req, res, provider, profile) {
+  const subject = clean(profile.subject || profile.sub || '');
+  const email = clean(profile.email || '').toLowerCase();
+  const rawName = clean(profile.name || email.split('@')[0] || `${provider} user`);
+  const username = rawName.slice(0, 80) || `${provider} user`;
+  const avatarUrl = clean(profile.avatarUrl || profile.picture || '') || null;
+
+  if (!subject) throw new Error('OAuth profile is missing a user id.');
+
+  let result = await pool.query(
+    'SELECT id,username,phone,about,avatar_url,last_seen,session_version FROM users WHERE oauth_provider=$1 AND oauth_subject=$2',
+    [provider, subject]
+  );
+
+  if (!result.rows.length) {
+    const passwordHash = await bcrypt.hash(crypto.randomBytes(32).toString('base64url'), 12);
+    const recoveryCode = generateRecoveryCode();
+    const recoveryCodeHash = await bcrypt.hash(recoveryCode, 12);
+    const oauthPhone = `oauth:${provider}:${crypto.createHash('sha256').update(subject).digest('hex').slice(0, 20)}`;
+    result = await pool.query(
+      `INSERT INTO users(username,phone,password_hash,recovery_code_hash,recovery_code_created_at,email,oauth_provider,oauth_subject,avatar_url)
+       VALUES($1,$2,$3,$4,NOW(),$5,$6,$7,$8)
+       ON CONFLICT (oauth_provider,oauth_subject) WHERE oauth_provider IS NOT NULL AND oauth_subject IS NOT NULL
+       DO UPDATE SET last_seen=NOW()
+       RETURNING id,username,phone,about,avatar_url,last_seen,session_version`,
+      [username, oauthPhone, passwordHash, recoveryCodeHash, email || null, provider, subject, avatarUrl]
+    );
+  } else {
+    await pool.query(
+      `UPDATE users SET last_seen=NOW(),email=COALESCE($2,email),avatar_url=COALESCE($3,avatar_url)
+       WHERE id=$1`,
+      [result.rows[0].id, email || null, avatarUrl]
+    );
+  }
+
+  const fresh = await pool.query(
+    'SELECT id,username,phone,about,avatar_url,last_seen,session_version FROM users WHERE id=$1',
+    [result.rows[0].id]
+  );
+  const out = user(fresh.rows[0]);
+  const sessionId = await createSession(req, out.id);
+  io.to(userRoom(out.id)).emit('security:new-login', {
+    deviceName: clean(req.query?.deviceName || req.get('user-agent') || 'Unknown device').slice(0, 160),
+    time: new Date().toISOString()
+  });
+
+  return res.redirect(302, redirectToClientAuth({
+    ok: true,
+    token: sign({ ...out, sessionVersion: fresh.rows[0].session_version, sessionId }),
+    user: out
+  }));
 }
 
 async function auth(req, res, next) {
@@ -550,6 +684,108 @@ app.get('/api/turn/health', asyncRoute(async (req, res) => {
       relayWithCredentialsFound: false,
       reason: error.message
     });
+  }
+}));
+
+app.get('/api/auth/oauth/:provider/start', authRateLimit, (req, res) => {
+  const provider = clean(req.params.provider).toLowerCase();
+  const state = signOAuthState({
+    provider,
+    deviceName: clean(req.query.deviceName || ''),
+    t: Date.now()
+  });
+
+  if (provider === 'google') {
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
+      return res.redirect(302, redirectToClientAuth({ ok: false, error: 'Google login is not configured yet.' }));
+    }
+    const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    url.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+    url.searchParams.set('redirect_uri', oauthCallbackUrl(req, 'google'));
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('scope', 'openid email profile');
+    url.searchParams.set('state', state);
+    url.searchParams.set('prompt', 'select_account');
+    return res.redirect(302, url.toString());
+  }
+
+  if (provider === 'apple') {
+    if (!APPLE_CLIENT_ID || !APPLE_TEAM_ID || !APPLE_KEY_ID || !APPLE_PRIVATE_KEY) {
+      return res.redirect(302, redirectToClientAuth({ ok: false, error: 'Apple login is not configured yet.' }));
+    }
+    const url = new URL('https://appleid.apple.com/auth/authorize');
+    url.searchParams.set('client_id', APPLE_CLIENT_ID);
+    url.searchParams.set('redirect_uri', oauthCallbackUrl(req, 'apple'));
+    url.searchParams.set('response_type', 'code');
+    url.searchParams.set('scope', 'name email');
+    url.searchParams.set('response_mode', 'form_post');
+    url.searchParams.set('state', state);
+    return res.redirect(302, url.toString());
+  }
+
+  return res.redirect(302, redirectToClientAuth({ ok: false, error: 'This social login provider is not supported.' }));
+});
+
+app.all('/api/auth/oauth/:provider/callback', authRateLimit, asyncRoute(async (req, res) => {
+  const provider = clean(req.params.provider).toLowerCase();
+  const params = { ...req.query, ...(req.body || {}) };
+
+  try {
+    const state = verifyOAuthState(params.state, provider);
+    const code = clean(params.code || '');
+    if (!code) throw new Error('OAuth sign-in was cancelled or did not return a code.');
+
+    req.query.deviceName = state.deviceName || req.query.deviceName || '';
+
+    if (provider === 'google') {
+      const tokens = await exchangeOAuthCode('https://oauth2.googleapis.com/token', {
+        code,
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        redirect_uri: oauthCallbackUrl(req, 'google'),
+        grant_type: 'authorization_code'
+      });
+      const claims = decodeJwtPayload(tokens.id_token);
+      if (claims.aud !== GOOGLE_CLIENT_ID || !['accounts.google.com', 'https://accounts.google.com'].includes(claims.iss)) {
+        throw new Error('Google identity token was not valid for this app.');
+      }
+      if (Number(claims.exp || 0) * 1000 < Date.now()) throw new Error('Google sign-in expired.');
+      return completeOAuthLogin(req, res, 'google', {
+        subject: claims.sub,
+        email: claims.email,
+        name: claims.name,
+        avatarUrl: claims.picture
+      });
+    }
+
+    if (provider === 'apple') {
+      const tokens = await exchangeOAuthCode('https://appleid.apple.com/auth/token', {
+        code,
+        client_id: APPLE_CLIENT_ID,
+        client_secret: appleClientSecret(),
+        redirect_uri: oauthCallbackUrl(req, 'apple'),
+        grant_type: 'authorization_code'
+      });
+      const claims = decodeJwtPayload(tokens.id_token);
+      if (claims.aud !== APPLE_CLIENT_ID || claims.iss !== 'https://appleid.apple.com') {
+        throw new Error('Apple identity token was not valid for this app.');
+      }
+      if (Number(claims.exp || 0) * 1000 < Date.now()) throw new Error('Apple sign-in expired.');
+      let appleName = '';
+      try {
+        const appleUser = params.user ? JSON.parse(params.user) : null;
+        appleName = [appleUser?.name?.firstName, appleUser?.name?.lastName].filter(Boolean).join(' ');
+      } catch {}
+      return completeOAuthLogin(req, res, 'apple', {
+        subject: claims.sub,
+        email: claims.email,
+        name: appleName || claims.email?.split('@')[0] || 'Apple user'
+      });
+    }
+
+    throw new Error('This social login provider is not supported.');
+  } catch (error) {
+    return res.redirect(302, redirectToClientAuth({ ok: false, error: error.message || 'Social login failed.' }));
   }
 }));
 
