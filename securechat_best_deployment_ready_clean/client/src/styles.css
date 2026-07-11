@@ -3284,3 +3284,271 @@ body{background:var(--bg);color:var(--text)}
     height:36px!important;
   }
 }
+
+/* Location sharing flow based on supplied reference */
+.composerTools{
+  display:grid!important;
+  grid-template-columns:repeat(3,1fr);
+  gap:16px!important;
+  padding:22px!important;
+  max-width:420px;
+  margin-left:auto!important;
+  margin-right:16px!important;
+}
+.composerTools button,.composerTools label{
+  width:auto!important;
+  height:auto!important;
+  min-height:86px;
+  padding:8px;
+  gap:9px!important;
+  color:#171326!important;
+  background:transparent!important;
+}
+.composerTools button>svg,.composerTools label>svg,.composerTools button>b{
+  width:58px;
+  height:58px;
+  margin:0 auto;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  padding:16px;
+  color:#704cff;
+  background:#f0e9ff;
+  box-shadow:0 12px 26px rgba(117,73,238,.12);
+}
+.composerTools span{
+  font-size:13px;
+  color:#171326;
+  font-weight:800;
+}
+.composerTools .toolGallery>svg{color:#2680eb;background:#eaf3ff}
+.composerTools .toolFile>svg{color:#f48a12;background:#fff2e3}
+.composerTools .toolContact>svg{color:#35b96f;background:#e8f8ef}
+.composerTools .toolLocation>svg{color:#e53945;background:#ffe8ed;box-shadow:0 14px 34px rgba(229,57,69,.18)}
+.composerTools .toolVoice>svg{color:#704cff;background:#f0e9ff}
+.composerTools .toolPoll>svg{color:#f48a12;background:#fff2e3}
+.composerTools .toolSchedule>svg{color:#2680eb;background:#eaf3ff}
+.composerTools .toolAi>svg{color:#9b35f5;background:#f5eaff}
+.composerTools .toolCancel{
+  grid-column:1 / -1;
+  min-height:48px;
+  border-radius:16px;
+  color:#704cff!important;
+  background:#f8f6fb!important;
+  font-weight:900;
+}
+.locationSheet{
+  position:fixed;
+  right:330px;
+  bottom:104px;
+  z-index:39;
+  width:min(360px,calc(100vw - 32px));
+  padding:18px;
+  border:1px solid #ece9f2;
+  border-radius:24px;
+  background:#fff;
+  box-shadow:0 24px 80px rgba(35,28,66,.18);
+}
+.locationSheetHeader{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  margin-bottom:14px;
+  color:#171326;
+}
+.locationSheetHeader b{
+  font-size:18px;
+}
+.locationSheetHeader button{
+  width:34px;
+  height:34px;
+  border-radius:12px;
+  display:grid;
+  place-items:center;
+  background:#f6f4fb;
+  color:#4d4964;
+}
+.locationDuration{
+  width:100%;
+  min-height:62px;
+  margin-bottom:10px;
+  padding:10px 12px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  border:1px solid transparent;
+  border-radius:18px;
+  color:#171326;
+  background:#fbfaff;
+  text-align:left;
+}
+.locationDuration>span{
+  width:42px;
+  height:42px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  color:#704cff;
+  background:#f0e9ff;
+}
+.locationDuration>span svg{
+  width:20px;
+  height:20px;
+}
+.locationDuration>div{
+  flex:1;
+  min-width:0;
+}
+.locationDuration b,.locationDuration small{
+  display:block;
+}
+.locationDuration b{
+  font-size:14px;
+}
+.locationDuration small{
+  margin-top:3px;
+  color:#8f8aa1;
+  font-size:12px;
+}
+.locationDuration i{
+  width:18px;
+  height:18px;
+  border:2px solid #b9b3c8;
+  border-radius:50%;
+}
+.locationDuration.active{
+  border-color:#eee7ff;
+  background:#fff;
+  box-shadow:0 10px 24px rgba(35,28,66,.06);
+}
+.locationDuration.active i{
+  border:5px solid #704cff;
+}
+.shareLocationButton{
+  width:100%;
+  height:52px;
+  margin-top:8px;
+  border-radius:17px;
+  color:#fff;
+  background:linear-gradient(135deg,#704cff,#9b35f5);
+  font-weight:900;
+  box-shadow:0 14px 28px rgba(117,73,238,.24);
+}
+.shareLocationButton:disabled{
+  opacity:.7;
+  cursor:wait;
+}
+.locationMessage{
+  min-width:min(360px,72vw);
+  display:grid;
+  grid-template-columns:1fr 126px;
+  gap:12px;
+  align-items:stretch;
+}
+.locationCopy{
+  min-width:0;
+}
+.locationCopy b,.locationCopy strong,.locationCopy span,.locationCopy small,.locationCopy a{
+  display:block;
+}
+.locationCopy b{
+  margin-bottom:8px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  color:#171326;
+}
+.mine .locationCopy b{
+  color:#fff;
+}
+.locationCopy b svg{
+  width:16px;
+  height:16px;
+  color:#704cff;
+}
+.mine .locationCopy b svg{
+  color:#fff;
+}
+.locationCopy strong{
+  margin-bottom:4px;
+}
+.locationCopy span,.locationCopy small{
+  color:inherit;
+  opacity:.74;
+}
+.locationCopy a{
+  margin-top:12px;
+  color:#704cff;
+  font-weight:900;
+}
+.mine .locationCopy a{
+  color:#fff;
+}
+.locationMiniMap{
+  min-height:126px;
+  border-radius:18px;
+  position:relative;
+  display:grid;
+  place-items:center;
+  overflow:hidden;
+  background:
+    linear-gradient(35deg,transparent 48%,rgba(255,255,255,.7) 49% 52%,transparent 53%),
+    linear-gradient(145deg,rgba(80,150,255,.22),rgba(126,220,145,.25)),
+    #eef5ff;
+}
+.locationMiniMap:before,.locationMiniMap:after{
+  content:"";
+  position:absolute;
+  background:rgba(255,255,255,.75);
+}
+.locationMiniMap:before{
+  width:160%;
+  height:14px;
+  transform:rotate(-20deg);
+}
+.locationMiniMap:after{
+  width:12px;
+  height:160%;
+  transform:rotate(32deg);
+}
+.locationMiniMap svg{
+  position:relative;
+  z-index:1;
+  width:38px;
+  height:38px;
+  padding:8px;
+  border-radius:50%;
+  color:#fff;
+  background:#2680eb;
+  box-shadow:0 10px 22px rgba(38,128,235,.28);
+}
+@media(max-width:1200px) and (min-width:901px){
+  .locationSheet{
+    right:30px;
+  }
+}
+@media(max-width:900px){
+  .composerTools{
+    position:fixed;
+    left:12px;
+    right:12px;
+    bottom:84px;
+    z-index:38;
+    max-width:none;
+    margin:0!important;
+    grid-template-columns:repeat(3,1fr);
+  }
+  .locationSheet{
+    left:12px;
+    right:12px;
+    bottom:84px;
+    width:auto;
+  }
+  .locationMessage{
+    grid-template-columns:1fr 104px;
+    min-width:0;
+  }
+  .locationMiniMap{
+    min-height:112px;
+  }
+}

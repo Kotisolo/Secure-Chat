@@ -4,7 +4,7 @@ import {
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
-  Shield, Ban, Flag, Users, Plus, Settings, Eye, EyeOff
+  Shield, Ban, Flag, Users, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, API_URL
@@ -310,6 +310,9 @@ export default function App() {
   const [emojiCategory, setEmojiCategory] = useState('recent');
   const [emojiSearch, setEmojiSearch] = useState('');
   const [showComposerTools, setShowComposerTools] = useState(false);
+  const [showLocationShare, setShowLocationShare] = useState(false);
+  const [locationDuration, setLocationDuration] = useState(60);
+  const [locationBusy, setLocationBusy] = useState(false);
   const [profile, setProfile] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -1580,6 +1583,60 @@ export default function App() {
       });
     } catch (e) {
       alert('Upload failed: ' + e.message);
+    }
+  }
+
+  function parseLocationMessage(message) {
+    try {
+      const data = JSON.parse(message.body || '{}');
+      if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return null;
+      return data;
+    } catch {
+      return null;
+    }
+  }
+
+  function requestCurrentPosition() {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Location is not supported on this device.'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(resolve, reject, {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 30000
+      });
+    });
+  }
+
+  async function shareLocation() {
+    if (!active) return;
+    setLocationBusy(true);
+    try {
+      const position = await requestCurrentPosition();
+      const now = new Date();
+      const liveMinutes = Number(locationDuration || 0);
+      const payload = {
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        liveMinutes,
+        label: liveMinutes ? `Live for ${liveMinutes === 60 ? '1 hour' : liveMinutes >= 60 ? `${liveMinutes / 60} hours` : `${liveMinutes} minutes`}` : 'Current Location',
+        place: 'Shared location',
+        updatedAt: now.toISOString(),
+        expiresAt: liveMinutes ? new Date(now.getTime() + liveMinutes * 60000).toISOString() : null
+      };
+      await send({
+        body: JSON.stringify(payload),
+        kind: 'location'
+      });
+      setShowLocationShare(false);
+      setShowComposerTools(false);
+    } catch (error) {
+      alert('Location sharing failed: ' + (error.message || 'Please allow location permission and try again.'));
+    } finally {
+      setLocationBusy(false);
     }
   }
 
@@ -3037,6 +3094,7 @@ export default function App() {
                 const repliedMessage = m.replyToId
                   ? rows.find(row => row.id === m.replyToId)
                   : null;
+                const locationData = m.kind === 'location' ? parseLocationMessage(m) : null;
                 return (
                 <div
                   key={m.id}
@@ -3070,6 +3128,35 @@ export default function App() {
                       preload="metadata"
                       onClick={e => e.stopPropagation()}
                     />
+                  ) : locationData ? (
+                    <div className="locationMessage" onClick={e => e.stopPropagation()}>
+                      <div className="locationCopy">
+                        <b><MapPin /> {locationData.liveMinutes ? 'Live Location' : 'Location'}</b>
+                        <strong>{String(m.senderId) === String(me.id) ? me.username : active.username}</strong>
+                        <span>{locationData.place || 'Shared location'}</span>
+                        {locationData.liveMinutes ? (
+                          <small>Moving · Updated {new Date(locationData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
+                        ) : (
+                          <small>Accuracy {Math.round(locationData.accuracy || 0)} m</small>
+                        )}
+                        <a
+                          href={`https://www.google.com/maps?q=${locationData.lat},${locationData.lng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          View on Map
+                        </a>
+                      </div>
+                      <a
+                        className="locationMiniMap"
+                        href={`https://www.google.com/maps?q=${locationData.lat},${locationData.lng}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label="Open shared location map"
+                      >
+                        <MapPin />
+                      </a>
+                    </div>
                   ) : m.kind === 'sticker' ? (
                     <span className="stickerMessage">{m.body}</span>
                   ) : (
@@ -3128,11 +3215,44 @@ export default function App() {
 
             {showComposerTools && (
               <div className="composerTools">
-                <button onClick={() => { setEmoji(!emoji); setShowComposerTools(false); }}><Smile /><span>Emoji</span></button>
-                <label><Image /><span>Photo</span><input hidden type="file" accept="image/*" onChange={e => file(e, 'image')} /></label>
-                <label><Paperclip /><span>File</span><input hidden type="file" onChange={e => file(e)} /></label>
-                <label><Camera /><span>Camera</span><input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} /></label>
-                <button onClick={() => { setShowScheduler(value => !value); setShowComposerTools(false); }}><CalendarClock /><span>Schedule</span></button>
+                <label className="toolCamera"><Camera /><span>Camera</span><input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} /></label>
+                <label className="toolGallery"><Image /><span>Gallery</span><input hidden type="file" accept="image/*" onChange={e => file(e, 'image')} /></label>
+                <label className="toolFile"><Paperclip /><span>File</span><input hidden type="file" onChange={e => file(e)} /></label>
+                <button className="toolContact" onClick={() => alert('Contact sharing will be connected in the contacts phase.')}><User /><span>Contact</span></button>
+                <button className="toolLocation" onClick={() => { setShowLocationShare(true); setShowComposerTools(false); }}><MapPin /><span>Location</span></button>
+                <button className="toolVoice" onClick={() => { setShowComposerTools(false); startVoiceRecording(); }}><Mic /><span>Voice Note</span></button>
+                <button className="toolPoll" onClick={() => alert('Polls will be connected in the groups/channels phase.')}><BarChart3 /><span>Poll</span></button>
+                <button className="toolSchedule" onClick={() => { setShowScheduler(value => !value); setShowComposerTools(false); }}><CalendarClock /><span>Schedule</span></button>
+                <button className="toolAi" onClick={() => alert('AI Assistant will be connected after go-live.')}><Languages /><span>AI Assistant</span></button>
+                <button className="toolCancel" onClick={() => setShowComposerTools(false)}>Cancel</button>
+              </div>
+            )}
+
+            {showLocationShare && (
+              <div className="locationSheet">
+                <div className="locationSheetHeader">
+                  <b>Share Live Location</b>
+                  <button onClick={() => setShowLocationShare(false)}><X /></button>
+                </div>
+                {[
+                  [0, 'Current Location', 'Share your current location once'],
+                  [15, 'Live for 15 minutes', 'Updated in real time'],
+                  [60, 'Live for 1 hour', 'Updated in real time'],
+                  [480, 'Live for 8 hours', 'Updated in real time']
+                ].map(([minutes, label, detail]) => (
+                  <button
+                    key={minutes}
+                    className={locationDuration === minutes ? 'locationDuration active' : 'locationDuration'}
+                    onClick={() => setLocationDuration(minutes)}
+                  >
+                    <span>{minutes === 0 ? <Navigation /> : <MapPin />}</span>
+                    <div><b>{label}</b><small>{detail}</small></div>
+                    <i />
+                  </button>
+                ))}
+                <button className="shareLocationButton" onClick={shareLocation} disabled={locationBusy}>
+                  {locationBusy ? 'Getting location...' : 'Share Location'}
+                </button>
               </div>
             )}
 

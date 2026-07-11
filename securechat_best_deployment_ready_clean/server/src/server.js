@@ -1762,7 +1762,7 @@ app.post('/api/messages', auth, async (req, res) => {
   if (recipientId === String(req.user.id)) return res.status(400).json({ error: 'You cannot message yourself.' });
   if (!body.trim() && !fileUrl) return res.status(400).json({ error: 'Message cannot be empty.' });
   if (body.length > 10000) return res.status(400).json({ error: 'Message is too long.' });
-  if (!['text', 'image', 'file', 'audio', 'sticker'].includes(kind)) return res.status(400).json({ error: 'Invalid message type.' });
+  if (!['text', 'image', 'file', 'audio', 'sticker', 'location'].includes(kind)) return res.status(400).json({ error: 'Invalid message type.' });
   if (ciphertext) {
     if (encryptionVersion !== 1 || !senderDeviceId || ciphertext.length > 30000) {
       return res.status(400).json({ error: 'Invalid encrypted message.' });
