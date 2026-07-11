@@ -1928,6 +1928,35 @@ app.patch('/api/messages/:messageId', auth, asyncRoute(async (req, res) => {
   res.json(updated);
 }));
 
+app.patch('/api/messages/:messageId/location', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  const body = String(req.body.body || '').trim();
+  if (!validUuid(messageId) || !body || body.length > 10000) {
+    return res.status(400).json({ error: 'Enter a valid location update.' });
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return res.status(400).json({ error: 'Invalid location update.' });
+  }
+  if (typeof parsed.lat !== 'number' || typeof parsed.lng !== 'number') {
+    return res.status(400).json({ error: 'Invalid location coordinates.' });
+  }
+  const result = await pool.query(
+    `UPDATE messages SET body=$1,edited_at=NOW()
+     WHERE id=$2 AND sender_id=$3 AND kind='location' AND deleted_at IS NULL
+     RETURNING *`,
+    [body, messageId, req.user.id]
+  );
+  if (!result.rows.length) {
+    return res.status(400).json({ error: 'This location cannot be updated.' });
+  }
+  const updated = msg(result.rows[0]);
+  io.to(userRoom(updated.recipientId)).emit('message:updated', updated);
+  res.json(updated);
+}));
+
 app.post('/api/messages/:messageId/star', auth, asyncRoute(async (req, res) => {
   const messageId = req.params.messageId;
   const found = await pool.query(

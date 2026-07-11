@@ -3484,6 +3484,66 @@ body{background:var(--bg);color:var(--text)}
 .mine .locationCopy a{
   color:#fff;
 }
+.locationOpenButton,.locationStopInline{
+  margin-top:10px;
+  border:0;
+  border-radius:12px;
+  padding:9px 12px;
+  font-weight:900;
+  cursor:pointer;
+  display:block;
+  width:fit-content;
+}
+.locationOpenButton{
+  color:#704cff;
+  background:rgba(112,76,255,.12);
+}
+.mine .locationOpenButton{
+  color:#fff;
+  background:rgba(255,255,255,.18);
+}
+.locationStopInline{
+  color:#df2f4f;
+  background:#ffe8ee;
+}
+.liveLocationBar{
+  margin:0 16px 10px;
+  padding:12px 14px;
+  border:1px solid rgba(112,76,255,.18);
+  border-radius:18px;
+  background:linear-gradient(135deg,rgba(112,76,255,.12),rgba(60,191,255,.1)),#fff;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  box-shadow:0 14px 34px rgba(30,21,70,.08);
+}
+.liveLocationBar b{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  color:#171326;
+}
+.liveLocationBar b svg{
+  width:17px;
+  height:17px;
+  color:#704cff;
+}
+.liveLocationBar span{
+  display:block;
+  margin-top:3px;
+  color:#7f7892;
+  font-size:12px;
+}
+.liveLocationBar button{
+  border:0;
+  border-radius:12px;
+  padding:10px 16px;
+  color:#fff;
+  background:#ef3f67;
+  font-weight:900;
+  cursor:pointer;
+}
 .locationMiniMap{
   min-height:126px;
   border-radius:18px;
@@ -3521,6 +3581,226 @@ body{background:var(--bg);color:var(--text)}
   color:#fff;
   background:#2680eb;
   box-shadow:0 10px 22px rgba(38,128,235,.28);
+}
+.locationViewerOverlay{
+  position:fixed;
+  inset:0;
+  z-index:80;
+  background:rgba(12,10,24,.44);
+  backdrop-filter:blur(14px);
+  display:grid;
+  place-items:center;
+  padding:20px;
+}
+.locationViewer{
+  width:min(420px,96vw);
+  height:min(760px,92vh);
+  border-radius:30px;
+  overflow:hidden;
+  background:#fff;
+  box-shadow:0 30px 90px rgba(16,10,45,.32);
+  position:relative;
+  display:flex;
+  flex-direction:column;
+}
+.locationViewerHead{
+  height:78px;
+  padding:14px 16px;
+  display:grid;
+  grid-template-columns:42px 1fr 42px;
+  gap:10px;
+  align-items:center;
+  background:rgba(255,255,255,.92);
+  border-bottom:1px solid rgba(20,16,40,.08);
+  z-index:2;
+}
+.locationViewerHead button{
+  width:42px;
+  height:42px;
+  border:0;
+  border-radius:14px;
+  background:#f3efff;
+  color:#33214d;
+  display:grid;
+  place-items:center;
+  cursor:pointer;
+}
+.locationViewerHead svg{
+  width:19px;
+  height:19px;
+}
+.locationViewerHead b,.locationViewerHead small{
+  display:block;
+}
+.locationViewerHead small{
+  margin-top:2px;
+  color:#7f7892;
+}
+.liveMapCanvas{
+  flex:1;
+  position:relative;
+  overflow:hidden;
+  background:
+    radial-gradient(circle at 30% 20%,rgba(112,76,255,.18),transparent 28%),
+    radial-gradient(circle at 70% 74%,rgba(22,163,255,.18),transparent 30%),
+    linear-gradient(135deg,#eaf3ff,#f9fff7 46%,#fff1f4);
+}
+.mapRoad{
+  position:absolute;
+  background:rgba(255,255,255,.9);
+  box-shadow:0 0 0 2px rgba(203,214,230,.55) inset;
+  border-radius:999px;
+}
+.mapRoad.one{width:120%;height:24px;left:-10%;top:31%;transform:rotate(-18deg)}
+.mapRoad.two{width:28px;height:120%;left:57%;top:-10%;transform:rotate(24deg)}
+.mapRoad.three{width:90%;height:18px;left:8%;top:64%;transform:rotate(10deg)}
+.mapWater{
+  position:absolute;
+  width:64%;
+  height:170px;
+  right:-16%;
+  bottom:6%;
+  border-radius:50%;
+  background:rgba(85,174,255,.24);
+}
+.mapPulse{
+  position:absolute;
+  width:132px;
+  height:132px;
+  left:44%;
+  top:42%;
+  transform:translate(-50%,-50%);
+  border-radius:50%;
+  background:rgba(112,76,255,.16);
+  border:2px solid rgba(112,76,255,.3);
+  animation:pulseLocation 1.8s ease-in-out infinite;
+}
+@keyframes pulseLocation{
+  0%,100%{transform:translate(-50%,-50%) scale(.82);opacity:.7}
+  50%{transform:translate(-50%,-50%) scale(1.05);opacity:.35}
+}
+.mapUserPin{
+  position:absolute;
+  left:44%;
+  top:42%;
+  transform:translate(-50%,-50%);
+  z-index:2;
+  width:76px;
+  height:76px;
+  border-radius:50%;
+  background:#fff;
+  display:grid;
+  place-items:center;
+  box-shadow:0 14px 36px rgba(42,26,90,.24);
+}
+.mapUserPin .avatar{
+  width:62px;
+  height:62px;
+}
+.mapDestinationPin{
+  position:absolute;
+  right:25%;
+  top:33%;
+  width:42px;
+  height:42px;
+  padding:9px;
+  border-radius:50%;
+  background:#2f83ff;
+  color:#fff;
+  box-shadow:0 14px 30px rgba(47,131,255,.26);
+}
+.mapCityLabel{
+  position:absolute;
+  right:16%;
+  top:47%;
+  font-size:28px;
+  font-weight:900;
+  color:rgba(27,23,42,.74);
+}
+.locationViewerCard{
+  position:absolute;
+  left:18px;
+  right:18px;
+  bottom:18px;
+  padding:18px;
+  border-radius:22px;
+  background:rgba(255,255,255,.94);
+  box-shadow:0 20px 50px rgba(20,16,40,.16);
+}
+.locationViewerCard b,.locationViewerCard span,.locationViewerCard small{
+  display:block;
+}
+.locationViewerCard span,.locationViewerCard small{
+  color:#7f7892;
+  margin-top:4px;
+}
+.locationViewerCard button{
+  width:100%;
+  margin-top:14px;
+  border:0;
+  border-radius:16px;
+  padding:13px;
+  color:#fff;
+  font-weight:900;
+  cursor:pointer;
+  background:linear-gradient(135deg,#704cff,#9b35f5);
+}
+.stopLocationDialog{
+  width:min(360px,94vw);
+  border-radius:28px;
+  background:#fff;
+  padding:24px;
+  position:relative;
+  text-align:center;
+  box-shadow:0 30px 90px rgba(16,10,45,.28);
+}
+.dialogClose{
+  position:absolute;
+  top:14px;
+  right:14px;
+  border:0;
+  background:transparent;
+  cursor:pointer;
+  color:#302842;
+}
+.stopLocationIcon{
+  width:74px;
+  height:74px;
+  margin:20px auto 12px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  color:#e53945;
+  background:#ffe9ee;
+}
+.stopLocationIcon svg{
+  width:36px;
+  height:36px;
+}
+.stopLocationDialog h3{
+  margin:0 0 8px;
+}
+.stopLocationDialog p{
+  margin:0 0 18px;
+  color:#7f7892;
+  line-height:1.45;
+}
+.dangerStop,.softCancel{
+  width:100%;
+  border:0;
+  border-radius:16px;
+  padding:14px;
+  font-weight:900;
+  cursor:pointer;
+}
+.dangerStop{
+  color:#fff;
+  background:linear-gradient(135deg,#ef3f67,#e53945);
+}
+.softCancel{
+  margin-top:10px;
+  color:#302842;
+  background:#f4f1f9;
 }
 @media(max-width:1200px) and (min-width:901px){
   .locationSheet{

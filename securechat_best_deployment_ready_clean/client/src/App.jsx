@@ -313,6 +313,9 @@ export default function App() {
   const [showLocationShare, setShowLocationShare] = useState(false);
   const [locationDuration, setLocationDuration] = useState(60);
   const [locationBusy, setLocationBusy] = useState(false);
+  const [liveLocationSession, setLiveLocationSession] = useState(null);
+  const [activeLocationView, setActiveLocationView] = useState(null);
+  const [stopLocationPrompt, setStopLocationPrompt] = useState(null);
   const [profile, setProfile] = useState(null);
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -406,6 +409,8 @@ export default function App() {
   const recordingStream = useRef(null);
   const recordingChunks = useRef([]);
   const recordingTimer = useRef(null);
+  const liveLocationWatch = useRef(null);
+  const liveLocationState = useRef(null);
 
   useEffect(() => {
     if (!call.active) return undefined;
@@ -430,6 +435,12 @@ export default function App() {
     window.caches?.keys?.()
       .then(keys => Promise.all(keys.map(key => window.caches.delete(key))))
       .catch(() => {});
+  }, []);
+
+  useEffect(() => () => {
+    if (liveLocationWatch.current !== null && navigator.geolocation?.clearWatch) {
+      navigator.geolocation.clearWatch(liveLocationWatch.current);
+    }
   }, []);
 
   useEffect(() => {
@@ -1549,6 +1560,7 @@ export default function App() {
       }));
 
       loadChats();
+      return { ...saved, body: tmp.body, encrypted: Boolean(encryptedPayload.ciphertext) };
     } catch (e) {
       setMessages(p => ({
         ...p,
@@ -1556,6 +1568,7 @@ export default function App() {
       }));
       if (tmp.kind === 'text') setText(tmp.body);
       alert('Message failed: ' + e.message);
+      return null;
     }
   }
 
@@ -1596,6 +1609,36 @@ export default function App() {
     }
   }
 
+  function isLiveLocationActive(data) {
+    if (!data?.liveMinutes || data.stoppedAt) return false;
+    return !data.expiresAt || new Date(data.expiresAt).getTime() > Date.now();
+  }
+
+  function locationMapUrl(data) {
+    return `https://www.google.com/maps?q=${data.lat},${data.lng}`;
+  }
+
+  function locationTimeLabel(value) {
+    if (!value) return 'just now';
+    try {
+      return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return 'just now';
+    }
+  }
+
+  function updateLocationInState(messageId, body) {
+    setMessages(current => {
+      const next = { ...current };
+      Object.keys(next).forEach(conversationId => {
+        next[conversationId] = (next[conversationId] || []).map(message => (
+          message.id === messageId ? { ...message, body, editedAt: new Date().toISOString() } : message
+        ));
+      });
+      return next;
+    });
+  }
+
   function requestCurrentPosition() {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
@@ -1608,6 +1651,109 @@ export default function App() {
         maximumAge: 30000
       });
     });
+  }
+
+  async function saveLiveLocationUpdate(messageId, payload) {
+    const body = JSON.stringify(payload);
+    updateLocationInState(messageId, body);
+    const updated = await api(`/api/messages/${messageId}/location`, {
+      method: 'PATCH',
+      body: JSON.stringify({ body })
+    });
+    setMessages(current => ({
+      ...current,
+      [updated.conversationId]: (current[updated.conversationId] || []).map(message => (
+        message.id === updated.id ? { ...message, ...updated, body } : message
+      ))
+    }));
+    loadChats();
+    return updated;
+  }
+
+  function beginLiveLocationUpdates(message, payload) {
+    if (!message?.id || !payload.liveMinutes || !navigator.geolocation?.watchPosition) return;
+
+    if (liveLocationWatch.current !== null) {
+      navigator.geolocation.clearWatch(liveLocationWatch.current);
+    }
+
+    const session = {
+      messageId: message.id,
+      conversationId: message.conversationId,
+      recipientName: active?.username || 'this chat',
+      payload,
+      lastSentAt: 0
+    };
+    liveLocationState.current = session;
+    setLiveLocationSession({
+      messageId: message.id,
+      recipientName: session.recipientName,
+      expiresAt: payload.expiresAt,
+      updatedAt: payload.updatedAt
+    });
+
+    liveLocationWatch.current = navigator.geolocation.watchPosition(position => {
+      const current = liveLocationState.current;
+      if (!current || current.messageId !== message.id) return;
+
+      if (current.payload.expiresAt && new Date(current.payload.expiresAt).getTime() <= Date.now()) {
+        stopLiveLocation(true);
+        return;
+      }
+
+      const now = Date.now();
+      if (now - current.lastSentAt < 10000) return;
+
+      const nextPayload = {
+        ...current.payload,
+        lat: position.coords.latitude,
+        lng: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        updatedAt: new Date(now).toISOString()
+      };
+      current.payload = nextPayload;
+      current.lastSentAt = now;
+      setLiveLocationSession(sessionState => sessionState?.messageId === message.id
+        ? { ...sessionState, updatedAt: nextPayload.updatedAt }
+        : sessionState);
+      saveLiveLocationUpdate(message.id, nextPayload).catch(error => {
+        console.warn('Live location update failed', error.message);
+      });
+    }, error => {
+      alert('Live location paused: ' + (error.message || 'Location permission or signal was lost.'));
+      stopLiveLocation(false);
+    }, {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 8000
+    });
+  }
+
+  async function stopLiveLocation(silent = false, messageId = liveLocationState.current?.messageId) {
+    if (liveLocationWatch.current !== null && navigator.geolocation?.clearWatch) {
+      navigator.geolocation.clearWatch(liveLocationWatch.current);
+      liveLocationWatch.current = null;
+    }
+
+    const current = liveLocationState.current;
+    liveLocationState.current = null;
+    setLiveLocationSession(null);
+    setStopLocationPrompt(null);
+
+    const sourcePayload = current?.payload || stopLocationPrompt?.data;
+    if (!messageId || !sourcePayload) return;
+
+    const stoppedPayload = {
+      ...sourcePayload,
+      stoppedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+
+    try {
+      await saveLiveLocationUpdate(messageId, stoppedPayload);
+    } catch (error) {
+      if (!silent) alert('Could not stop live location: ' + error.message);
+    }
   }
 
   async function shareLocation() {
@@ -1627,10 +1773,11 @@ export default function App() {
         updatedAt: now.toISOString(),
         expiresAt: liveMinutes ? new Date(now.getTime() + liveMinutes * 60000).toISOString() : null
       };
-      await send({
+      const saved = await send({
         body: JSON.stringify(payload),
         kind: 'location'
       });
+      if (saved && liveMinutes) beginLiveLocationUpdates(saved, payload);
       setShowLocationShare(false);
       setShowComposerTools(false);
     } catch (error) {
@@ -3095,6 +3242,7 @@ export default function App() {
                   ? rows.find(row => row.id === m.replyToId)
                   : null;
                 const locationData = m.kind === 'location' ? parseLocationMessage(m) : null;
+                const locationActive = isLiveLocationActive(locationData);
                 return (
                 <div
                   key={m.id}
@@ -3146,6 +3294,24 @@ export default function App() {
                         >
                           View on Map
                         </a>
+                        <button
+                          className="locationOpenButton"
+                          onClick={() => setActiveLocationView({
+                            message: m,
+                            data: locationData,
+                            senderName: String(m.senderId) === String(me.id) ? me.username : active.username
+                          })}
+                        >
+                          {locationData.liveMinutes ? 'View Live Location' : 'Open Preview'}
+                        </button>
+                        {String(m.senderId) === String(me.id) && locationActive && (
+                          <button
+                            className="locationStopInline"
+                            onClick={() => setStopLocationPrompt({ message: m, data: locationData })}
+                          >
+                            Stop Sharing
+                          </button>
+                        )}
                       </div>
                       <a
                         className="locationMiniMap"
@@ -3253,6 +3419,74 @@ export default function App() {
                 <button className="shareLocationButton" onClick={shareLocation} disabled={locationBusy}>
                   {locationBusy ? 'Getting location...' : 'Share Location'}
                 </button>
+              </div>
+            )}
+
+            {liveLocationSession && (
+              <div className="liveLocationBar">
+                <div>
+                  <b><MapPin /> Sharing live location</b>
+                  <span>With {liveLocationSession.recipientName} · Updated {locationTimeLabel(liveLocationSession.updatedAt)}</span>
+                </div>
+                <button onClick={() => setStopLocationPrompt({ message: { id: liveLocationSession.messageId }, data: liveLocationState.current?.payload })}>
+                  Stop
+                </button>
+              </div>
+            )}
+
+            {activeLocationView && (
+              <div className="locationViewerOverlay" onClick={() => setActiveLocationView(null)}>
+                <div className="locationViewer" onClick={e => e.stopPropagation()}>
+                  <div className="locationViewerHead">
+                    <button onClick={() => setActiveLocationView(null)}><ArrowLeft /></button>
+                    <div>
+                      <b>{activeLocationView.senderName}'s {activeLocationView.data.liveMinutes ? 'Live Location' : 'Location'}</b>
+                      <small>
+                        {activeLocationView.data.liveMinutes
+                          ? `${isLiveLocationActive(activeLocationView.data) ? 'Live' : activeLocationView.data.stoppedAt ? 'Stopped' : 'Expired'} · Updated ${locationTimeLabel(activeLocationView.data.updatedAt)}`
+                          : `Accuracy ${Math.round(activeLocationView.data.accuracy || 0)} m`}
+                      </small>
+                    </div>
+                    <button onClick={() => window.open(locationMapUrl(activeLocationView.data), '_blank', 'noopener,noreferrer')}><Navigation /></button>
+                  </div>
+
+                  <div className="liveMapCanvas">
+                    <div className="mapRoad one" />
+                    <div className="mapRoad two" />
+                    <div className="mapRoad three" />
+                    <div className="mapWater" />
+                    <div className="mapPulse" />
+                    <div className="mapUserPin">
+                      <Avatar user={String(activeLocationView.message.senderId) === String(me.id) ? me : active} />
+                    </div>
+                    <MapPin className="mapDestinationPin" />
+                    <span className="mapCityLabel">Shared location</span>
+                  </div>
+
+                  <div className="locationViewerCard">
+                    <b>{activeLocationView.data.liveMinutes ? 'Live tracking' : 'Shared location'}</b>
+                    <span>{activeLocationView.data.place || 'Current location'} · {Math.round(activeLocationView.data.accuracy || 0)} m accuracy</span>
+                    {activeLocationView.data.expiresAt && !activeLocationView.data.stoppedAt && (
+                      <small>Ends {locationTimeLabel(activeLocationView.data.expiresAt)}</small>
+                    )}
+                    <button onClick={() => window.open(locationMapUrl(activeLocationView.data), '_blank', 'noopener,noreferrer')}>
+                      Open in Google Maps
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {stopLocationPrompt && (
+              <div className="locationViewerOverlay" onClick={() => setStopLocationPrompt(null)}>
+                <div className="stopLocationDialog" onClick={e => e.stopPropagation()}>
+                  <button className="dialogClose" onClick={() => setStopLocationPrompt(null)}><X /></button>
+                  <div className="stopLocationIcon"><MapPin /></div>
+                  <h3>Stop Sharing Location?</h3>
+                  <p>{active?.username || 'This user'} will no longer see your live location updates.</p>
+                  <button className="dangerStop" onClick={() => stopLiveLocation(false, stopLocationPrompt.message.id)}>Stop Sharing</button>
+                  <button className="softCancel" onClick={() => setStopLocationPrompt(null)}>Cancel</button>
+                </div>
               </div>
             )}
 
