@@ -2699,28 +2699,46 @@ export default function App() {
   return (
     <div className="app">
       <aside className={`${active ? 'side hide' : 'side'} tab-${mobileTab}`}>
-        <div className="appTitle">
-          <div className="brandMark"><MessageCircle /></div>
-          <div><b className="desktopBrand">{BRAND.name}</b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
-          <button className="mobileTitleAction" onClick={() => setProfile(me)} title="Open profile"><Avatar user={me} /></button>
-        </div>
-        <div className="me">
-          <Avatar user={me} className="avatarButton" onClick={() => setProfile(me)} title="Change profile photo" />
-          <div>
-            <b>{me?.username}</b>
-            <small>{ready ? 'Online' : 'Offline'}</small>
+        <div className="desktopNavRail">
+          <div className="appTitle">
+            <div className="brandMark"><MessageCircle /></div>
+            <div><b className="desktopBrand">Chat <em>Opal</em></b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
+            <button className="mobileTitleAction" onClick={() => setProfile(me)} title="Open profile"><Avatar user={me} /></button>
           </div>
-          <button className="icon" onClick={logout}><LogOut /></button>
-          <button className="icon" onClick={createRecoveryCode} title="Create recovery code"><KeyRound /></button>
-          <button className="icon" onClick={requestNotifications} title="Enable notifications"><Bell /></button>
-          <button className="icon" onClick={loadCallHistory} title="Call history"><History /></button>
-          <button className="icon" onClick={openPrivacy} title="Privacy"><Shield /></button>
-          <button className="icon" onClick={openSecurity} title="Account security"><Lock /></button>
+          <button className="newChatButton" onClick={() => {
+            setMobileTab('chats');
+            setChatListFilter('all');
+            setActive(null);
+          }}><Plus /> New Chat</button>
+          <div className="railMenu">
+            <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('all'); }}><MessageCircle /> Chats <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0) || ''}</span></button>
+            <button className={chatListFilter === 'groups' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('groups'); }}><Users /> Groups</button>
+            <button onClick={loadCallHistory}><Phone /> Calls</button>
+            <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Languages /> AI Assistant</button>
+            <button onClick={() => { setChatListFilter('all'); setMobileTab('chats'); }}><User /> Contacts</button>
+            <button onClick={() => alert('Saved messages will be connected in the saved-chats phase.')}><Star /> Saved Messages</button>
+          </div>
+          <div className="railFooter">
+            <button onClick={openPrivacy}><Settings /> Settings</button>
+            <button onClick={requestNotifications}><Bell /> Notifications</button>
+          </div>
+          <div className="me">
+            <Avatar user={me} className="avatarButton" onClick={() => setProfile(me)} title="Change profile photo" />
+            <div>
+              <b>{me?.username}</b>
+              <small>{ready ? 'Online' : 'Offline'}</small>
+            </div>
+            <button className="icon" onClick={logout} title="Log out"><LogOut /></button>
+            <button className="icon" onClick={openSecurity} title="Account security"><Lock /></button>
+          </div>
         </div>
+
+        <div className="chatListPane">
 
         <div className="search">
           <Search />
           <input placeholder="Search name or phone" onChange={e => search(e.target.value)} />
+          <button className="searchTune" type="button" onClick={() => setChatListFilter('unread')} title="Show unread chats"><Settings /></button>
         </div>
         <div className="chatFilterChips">
           <button className={chatListFilter === 'all' ? 'active' : ''} onClick={() => setChatListFilter('all')}>
@@ -2738,18 +2756,24 @@ export default function App() {
             loadChannels('', false);
           }}>Channels</button>
         </div>
-        {['all', 'unread'].includes(chatListFilter) && <div className="contactStories">
-          <button onClick={() => setProfile(me)}>
-            <span className="storyAvatar"><Avatar user={me} /><Plus /></span>
-            <small>Your story</small>
-          </button>
-          {contacts.slice(0, 6).map(contact => (
-            <button key={`story-${contact.id}`} onClick={() => openChat(contact)}>
-              <span className="storyAvatar"><Avatar user={contact} /></span>
-              <small>{contact.username}</small>
+        {['all', 'unread'].includes(chatListFilter) && <>
+          <div className="storiesHeader">
+            <b>Stories</b>
+            <button type="button" onClick={() => setProfile(me)} title="Add story"><Plus /></button>
+          </div>
+          <div className="contactStories">
+            <button onClick={() => setProfile(me)}>
+              <span className="storyAvatar"><Avatar user={me} /><Plus /></span>
+              <small>Your story</small>
             </button>
-          ))}
-        </div>}
+            {contacts.slice(0, 6).map(contact => (
+              <button key={`story-${contact.id}`} onClick={() => openChat(contact)}>
+                <span className="storyAvatar"><Avatar user={contact} /></span>
+                <small>{contact.username}</small>
+              </button>
+            ))}
+          </div>
+        </>}
         <div className="aiOpalPanel">
           <div className="aiOrb"><Languages /></div>
           <h2>AI Opal</h2>
@@ -2867,6 +2891,7 @@ export default function App() {
           <button className={mobileTab === 'status' ? 'active' : ''} onClick={() => { setMobileTab('status'); loadStatuses(); }}><History /><span>Status</span></button>
           <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); openPrivacy(); }}><Settings /><span>Settings</span></button>
         </nav>
+        </div>
       </aside>
 
       <main className={active ? 'panel open' : 'panel'}>
@@ -2914,6 +2939,7 @@ export default function App() {
             )}
 
             <section className="msgs">
+              <div className="dayChip">Today</div>
               {displayRows.map(m => {
                 const repliedMessage = m.replyToId
                   ? rows.find(row => row.id === m.replyToId)
@@ -3086,6 +3112,22 @@ export default function App() {
           </>
         )}
       </main>
+
+      <aside className="desktopAssistantPanel">
+        <div className="assistantCard">
+          <div className="assistantTitle">
+            <div><b>AI Assistant</b><small>How can I help you today?</small></div>
+            <Languages />
+          </div>
+          <button onClick={() => alert('AI translation will be connected after go-live.')}><Languages /> Translate this chat</button>
+          <button onClick={() => alert('Conversation summary will be connected after go-live.')}><MessageCircle /> Summarize conversation</button>
+          <button onClick={() => alert('Smart reply suggestions will be connected after go-live.')}><Pencil /> Suggest a reply</button>
+          <div className="assistantAsk">
+            <input placeholder="Ask anything..." />
+            <button onClick={() => alert('AI Assistant will be connected after go-live.')}><Send /></button>
+          </div>
+        </div>
+      </aside>
 
       {incoming && !call.active && (
         <div className="incoming">

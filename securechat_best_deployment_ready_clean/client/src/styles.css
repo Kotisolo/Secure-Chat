@@ -2738,8 +2738,395 @@ body{background:var(--bg);color:var(--text)}
     width:56px!important;
     height:72px!important;
   }
-  .videoMini .miniEnd{
+.videoMini .miniEnd{
     width:40px!important;
     height:40px!important;
+  }
+}
+
+/* Desktop main chat page refresh based on the supplied Chat Opal reference */
+@media(min-width:901px){
+  .app{
+    padding:18px;
+    gap:16px;
+    background:
+      radial-gradient(circle at 18% 0%,rgba(117,73,238,.10),transparent 28%),
+      radial-gradient(circle at 80% 10%,rgba(34,211,238,.08),transparent 24%),
+      #fbfaff;
+  }
+  .side{
+    width:610px!important;
+    min-width:610px!important;
+    height:calc(100dvh - 36px);
+    display:grid!important;
+    grid-template-columns:210px 1fr;
+    overflow:hidden;
+    border:1px solid #ece9f2;
+    border-radius:18px;
+    background:#fff;
+    box-shadow:0 18px 55px rgba(35,28,66,.08);
+  }
+  .desktopNavRail{
+    min-width:0;
+    display:flex;
+    flex-direction:column;
+    padding:18px 14px;
+    border-right:1px solid #f0edf6;
+    background:#fff;
+  }
+  .desktopNavRail .appTitle{
+    height:auto;
+    padding:0 0 18px;
+    gap:10px;
+  }
+  .desktopNavRail .appTitle b{
+    font-size:22px;
+    color:#171326;
+  }
+  .desktopNavRail .appTitle b em{
+    font-style:normal;
+    color:#704cff;
+  }
+  .desktopNavRail .appTitle small{
+    display:none;
+  }
+  .desktopNavRail .brandMark{
+    width:42px;
+    height:42px;
+    border-radius:14px;
+  }
+  .newChatButton{
+    height:44px;
+    border-radius:13px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    color:#fff;
+    font-weight:900;
+    background:linear-gradient(135deg,#704cff,#9b35f5);
+    box-shadow:0 12px 26px rgba(117,73,238,.24);
+  }
+  .newChatButton svg{width:18px;height:18px}
+  .railMenu,.railFooter{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-top:18px;
+  }
+  .railFooter{
+    margin-top:auto;
+    padding-top:18px;
+    border-top:1px solid #f0edf6;
+  }
+  .railMenu button,.railFooter button{
+    height:42px;
+    padding:0 12px;
+    border-radius:13px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    color:#312d46;
+    background:transparent;
+    font-weight:800;
+    text-align:left;
+  }
+  .railMenu button svg,.railFooter button svg{
+    width:18px;
+    height:18px;
+    color:#4d4964;
+  }
+  .railMenu button span{
+    margin-left:auto;
+    min-width:22px;
+    height:22px;
+    padding:0 7px;
+    border-radius:999px;
+    display:grid;
+    place-items:center;
+    color:#fff;
+    background:#704cff;
+    font-size:11px;
+  }
+  .railMenu button.active,.railFooter button:hover,.railMenu button:hover{
+    color:#704cff;
+    background:linear-gradient(90deg,rgba(117,73,238,.14),rgba(117,73,238,.05));
+  }
+  .railMenu button.active svg,.railFooter button:hover svg,.railMenu button:hover svg{
+    color:#704cff;
+  }
+  .desktopNavRail .me{
+    height:auto;
+    margin-top:16px;
+    padding:14px 0 0;
+    border:0;
+    border-top:1px solid #f0edf6;
+    background:transparent;
+    gap:9px;
+  }
+  .desktopNavRail .me .avatar{
+    width:42px;
+    height:42px;
+  }
+  .desktopNavRail .me b{
+    color:#171326;
+    font-size:13px;
+  }
+  .desktopNavRail .me small{
+    color:#2ebd71;
+    font-size:11px;
+  }
+  .desktopNavRail .me .icon{
+    width:32px;
+    height:32px;
+    border-radius:10px;
+    background:#f6f4fb;
+    color:#5f5a72;
+  }
+  .chatListPane{
+    min-width:0;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+    background:#fff;
+  }
+  .chatListPane .search{
+    height:48px;
+    margin:18px 16px 12px;
+    border-radius:16px;
+    background:#f7f6fb;
+  }
+  .searchTune{
+    width:34px;
+    height:34px;
+    border-radius:11px;
+    display:grid;
+    place-items:center;
+    color:#4d4964;
+    background:#fff;
+    box-shadow:0 8px 18px rgba(35,28,66,.06);
+  }
+  .searchTune svg{
+    width:17px;
+    height:17px;
+  }
+  .storiesHeader{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding:0 18px 9px;
+    color:#171326;
+  }
+  .storiesHeader button{
+    width:26px;
+    height:26px;
+    border-radius:9px;
+    display:grid;
+    place-items:center;
+    color:#704cff;
+    background:#f4f2fb;
+  }
+  .storiesHeader svg{width:15px;height:15px}
+  .contactStories{
+    padding:0 16px 14px;
+    gap:12px;
+  }
+  .contactStories button{min-width:58px}
+  .storyAvatar .avatar{
+    width:48px;
+    height:48px;
+  }
+  .list{
+    flex:1;
+    min-height:0;
+    padding:8px 10px 14px;
+  }
+  .chat{
+    margin-bottom:8px;
+    border-radius:18px;
+    box-shadow:none;
+    background:#fff;
+  }
+  .chat:hover{
+    background:#f7f3ff;
+  }
+  .chatMain{
+    padding:12px 8px;
+  }
+  .chatMain .avatar{
+    width:48px;
+    height:48px;
+  }
+  .chatMain span{
+    max-width:132px;
+  }
+  .panel{
+    height:calc(100dvh - 36px);
+    min-width:0;
+    overflow:hidden;
+    border:1px solid #ece9f2;
+    border-radius:18px;
+    background:#fff;
+    box-shadow:0 18px 55px rgba(35,28,66,.06);
+  }
+  .head{
+    height:76px;
+    min-height:76px;
+    border-radius:18px 18px 0 0;
+  }
+  .msgs{
+    padding:18px 20px;
+    background-color:#fdfcff;
+    background-image:
+      radial-gradient(circle at 1px 1px,rgba(117,73,238,.045) 1px,transparent 0),
+      linear-gradient(180deg,#fff,#fcfbff);
+  }
+  .dayChip{
+    align-self:center;
+    padding:7px 16px;
+    border-radius:999px;
+    color:#6f6a80;
+    background:#f3f1f8;
+    font-size:12px;
+    font-weight:800;
+  }
+  .compose{
+    margin:0 16px 12px;
+    height:64px;
+    min-height:64px;
+    padding:8px 10px;
+    border:1px solid #ece9f2;
+    border-radius:18px;
+    box-shadow:0 16px 36px rgba(35,28,66,.06);
+  }
+  .compose .icon{
+    width:42px;
+    height:42px;
+    border-radius:14px;
+  }
+  .compose input{
+    height:42px;
+    border-radius:16px;
+  }
+  .send{
+    width:46px;
+    height:46px;
+  }
+  .desktopAssistantPanel{
+    width:280px;
+    min-width:280px;
+    height:calc(100dvh - 36px);
+    display:flex;
+    align-items:flex-end;
+  }
+  .assistantCard{
+    width:100%;
+    padding:16px;
+    border:1px solid #ece9f2;
+    border-radius:18px;
+    background:#fff;
+    box-shadow:0 18px 55px rgba(35,28,66,.08);
+  }
+  .assistantTitle{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:14px;
+    color:#171326;
+  }
+  .assistantTitle b,.assistantTitle small{
+    display:block;
+  }
+  .assistantTitle small{
+    margin-top:4px;
+    color:#8f8aa1;
+    font-size:11px;
+  }
+  .assistantTitle svg{
+    color:#704cff;
+  }
+  .assistantCard>button{
+    width:100%;
+    height:42px;
+    margin-bottom:9px;
+    padding:0 12px;
+    border-radius:13px;
+    display:flex;
+    align-items:center;
+    gap:9px;
+    color:#4d4964;
+    background:#f7f5fb;
+    font-weight:800;
+  }
+  .assistantCard>button svg{
+    width:17px;
+    height:17px;
+    color:#704cff;
+  }
+  .assistantAsk{
+    height:42px;
+    margin-top:4px;
+    padding:4px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+    border-radius:14px;
+    background:#f7f5fb;
+  }
+  .assistantAsk input{
+    flex:1;
+    min-width:0;
+    border:0;
+    outline:0;
+    background:transparent;
+    color:#171326;
+    padding:0 8px;
+  }
+  .assistantAsk button{
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    display:grid;
+    place-items:center;
+    color:#fff;
+    background:linear-gradient(135deg,#704cff,#9b35f5);
+  }
+  .assistantAsk svg{width:16px;height:16px}
+}
+
+@media(max-width:1200px) and (min-width:901px){
+  .desktopAssistantPanel{
+    display:none;
+  }
+  .side{
+    width:560px!important;
+    min-width:560px!important;
+    grid-template-columns:190px 1fr;
+  }
+}
+
+@media(max-width:900px){
+  .side{
+    display:flex!important;
+  }
+  .desktopNavRail{
+    display:block;
+    padding:0;
+    border:0;
+  }
+  .desktopNavRail .appTitle{
+    display:flex;
+  }
+  .newChatButton,.railMenu,.railFooter,.desktopNavRail .me{
+    display:none!important;
+  }
+  .chatListPane{
+    flex:1;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+  }
+  .desktopAssistantPanel,.storiesHeader,.dayChip{
+    display:none!important;
   }
 }
