@@ -4509,3 +4509,39 @@ body{background:var(--bg);color:var(--text)}
     font-size:28px;
   }
 }
+
+/* Keep chat three-dot menu compact */
+.chatHeaderMenu{
+  top:72px;
+  right:14px;
+  width:min(260px,72vw);
+  max-height:calc(100dvh - 96px);
+  padding:8px 0;
+  border-radius:18px;
+  overflow:auto;
+}
+.chatHeaderMenu button{
+  min-height:42px;
+  padding:0 16px;
+  gap:10px;
+  font-size:15px;
+  font-weight:600;
+}
+.chatHeaderMenu .menuMoreButton span{
+  font-size:22px;
+}
+@media(max-width:900px){
+  .chatHeaderMenu{
+    top:68px;
+    right:10px;
+    width:min(248px,76vw);
+    max-height:calc(100dvh - 92px);
+    border-radius:18px;
+    padding:8px 0;
+  }
+  .chatHeaderMenu button{
+    min-height:44px;
+    padding:0 16px;
+    font-size:16px;
+  }
+}
