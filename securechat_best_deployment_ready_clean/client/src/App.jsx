@@ -3284,8 +3284,7 @@ export default function App() {
 
               <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
               <button className="icon" onClick={() => startCall('video')}><Video /></button>
-              <button className="icon" onClick={() => setSearchingMessages(value => !value)}><Search /></button>
-              <button className="icon" onClick={() => setProfile(active)}><User /></button>
+              <button className="icon" onClick={() => setProfile(active)}><MoreVertical /></button>
             </header>
 
             {searchingMessages && (
