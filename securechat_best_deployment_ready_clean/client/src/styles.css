@@ -3832,3 +3832,265 @@ body{background:var(--bg);color:var(--text)}
     min-height:112px;
   }
 }
+
+/* Mobile top headers based on the latest reference image. Bottom navigation is unchanged. */
+@media(max-width:900px){
+  .desktopNavRail .appTitle{
+    height:96px!important;
+    padding:22px 18px 12px!important;
+    display:flex!important;
+    align-items:center!important;
+    gap:12px!important;
+    background:#fff!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+  .desktopNavRail .brandMark,
+  .desktopNavRail .desktopBrand,
+  .desktopNavRail .appTitle small{
+    display:none!important;
+  }
+  .mobileBrand{
+    display:block!important;
+    color:#11101b!important;
+    font-size:34px!important;
+    line-height:1!important;
+    font-weight:950!important;
+    letter-spacing:-.07em!important;
+  }
+  .mobileTitleActions{
+    margin-left:auto;
+    display:flex;
+    gap:12px;
+    align-items:center;
+  }
+  .mobileTitleActions button{
+    width:54px;
+    height:54px;
+    border-radius:22px;
+    display:grid;
+    place-items:center;
+    color:#11101b;
+    background:#fbfaff;
+    border:1px solid #eeeaf6;
+    box-shadow:0 10px 26px rgba(35,28,66,.07);
+  }
+  .mobileTitleActions button svg{
+    width:24px;
+    height:24px;
+  }
+  .chatListPane .search{
+    height:58px!important;
+    margin:8px 18px 18px!important;
+    padding:0 16px!important;
+    border-radius:20px!important;
+    background:#f5f3f9!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+  .chatListPane .search svg{
+    width:24px;
+    height:24px;
+    color:#b0aabc;
+  }
+  .chatListPane .search input{
+    font-size:16px!important;
+    color:#171326!important;
+  }
+  .chatListPane .search input::placeholder{
+    color:#8f8aa1;
+  }
+  .chatListPane .searchTune{
+    display:none!important;
+  }
+  .chatFilterChips{
+    padding:0 18px 18px!important;
+    gap:10px!important;
+  }
+  .chatFilterChips button{
+    min-height:50px!important;
+    padding:0 18px!important;
+    border-radius:16px!important;
+    background:#f4f2f8!important;
+    color:#5c566b!important;
+    font-size:15px!important;
+    font-weight:850!important;
+  }
+  .chatFilterChips button.active{
+    color:#fff!important;
+    background:linear-gradient(135deg,#5f20ff,#823cff)!important;
+    box-shadow:0 12px 22px rgba(112,76,255,.25)!important;
+  }
+  .contactStories{
+    padding:0 18px 22px!important;
+    gap:14px!important;
+    border-bottom:0!important;
+  }
+  .contactStories button{
+    min-width:68px!important;
+  }
+  .storyAvatar{
+    padding:3px!important;
+    border:3px solid #704cff!important;
+  }
+  .storyAvatar .avatar{
+    width:58px!important;
+    height:58px!important;
+    font-size:18px!important;
+  }
+  .storyAvatar>svg{
+    right:-2px!important;
+    bottom:-2px!important;
+    width:22px!important;
+    height:22px!important;
+    padding:4px!important;
+  }
+  .contactStories small{
+    width:68px!important;
+    font-size:12px!important;
+    color:#706a7d!important;
+  }
+  .archiveToggle{
+    height:70px!important;
+    margin:12px 18px 16px!important;
+    padding:0 18px!important;
+    border-radius:22px!important;
+    color:#625d74!important;
+    background:#fbfaff!important;
+    border:1px solid #eeeaf6!important;
+    box-shadow:0 10px 24px rgba(35,28,66,.05)!important;
+    font-size:17px!important;
+    font-weight:850!important;
+  }
+  .archiveToggle svg{
+    width:26px;
+    height:26px;
+  }
+  .panel.open .head{
+    height:90px!important;
+    min-height:90px!important;
+    padding:18px 14px 12px!important;
+    gap:10px!important;
+    border:0!important;
+    border-radius:0 0 24px 24px!important;
+    background:#fff!important;
+    box-shadow:0 12px 30px rgba(35,28,66,.07)!important;
+  }
+  .panel.open .head .mobile{
+    width:42px!important;
+    height:42px!important;
+    border-radius:16px!important;
+    color:#151225!important;
+    background:transparent!important;
+    box-shadow:none!important;
+  }
+  .panel.open .head .avatar{
+    width:54px!important;
+    height:54px!important;
+    border-radius:50%!important;
+    font-size:18px!important;
+  }
+  .panel.open .head .title b{
+    font-size:20px!important;
+    font-weight:950!important;
+    color:#14111f!important;
+  }
+  .panel.open .head .title small{
+    margin-top:2px!important;
+    font-size:13px!important;
+    color:#1fc86b!important;
+  }
+  .panel.open .head .icon:not(.mobile){
+    width:50px!important;
+    height:50px!important;
+    border-radius:22px!important;
+    color:#704cff!important;
+    background:#fbfaff!important;
+    border:1px solid #eeeaf6!important;
+    box-shadow:0 10px 24px rgba(35,28,66,.06)!important;
+  }
+  .panel.open .head .icon:not(.mobile) svg{
+    width:24px;
+    height:24px;
+  }
+}
+
+.voiceBubble{
+  width:min(292px,68vw);
+  min-height:72px;
+  padding:12px 14px;
+  border-radius:22px;
+  display:flex;
+  align-items:center;
+  gap:12px;
+  background:#fff;
+  border:1px solid #eceaf2;
+  box-shadow:0 10px 24px rgba(35,28,66,.07);
+}
+.voiceBubble.mineVoice{
+  background:linear-gradient(135deg,#704cff,#823cff);
+  border:0;
+  box-shadow:0 16px 30px rgba(112,76,255,.26);
+}
+.voiceBubble audio{
+  display:none;
+}
+.voiceBubble button{
+  width:48px;
+  height:48px;
+  min-width:48px;
+  border-radius:50%;
+  display:grid;
+  place-items:center;
+  background:#704cff;
+  color:#fff;
+}
+.voiceBubble.mineVoice button{
+  color:#704cff;
+  background:#fff;
+}
+.voiceBubble button span{
+  width:0;
+  height:0;
+  margin-left:4px;
+  border-top:10px solid transparent;
+  border-bottom:10px solid transparent;
+  border-left:14px solid currentColor;
+}
+.voiceBubble button svg{
+  width:18px;
+  height:18px;
+}
+.voiceWave{
+  flex:1;
+  height:34px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+}
+.voiceWave i{
+  width:3px;
+  min-height:5px;
+  border-radius:999px;
+  background:#704cff;
+}
+.voiceBubble.mineVoice .voiceWave i{
+  background:#fff;
+}
+.voiceBubble time{
+  min-width:34px;
+  color:#625d74;
+  font-weight:800;
+  font-size:13px;
+}
+.voiceBubble.mineVoice time{
+  color:#fff;
+}
+@media(max-width:900px){
+  .voiceBubble{
+    width:min(292px,72vw);
+    min-height:74px;
+    border-radius:24px;
+  }
+}

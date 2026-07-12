@@ -4,7 +4,7 @@ import {
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
-  Shield, Ban, Flag, Users, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3
+  Shield, Ban, Flag, Users, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, API_URL
@@ -210,6 +210,67 @@ const StreamAudio = ({ stream }) => {
     if (ref.current) ref.current.srcObject = stream || null;
   }, [stream]);
   return <audio ref={ref} autoPlay />;
+};
+const formatAudioTime = seconds => {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const whole = Math.floor(seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
+};
+const VoiceMessage = ({ src, mine = false, onClick }) => {
+  const audioRef = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [current, setCurrent] = useState(0);
+  const progress = duration ? Math.min(1, current / duration) : 0;
+  const bars = [18, 30, 22, 40, 56, 34, 48, 26, 38, 58, 32, 46, 24, 36, 20, 30];
+
+  useEffect(() => {
+    setPlaying(false);
+    setDuration(0);
+    setCurrent(0);
+  }, [src]);
+
+  const toggle = event => {
+    event.stopPropagation();
+    const audio = audioRef.current;
+    if (!audio || !src) return;
+    if (audio.paused) audio.play().catch(() => {});
+    else audio.pause();
+  };
+
+  return (
+    <div className={mine ? 'voiceBubble mineVoice' : 'voiceBubble'} onClick={onClick}>
+      <audio
+        ref={audioRef}
+        src={src}
+        preload="auto"
+        onLoadedMetadata={event => setDuration(event.currentTarget.duration || 0)}
+        onTimeUpdate={event => setCurrent(event.currentTarget.currentTime || 0)}
+        onPlay={() => setPlaying(true)}
+        onPause={() => setPlaying(false)}
+        onEnded={event => {
+          event.currentTarget.currentTime = 0;
+          setCurrent(0);
+          setPlaying(false);
+        }}
+      />
+      <button type="button" onClick={toggle} aria-label={playing ? 'Pause voice message' : 'Play voice message'}>
+        {playing ? <Square /> : <span />}
+      </button>
+      <div className="voiceWave" aria-hidden="true">
+        {bars.map((height, index) => (
+          <i
+            key={index}
+            style={{
+              height: `${height}%`,
+              opacity: index / bars.length <= progress ? 1 : .48
+            }}
+          />
+        ))}
+      </div>
+      <time>{formatAudioTime(duration || current)}</time>
+    </div>
+  );
 };
 const cid = (a, b) => [String(a), String(b)].sort().join('-');
 const t = v => {
@@ -3000,7 +3061,10 @@ export default function App() {
           <div className="appTitle">
             <div className="brandMark"><MessageCircle /></div>
             <div><b className="desktopBrand">Chat <em>Opal</em></b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
-            <button className="mobileTitleAction" onClick={() => setProfile(me)} title="Open profile"><Avatar user={me} /></button>
+            <div className="mobileTitleActions">
+              <button onClick={() => alert('Camera story capture will open from the Status screen.')} title="Camera"><Camera /></button>
+              <button onClick={() => setProfile(me)} title="Menu"><MoreVertical /></button>
+            </div>
           </div>
           <button className="newChatButton" onClick={() => {
             setMobileTab('chats');
@@ -3269,15 +3333,10 @@ export default function App() {
                       📎 {m.fileName || m.body}
                     </a>
                   ) : m.kind === 'audio' && m.fileUrl ? (
-                    <audio
-                      className="voiceMessage"
+                    <VoiceMessage
                       src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))}
-                      controls
-                      preload="auto"
+                      mine={String(m.senderId) === String(me.id)}
                       onClick={e => e.stopPropagation()}
-                      onEnded={e => {
-                        e.currentTarget.currentTime = 0;
-                      }}
                     />
                   ) : locationData ? (
                     <div className="locationMessage" onClick={e => e.stopPropagation()}>
