@@ -378,6 +378,7 @@ export default function App() {
   const [activeLocationView, setActiveLocationView] = useState(null);
   const [stopLocationPrompt, setStopLocationPrompt] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [profileMode, setProfileMode] = useState('quick');
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
@@ -475,6 +476,10 @@ export default function App() {
   const recordingTimer = useRef(null);
   const liveLocationWatch = useRef(null);
   const liveLocationState = useRef(null);
+
+  useEffect(() => {
+    if (profile) setProfileMode('quick');
+  }, [profile?.id]);
 
   useEffect(() => {
     if (!call.active) return undefined;
@@ -2041,6 +2046,48 @@ export default function App() {
     alert('Report submitted.');
   }
 
+  function openProfileConversation(target = profile) {
+    if (!target) return;
+    setActive(target);
+    setMobileTab('chats');
+    setProfile(null);
+  }
+
+  function callProfile(type) {
+    if (!profile) return;
+    const target = profile;
+    setActive(target);
+    setMobileTab('chats');
+    setProfile(null);
+    startCall(type, target);
+  }
+
+  function shareProfileLocation() {
+    if (!profile) return;
+    setActive(profile);
+    setMobileTab('chats');
+    setProfile(null);
+    setShowLocationShare(true);
+  }
+
+  function openProfileMedia() {
+    if (!profile) return;
+    setActive(profile);
+    setMobileTab('chats');
+    setProfile(null);
+    setShowChatMedia(true);
+  }
+
+  function enableProfileTranslation() {
+    if (!profile || !me) return;
+    const key = `sc_translate_chat_${cid(me.id, profile.id)}`;
+    localStorage.setItem(key, 'enabled');
+    setActive(profile);
+    setMobileTab('chats');
+    setProfile(null);
+    alert(`Translate chat is enabled for ${profile.username}.`);
+  }
+
   async function unblockUser(userId) {
     await api(`/api/users/${userId}/block`, { method: 'DELETE' });
     setPrivacy(current => ({
@@ -3015,6 +3062,19 @@ export default function App() {
   const displayRows = messageSearch.trim()
     ? rows.filter(message => (message.body || '').toLowerCase().includes(messageSearch.trim().toLowerCase()))
     : rows;
+  const profileRows = profile && me && String(profile.id) !== String(me.id)
+    ? messages[cid(me.id, profile.id)] || []
+    : [];
+  const profileMediaCount = profileRows.filter(message =>
+    ['image', 'file', 'audio', 'location'].includes(message.kind) || /^https?:\/\//i.test(message.body || '')
+  ).length;
+  const profileStarredCount = profileRows.filter(message => message.starred).length;
+  const profileIsMe = profile && String(profile.id) === String(me?.id);
+  const profileOnlineText = profile?.online ? 'Online' : 'Offline';
+  const profileLastSeenText = profile?.online ? 'Last active now' : 'Last active recently';
+  const profileMemberSince = profile?.createdAt
+    ? new Date(profile.createdAt).toLocaleString(undefined, { month: 'long', year: 'numeric' })
+    : 'Recently';
   const filteredCalls = callHistory.filter(item => {
     if (callFilter === 'all') return true;
     if (callFilter === 'missed') return ['missed', 'declined', 'failed'].includes(item.status);
@@ -4512,27 +4572,73 @@ export default function App() {
       )}
 
       {profile && (
-        <div className="modal">
-          <div className="profile">
-            <button onClick={() => setProfile(null)}><X /></button>
-            <Avatar user={profile} big />
-            <h2>{profile.username}</h2>
-            <p>{profile.phone}</p>
-            <small>{profile.about}</small>
-            {String(profile.id) !== String(me?.id) && (
-              <div className="profileSafety">
-                <button onClick={reportProfile}><Flag /> Report</button>
-                <button className="danger" onClick={blockProfile}><Ban /> Block</button>
+        <div className="modal profileModal">
+          {profileMode === 'full' ? (
+            <div className="profile profileFull">
+              <div className="profileFullTop">
+                <button onClick={() => setProfileMode('quick')}><ArrowLeft /></button>
+                <b>Full Profile</b>
+                <button onClick={() => setProfile(null)}><MoreVertical /></button>
               </div>
-            )}
-            {String(profile.id) === String(me?.id) && (
-              <label className="profilePhoto">
-                <Camera />
-                Change profile photo
-                <input hidden type="file" accept="image/*" onChange={uploadAvatar} />
-              </label>
-            )}
-          </div>
+              <div className="profileCover" />
+              <div className="profileAvatarWrap full">
+                <Avatar user={profile} big />
+                <span className={profile.online ? 'profilePresence online' : 'profilePresence'} />
+              </div>
+              <h2>{profile.username}</h2>
+              <p>{profile.phone}</p>
+              <small><span className={profile.online ? 'dot online' : 'dot'} /> {profileOnlineText} • {profileLastSeenText}</small>
+              <div className="profileInfoList">
+                <div><span><MessageCircle /></span><b>About</b><p>{profile.about || 'Hey there! I am using SecureChat.'}</p></div>
+                <div><span><Languages /></span><b>Languages</b><p>{profile.languages || 'English, Hindi'}</p></div>
+                <div><span><CalendarClock /></span><b>Member Since</b><p>{profileMemberSince}</p></div>
+              </div>
+              <div className="profileRows">
+                <button onClick={openProfileMedia}><span><Image /></span> Media, Links & Docs <b>{profileMediaCount}</b></button>
+                <button onClick={() => alert(`${profileStarredCount} starred message${profileStarredCount === 1 ? '' : 's'} in this chat.`)}><span><Star /></span> Starred Messages <b>{profileStarredCount}</b></button>
+              </div>
+            </div>
+          ) : (
+            <div className="profile profileCompact">
+              <button className="profileClose" onClick={() => setProfile(null)}><X /></button>
+              <div className="profileAvatarWrap">
+                <Avatar user={profile} big />
+                <span className={profile.online ? 'profilePresence online' : 'profilePresence'} />
+              </div>
+              <h2>{profile.username}</h2>
+              <p>{profile.phone}</p>
+              <small><span className={profile.online ? 'dot online' : 'dot'} /> {profileOnlineText} • {profileLastSeenText}</small>
+
+              {!profileIsMe && (
+                <div className="profileActionGrid">
+                  <button onClick={() => openProfileConversation(profile)}><MessageCircle /><span>Message</span></button>
+                  <button onClick={() => callProfile('audio')}><Phone /><span>Voice Call</span></button>
+                  <button onClick={() => callProfile('video')}><Video /><span>Video Call</span></button>
+                  <button onClick={shareProfileLocation}><MapPin /><span>Share Live Location</span></button>
+                </div>
+              )}
+
+              {profileIsMe && (
+                <label className="profilePhoto profilePhotoModern">
+                  <Camera />
+                  Change profile photo
+                  <input hidden type="file" accept="image/*" onChange={uploadAvatar} />
+                </label>
+              )}
+
+              <div className="profileRows">
+                <button onClick={() => setProfileMode('full')}><span><User /></span> View Full Profile <b>›</b></button>
+                {!profileIsMe && <button onClick={enableProfileTranslation}><span><Languages /></span> Translate Chat <b>›</b></button>}
+              </div>
+
+              {!profileIsMe && (
+                <div className="profileSafety profileSafetyModern">
+                  <button onClick={reportProfile}><Flag /> Report</button>
+                  <button className="danger" onClick={blockProfile}><Ban /> Block</button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
