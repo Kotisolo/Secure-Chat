@@ -460,6 +460,58 @@ body{background:var(--bg);color:var(--text)}
   transition:.18s ease;
 }
 
+/* Final call font-size tune: smaller on voice and video screens */
+.call .callTopBar b{
+  font-size:21px!important;
+}
+.call .callTopBar small{
+  font-size:13px!important;
+}
+.call .callTopBar span{
+  font-size:21px!important;
+}
+.call .callInfo h2{
+  font-size:24px!important;
+}
+.call .callInfo p{
+  font-size:14px!important;
+}
+.call .raisedHand{
+  font-size:13px!important;
+}
+.call .callBtns button span{
+  font-size:10px!important;
+}
+.call .callOptionsSheet h3{
+  font-size:22px!important;
+}
+.call .callOptionsSheet b{
+  font-size:16px!important;
+}
+.call .callOptionsSheet small{
+  font-size:12px!important;
+}
+@media (max-width:760px){
+  .call .callTopBar b{
+    font-size:18px!important;
+  }
+  .call .callTopBar small{
+    font-size:12px!important;
+  }
+  .call .callTopBar span{
+    font-size:18px!important;
+  }
+  .call .callInfo h2{
+    font-size:21px!important;
+  }
+  .call .callInfo p{
+    font-size:13px!important;
+  }
+  .call .callBtns button span{
+    font-size:9px!important;
+  }
+}
+
 /* Refreshed in-call screen: dark, WhatsApp-style controls with working actions */
 .call{
   position:fixed!important;
