@@ -1204,7 +1204,7 @@ export default function App() {
           alert('Group voice message failed: ' + error.message);
         }
       };
-      recorder.start(250);
+      recorder.start();
       setGroupRecording(true);
     } catch (error) {
       alert(mediaErrorMessage(error, 'audio'));
@@ -2083,7 +2083,7 @@ export default function App() {
           alert('Voice message failed: ' + error.message);
         }
       };
-      recorder.start(250);
+      recorder.start();
       setRecording(true);
       setRecordingSeconds(0);
       recordingTimer.current = setInterval(() => setRecordingSeconds(value => value + 1), 1000);
@@ -3273,8 +3273,11 @@ export default function App() {
                       className="voiceMessage"
                       src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))}
                       controls
-                      preload="metadata"
+                      preload="auto"
                       onClick={e => e.stopPropagation()}
+                      onEnded={e => {
+                        e.currentTarget.currentTime = 0;
+                      }}
                     />
                   ) : locationData ? (
                     <div className="locationMessage" onClick={e => e.stopPropagation()}>
@@ -3972,7 +3975,15 @@ export default function App() {
                         📎 {message.fileName}
                       </a>
                     ) : message.kind === 'audio' && message.mediaUrl ? (
-                      <audio controls src={message.mediaUrl} onClick={e => e.stopPropagation()} />
+                      <audio
+                        controls
+                        preload="auto"
+                        src={message.mediaUrl}
+                        onClick={e => e.stopPropagation()}
+                        onEnded={e => {
+                          e.currentTarget.currentTime = 0;
+                        }}
+                      />
                     ) : message.kind === 'sticker' ? (
                       <span className="stickerMessage">{message.body}</span>
                     ) : <span>{message.body}</span>}
