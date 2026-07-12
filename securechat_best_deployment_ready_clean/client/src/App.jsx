@@ -3656,23 +3656,23 @@ export default function App() {
                 <div className="chatHeaderMenu" onClick={e => e.stopPropagation()}>
                   {chatHeaderMenu === 'main' ? (
                     <>
-                      <button onClick={() => { closeChatHeaderMenu(); setProfile(active); }}>Add to contacts</button>
-                      <button onClick={() => { closeChatHeaderMenu(); setSearchingMessages(true); }}>Search</button>
-                      <button onClick={() => { closeChatHeaderMenu(); createGroup(); }}>New group</button>
-                      <button onClick={openActiveMediaPanel}>Media, links, and docs</button>
-                      <button onClick={toggleActiveMute}>Mute notifications</button>
-                      <button onClick={setActiveDisappearingMessages}>Disappearing messages</button>
-                      <button onClick={changeActiveChatTheme}>Chat theme</button>
+                      <button onClick={() => { closeChatHeaderMenu(); setProfile(active); }}><User /> Add to contacts</button>
+                      <button onClick={() => { closeChatHeaderMenu(); setSearchingMessages(true); }}><Search /> Search</button>
+                      <button onClick={() => { closeChatHeaderMenu(); createGroup(); }}><Users /> New group</button>
+                      <button onClick={openActiveMediaPanel}><Image /> Media, links, and docs</button>
+                      <button onClick={toggleActiveMute}><BellOff /> Mute notifications</button>
+                      <button onClick={setActiveDisappearingMessages}><History /> Disappearing messages</button>
+                      <button onClick={changeActiveChatTheme}><Settings /> Chat theme</button>
                       <button className="menuMoreButton" onClick={() => setChatHeaderMenu('more')}>More <span>›</span></button>
                     </>
                   ) : (
                     <>
-                      <button onClick={reportActiveChat}>Report</button>
-                      <button onClick={blockActiveChat}>Block</button>
-                      <button onClick={clearActiveChat}>Clear chat</button>
-                      <button onClick={exportActiveChat}>Export chat</button>
-                      <button onClick={addActiveShortcut}>Add shortcut</button>
-                      <button onClick={addActiveToList}>Add to list</button>
+                      <button onClick={reportActiveChat}><Flag /> Report</button>
+                      <button onClick={blockActiveChat}><Ban /> Block</button>
+                      <button onClick={clearActiveChat}><Trash2 /> Clear chat</button>
+                      <button onClick={exportActiveChat}><Archive /> Export chat</button>
+                      <button onClick={addActiveShortcut}><Star /> Add shortcut</button>
+                      <button onClick={addActiveToList}><Users /> Add to list</button>
                       <button className="menuMoreButton" onClick={() => setChatHeaderMenu('main')}>‹ Back</button>
                     </>
                   )}

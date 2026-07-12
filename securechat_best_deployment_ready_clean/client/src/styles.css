@@ -460,6 +460,364 @@ body{background:var(--bg);color:var(--text)}
   transition:.18s ease;
 }
 
+/* Final image-based UI polish: inbox, chat, menus, profile, emoji, and location */
+.app{
+  font-size:14px;
+}
+.appTitle b,
+.mobileBrand,
+.desktopBrand{
+  font-size:24px!important;
+  letter-spacing:-.04em;
+}
+.appTitle small{
+  font-size:12px!important;
+}
+.search{
+  min-height:52px!important;
+  border-radius:18px!important;
+  background:#f4f2fb!important;
+  color:#625d74!important;
+}
+.search input{
+  color:#171326!important;
+  font-size:14px!important;
+}
+.searchTune{
+  width:34px!important;
+  height:34px!important;
+  border-radius:12px!important;
+  color:#625d74!important;
+  background:#fff!important;
+}
+.chatFilterChips button{
+  min-height:38px!important;
+  padding:0 17px!important;
+  border-radius:17px!important;
+  font-size:13px!important;
+  font-weight:850!important;
+}
+.chatFilterChips button.active{
+  background:linear-gradient(135deg,#5b5fef,#8b5cf6)!important;
+  color:#fff!important;
+  box-shadow:0 10px 22px rgba(112,76,255,.22)!important;
+}
+.storiesHeader b{
+  font-size:14px!important;
+}
+.contactStories small{
+  font-size:11px!important;
+}
+.archiveToggle{
+  min-height:64px!important;
+  border-radius:22px!important;
+}
+.archiveToggle span{
+  font-size:17px!important;
+}
+.head{
+  margin:10px!important;
+  height:74px!important;
+  min-height:74px!important;
+  border-radius:24px!important;
+  border:1px solid #eee9fb!important;
+  background:rgba(255,255,255,.96)!important;
+  box-shadow:0 14px 36px rgba(35,28,66,.08)!important;
+}
+.head .title b{
+  color:#171326!important;
+  font-size:18px!important;
+  font-weight:950!important;
+}
+.head .title small{
+  color:#20b96a!important;
+  font-size:12px!important;
+}
+.head .icon{
+  width:48px!important;
+  height:48px!important;
+  border-radius:18px!important;
+  background:#f7f5fc!important;
+  color:#704cff!important;
+  border:1px solid #eee9fb!important;
+}
+.head .icon svg{
+  width:24px!important;
+  height:24px!important;
+}
+.msgs{
+  background:#fbfaff!important;
+  background-image:radial-gradient(circle at 1px 1px, rgba(112,76,255,.055) 1px, transparent 0)!important;
+  background-size:22px 22px!important;
+}
+.bubble{
+  font-size:15px!important;
+  line-height:1.35!important;
+  box-shadow:0 12px 30px rgba(35,28,66,.08)!important;
+}
+.theirs{
+  background:#fff!important;
+  color:#171326!important;
+}
+.mine{
+  color:#fff!important;
+  background:linear-gradient(135deg,#5b5fef,#8b5cf6)!important;
+}
+.compose{
+  margin:0 10px 10px!important;
+  height:70px!important;
+  min-height:70px!important;
+  border-radius:24px!important;
+  background:#fff!important;
+  border:1px solid #eee9fb!important;
+  box-shadow:0 -8px 30px rgba(35,28,66,.06)!important;
+}
+.compose input{
+  height:48px!important;
+  background:#f4f2fb!important;
+  color:#171326!important;
+  font-size:15px!important;
+}
+.compose .icon,
+.compose .send{
+  width:48px!important;
+  height:48px!important;
+  border-radius:18px!important;
+}
+.compose .send{
+  border-radius:50%!important;
+}
+.chatHeaderMenuBackdrop{
+  background:rgba(16,18,28,.12)!important;
+  backdrop-filter:none!important;
+}
+.chatHeaderMenu{
+  right:22px!important;
+  top:92px!important;
+  width:min(330px, calc(100vw - 34px))!important;
+  padding:10px!important;
+  border-radius:18px!important;
+  background:#fff!important;
+  color:#171326!important;
+  box-shadow:0 22px 70px rgba(35,28,66,.22)!important;
+}
+.chatHeaderMenu button{
+  min-height:48px!important;
+  padding:0 12px!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:14px!important;
+  color:#171326!important;
+  font-size:15px!important;
+  font-weight:850!important;
+  border-radius:14px!important;
+  background:transparent!important;
+}
+.chatHeaderMenu button:hover{
+  background:#f7f5fc!important;
+}
+.chatHeaderMenu button svg{
+  width:21px!important;
+  height:21px!important;
+  color:#704cff!important;
+}
+.chatMenu{
+  border-radius:18px!important;
+  background:#fff!important;
+  color:#171326!important;
+  box-shadow:0 18px 46px rgba(35,28,66,.16)!important;
+}
+.chatMenu button{
+  font-size:14px!important;
+}
+.emoji{
+  width:min(420px, calc(100vw - 22px))!important;
+  left:auto!important;
+  right:12px!important;
+  bottom:90px!important;
+  display:flex!important;
+  flex-direction:column!important;
+  flex-wrap:nowrap!important;
+  gap:12px!important;
+  padding:14px!important;
+  border-radius:24px!important;
+  background:#fff!important;
+  color:#171326!important;
+  box-shadow:0 22px 70px rgba(35,28,66,.18)!important;
+}
+.emojiSearch{
+  height:46px!important;
+  background:#f4f2fb!important;
+  border-radius:16px!important;
+}
+.emojiScroll{
+  max-height:310px!important;
+}
+.emojiSection h4{
+  font-size:14px!important;
+  color:#171326!important;
+}
+.emojiGrid button{
+  width:40px!important;
+  height:40px!important;
+  border-radius:12px!important;
+  background:transparent!important;
+  font-size:26px!important;
+}
+.emojiCategoryBar{
+  border-radius:18px!important;
+  background:#f4f2fb!important;
+}
+.locationSheet,
+.locationViewer,
+.stopLocationDialog{
+  border-radius:26px!important;
+  background:#fff!important;
+  color:#171326!important;
+  box-shadow:0 24px 80px rgba(35,28,66,.18)!important;
+}
+.locationSheetHeader b,
+.locationViewerHead b{
+  font-size:18px!important;
+}
+.locationDuration{
+  min-height:68px!important;
+  border-radius:18px!important;
+  font-size:14px!important;
+}
+.locationDuration b{
+  font-size:15px!important;
+}
+.locationDuration small{
+  font-size:12px!important;
+}
+.shareLocationButton,
+.dangerStop,
+.softCancel{
+  min-height:52px!important;
+  border-radius:16px!important;
+  font-size:15px!important;
+}
+.profileModal{
+  align-items:center!important;
+}
+.profileCompact,
+.profileFull{
+  max-width:min(92vw,520px)!important;
+  transform:scale(.92)!important;
+  transform-origin:center!important;
+  border-radius:30px!important;
+  background:#fff!important;
+  color:#171326!important;
+  box-shadow:0 30px 90px rgba(35,28,66,.22)!important;
+}
+.profileCompact h2,
+.profileFull h2{
+  font-size:27px!important;
+  letter-spacing:-.04em!important;
+}
+.profileCompact p,
+.profileFull p,
+.profileCompact small,
+.profileFull small{
+  font-size:13px!important;
+}
+.profileActionGrid button{
+  min-height:74px!important;
+  border-radius:18px!important;
+  font-size:13px!important;
+}
+.profileRows button{
+  min-height:52px!important;
+  border-radius:16px!important;
+  font-size:14px!important;
+}
+.profileSafety button{
+  min-height:52px!important;
+  border-radius:16px!important;
+  font-size:14px!important;
+}
+.profileFullTop b{
+  font-size:18px!important;
+}
+.profileInfoList div{
+  min-height:48px!important;
+  font-size:13px!important;
+}
+.profileCover{
+  height:118px!important;
+  background:linear-gradient(135deg,#704cff,#9c3cff)!important;
+}
+@media (max-width:760px){
+  .app{
+    font-size:13px;
+  }
+  .side.tab-chats .appTitle b{
+    font-size:34px!important;
+  }
+  .side.tab-chats .chatMain{
+    min-height:82px!important;
+    grid-template-columns:56px 1fr auto!important;
+  }
+  .side.tab-chats .chatMain .avatar{
+    width:56px!important;
+    height:56px!important;
+    border-radius:20px!important;
+    font-size:18px!important;
+  }
+  .side.tab-chats .chatMain b{
+    font-size:16px!important;
+  }
+  .side.tab-chats .chatMain span{
+    font-size:13px!important;
+  }
+  .side.tab-chats .chatMain time{
+    font-size:11px!important;
+  }
+  .side.tab-chats .chatMain .unreadBadge{
+    min-width:26px!important;
+    height:26px!important;
+    border-radius:11px!important;
+    font-size:13px!important;
+  }
+  .head{
+    margin:8px!important;
+    height:68px!important;
+    min-height:68px!important;
+    border-radius:22px!important;
+  }
+  .head .title b{
+    font-size:17px!important;
+  }
+  .head .title small{
+    font-size:11px!important;
+  }
+  .head .icon{
+    width:44px!important;
+    height:44px!important;
+    border-radius:17px!important;
+  }
+  .chatHeaderMenu{
+    top:82px!important;
+    right:12px!important;
+    width:min(300px, calc(100vw - 24px))!important;
+  }
+  .chatHeaderMenu button{
+    min-height:46px!important;
+    font-size:14px!important;
+  }
+  .profileCompact,
+  .profileFull{
+    transform:scale(.88)!important;
+    max-height:96vh!important;
+    overflow:auto!important;
+  }
+  .emoji{
+    right:10px!important;
+    bottom:84px!important;
+  }
+}
+
 /* Final call font-size tune: smaller on voice and video screens */
 .call .callTopBar b{
   font-size:21px!important;
