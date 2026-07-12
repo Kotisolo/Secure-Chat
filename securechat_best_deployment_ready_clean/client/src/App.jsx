@@ -3316,12 +3316,12 @@ export default function App() {
     return true;
   });
   const mobileTitle = {
-    chats: 'Inbox',
+    chats: 'Chats',
     calls: 'Calls',
     ai: 'Opal',
     status: 'Moments',
     settings: 'Settings'
-  }[mobileTab] || 'Inbox';
+  }[mobileTab] || 'Chats';
   const settingsHandle = `@${String(me?.username || 'user').trim().toLowerCase().replace(/[^a-z0-9]+/g, '') || 'user'}`;
   const settingsSections = [
     {
@@ -3665,16 +3665,16 @@ export default function App() {
             All
           </button>
           <button className={chatListFilter === 'unread' ? 'active' : ''} onClick={() => setChatListFilter('unread')}>
-            New
+            Unread
             {contacts.some(user => Number(user.chat?.unreadCount || 0) > 0) && (
               <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0)}</span>
             )}
           </button>
-          <button className={chatListFilter === 'groups' ? 'active' : ''} onClick={() => setChatListFilter('groups')}>Circles</button>
+          <button className={chatListFilter === 'groups' ? 'active' : ''} onClick={() => setChatListFilter('groups')}>Groups</button>
           <button className={chatListFilter === 'channels' ? 'active' : ''} onClick={() => {
             setChatListFilter('channels');
             loadChannels('', false);
-          }}>Feeds</button>
+          }}>Channels</button>
         </div>
         {['all', 'unread'].includes(chatListFilter) && <>
           <div className="storiesHeader">
@@ -3706,7 +3706,7 @@ export default function App() {
           </div>
         </div>
         {['all', 'unread'].includes(chatListFilter) && <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
-          <Archive /> <span>{showArchived ? 'Back to inbox' : 'Tucked away'}</span> {!showArchived && <b>{contacts.filter(user => user.chat?.archived).length} chats</b>}
+          <Archive /> <span>{showArchived ? 'Back to chats' : 'Archived chats'}</span> {!showArchived && <b>{contacts.filter(user => user.chat?.archived).length} chats</b>}
         </button>}
         {['all', 'unread'].includes(chatListFilter) && <div className="statusHeader">
           <button onClick={loadStatuses}><div className="statusRing"><Avatar user={me} /></div> Status</button>
@@ -3805,7 +3805,7 @@ export default function App() {
           })}
         </div>}
         <nav className="bottomNav" aria-label="Primary navigation">
-          <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Inbox</span></button>
+          <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Chats</span></button>
           <button className={mobileTab === 'calls' ? 'active' : ''} onClick={() => { setMobileTab('calls'); loadCallHistory(); }}><Phone /><span>Calls</span></button>
           <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Languages /><span>Opal</span></button>
           <button className={mobileTab === 'status' ? 'active' : ''} onClick={() => { setMobileTab('status'); loadStatuses(); }}><History /><span>Moments</span></button>

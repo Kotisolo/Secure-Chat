@@ -5634,7 +5634,7 @@ body{background:var(--bg);color:var(--text)}
   }
   .side.tab-chats .mobileBrand{
     color:#704cff!important;
-    font-size:42px!important;
+    font-size:38px!important;
     font-weight:900!important;
     letter-spacing:-.08em!important;
   }
@@ -5651,14 +5651,17 @@ body{background:var(--bg);color:var(--text)}
     box-shadow:0 12px 28px rgba(112,76,255,.11)!important;
   }
   .side.tab-chats .chatListPane .search{
-    height:64px!important;
+    height:62px!important;
     margin:4px 18px 20px!important;
     border-radius:24px!important;
     background:#f0edf8!important;
     border:1px solid #ebe5f6!important;
   }
+  .side.tab-chats .chatListPane .searchTune{
+    display:none!important;
+  }
   .side.tab-chats .chatListPane .search input{
-    font-size:18px!important;
+    font-size:17px!important;
     font-weight:650!important;
   }
   .side.tab-chats .chatFilterChips{
@@ -5669,12 +5672,12 @@ body{background:var(--bg);color:var(--text)}
   }
   .side.tab-chats .chatFilterChips button{
     min-width:0!important;
-    min-height:52px!important;
+    min-height:50px!important;
     padding:0 8px!important;
     border-radius:20px!important;
     background:#f2eff8!important;
     color:#5e5871!important;
-    font-size:16px!important;
+    font-size:15px!important;
     box-shadow:none!important;
   }
   .side.tab-chats .chatFilterChips button.active{
@@ -5691,7 +5694,7 @@ body{background:var(--bg);color:var(--text)}
     display:none!important;
   }
   .side.tab-chats .archiveToggle{
-    height:66px!important;
+    height:68px!important;
     margin:8px 18px 18px!important;
     padding:0 16px!important;
     border-radius:23px!important;
@@ -5702,7 +5705,7 @@ body{background:var(--bg);color:var(--text)}
     display:flex!important;
     align-items:center!important;
     gap:14px!important;
-    font-size:18px!important;
+    font-size:17px!important;
     font-weight:900!important;
   }
   .side.tab-chats .archiveToggle span{
@@ -5710,9 +5713,7 @@ body{background:var(--bg);color:var(--text)}
     text-align:left;
   }
   .side.tab-chats .archiveToggle b{
-    margin-left:auto;
-    color:#625d74;
-    font-size:16px;
+    display:none!important;
   }
   .side.tab-chats .archiveToggle::after{
     content:'›';
@@ -5737,10 +5738,10 @@ body{background:var(--bg);color:var(--text)}
     overflow:visible;
   }
   .side.tab-chats .chatMain{
-    min-height:96px!important;
+    min-height:92px!important;
     padding:16px 16px!important;
     display:grid!important;
-    grid-template-columns:64px 1fr auto;
+    grid-template-columns:60px 1fr auto;
     column-gap:14px;
     align-items:center;
     width:100%;
@@ -5748,12 +5749,12 @@ body{background:var(--bg);color:var(--text)}
     color:#171326!important;
   }
   .side.tab-chats .chatMain .avatar{
-    width:64px!important;
-    height:64px!important;
+    width:60px!important;
+    height:60px!important;
     border-radius:22px!important;
     background:linear-gradient(135deg,#5b5fef,#8b5cf6)!important;
     color:#fff!important;
-    font-size:22px!important;
+    font-size:20px!important;
     font-weight:900!important;
   }
   .side.tab-chats .chatMain div{
@@ -5761,7 +5762,7 @@ body{background:var(--bg);color:var(--text)}
   }
   .side.tab-chats .chatMain b{
     display:block;
-    font-size:19px!important;
+    font-size:17px!important;
     line-height:1.15;
     font-weight:950!important;
     color:#171326!important;
@@ -5772,7 +5773,7 @@ body{background:var(--bg);color:var(--text)}
   .side.tab-chats .chatMain span{
     margin-top:7px!important;
     max-width:none!important;
-    font-size:16px!important;
+    font-size:14px!important;
     color:#777287!important;
     white-space:nowrap;
     overflow:hidden;
@@ -5784,7 +5785,7 @@ body{background:var(--bg);color:var(--text)}
     align-self:start!important;
     margin-top:4px!important;
     color:#8f8aa1!important;
-    font-size:13px!important;
+    font-size:12px!important;
     font-weight:850!important;
   }
   .side.tab-chats .chatMain .unreadBadge{
@@ -5792,10 +5793,10 @@ body{background:var(--bg);color:var(--text)}
     grid-row:1;
     align-self:end;
     justify-self:end;
-    min-width:32px!important;
-    height:32px!important;
+    min-width:28px!important;
+    height:28px!important;
     border-radius:13px!important;
-    font-size:16px!important;
+    font-size:14px!important;
     background:linear-gradient(135deg,#5b5fef,#8b5cf6)!important;
   }
   .side.tab-chats .bottomNav{
