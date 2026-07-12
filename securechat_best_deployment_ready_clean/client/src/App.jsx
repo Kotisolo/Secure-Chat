@@ -82,6 +82,9 @@ const defaultMeteredTurnUrls = [
   'turn:standard.relay.metered.ca:443',
   'turns:standard.relay.metered.ca:443?transport=tcp'
 ];
+
+const NORMAL_CALL_VOLUME = 0.35;
+const LOUD_SPEAKER_VOLUME = 1;
 const configuredTurnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '')
   .split(',')
   .map(url => url.trim())
@@ -444,7 +447,7 @@ export default function App() {
   // Media states shown on the call buttons
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
-  const [speakerVolume, setSpeakerVolume] = useState(0.7);
+  const [speakerVolume, setSpeakerVolume] = useState(NORMAL_CALL_VOLUME);
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -2976,6 +2979,8 @@ export default function App() {
     setCallOptionsOpen(null);
     setRaisedHand(false);
     setVideoEffectsOn(false);
+    setSpeakerMuted(false);
+    setSpeakerVolume(NORMAL_CALL_VOLUME);
   }
 
   // Toggle microphone on/off (button reflects the state)
@@ -3253,6 +3258,7 @@ export default function App() {
   const callContactName = call.title.split(' with ').pop() || call.title;
   const callDurationText = `${String(Math.floor(call.seconds / 60)).padStart(2, '0')}:${String(call.seconds % 60).padStart(2, '0')}`;
   const callCanUseVideo = call.type === 'video' || call.videoCapable;
+  const speakerOn = !speakerMuted && speakerVolume >= 0.8;
   const visibleContacts = contacts.filter(user => {
     if (Boolean(user.chat?.archived) !== showArchived) return false;
     if (chatListFilter === 'unread') return Number(user.chat?.unreadCount || 0) > 0;
@@ -4255,11 +4261,14 @@ export default function App() {
             )}
 
             <button
-              className={speakerMuted ? 'off' : ''}
-              onClick={() => setSpeakerMuted(value => !value)}
-              title={speakerMuted ? 'Turn speaker on' : 'Mute speaker'}
+              className={speakerOn ? '' : 'off'}
+              onClick={() => {
+                setSpeakerMuted(false);
+                setSpeakerVolume(value => value >= 0.8 ? NORMAL_CALL_VOLUME : LOUD_SPEAKER_VOLUME);
+              }}
+              title={speakerOn ? 'Turn speaker off' : 'Turn speaker on'}
             >
-              {speakerMuted ? <VolumeX /> : <Volume2 />}
+              {speakerOn ? <Volume2 /> : <VolumeX />}
               <span>Speaker</span>
             </button>
 
