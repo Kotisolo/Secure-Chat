@@ -4,7 +4,7 @@ import {
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
-  Shield, Ban, Flag, Users, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
+  Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
   MonitorUp, Hand, Info
 } from 'lucide-react';
 import {
@@ -454,6 +454,7 @@ export default function App() {
   const [miniCallPosition, setMiniCallPosition] = useState(null);
   const [localVideoPosition, setLocalVideoPosition] = useState(null);
   const [callOptionsOpen, setCallOptionsOpen] = useState(null);
+  const [showCallInvite, setShowCallInvite] = useState(false);
   const [noiseCancellation, setNoiseCancellation] = useState(true);
   const [cameraFacingMode, setCameraFacingMode] = useState('user');
   const [videoEffectsOn, setVideoEffectsOn] = useState(false);
@@ -2621,6 +2622,7 @@ export default function App() {
     if (!callContact) return;
     setCallError('');
     clearTimeout(callTimeout.current);
+    const callRoomId = createCallRoomId();
 
     setCall({
       active: true,
@@ -2629,17 +2631,19 @@ export default function App() {
       videoCapable: type === 'video',
       title: (type === 'video' ? 'Video' : 'Voice') + ' call with ' + callContact.username,
       status: 'Calling...',
-      seconds: 0
+      seconds: 0,
+      roomId: callRoomId
     });
 
     try {
-      await connectLiveKitCall(callContact.id, type);
+      await connectLiveKitCall(callContact.id, type, callRoomId);
 
       const ack = await emitWithAck(getSocket(), 'call:offer', {
         recipientId: callContact.id,
         offer: { livekit: true },
         callType: type,
         videoIntent: type === 'video',
+        callRoomId,
         network: callNetworkInfo()
       });
 
@@ -2676,11 +2680,12 @@ export default function App() {
       videoCapable: callType === 'video',
       title: (callType === 'video' ? 'Video' : 'Voice') + ' call with ' + d.callerName,
       status: 'Connecting...',
-      seconds: 0
+      seconds: 0,
+      roomId: d.callRoomId || createCallRoomId()
     });
 
     try {
-      await connectLiveKitCall(d.callerId, callType);
+      await connectLiveKitCall(d.callerId, callType, d.callRoomId || '');
 
       const ack = await emitWithAck(getSocket(), 'call:answer', {
         callerId: d.callerId,
@@ -2814,12 +2819,18 @@ export default function App() {
     attachCallMedia();
   }
 
-  async function connectLiveKitCall(peerId, type) {
+  function createCallRoomId() {
+    return globalThis.crypto?.randomUUID?.() || '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, value =>
+      (Number(value) ^ Math.random() * 16 >> Number(value) / 4).toString(16)
+    );
+  }
+
+  async function connectLiveKitCall(peerId, type, callRoomId = '') {
     await disconnectLiveKit();
     callPeer.current = peerId;
     const credentials = await api('/api/calls/livekit-token', {
       method: 'POST',
-      body: JSON.stringify({ peerId })
+      body: JSON.stringify({ peerId, callRoomId })
     });
 
     const room = new Room({
@@ -2895,10 +2906,10 @@ export default function App() {
     const drag = localVideoDrag.current;
     if (!drag.dragging || drag.pointerId !== event.pointerId) return;
     const maxX = Math.max(8, window.innerWidth - drag.width - 8);
-    const maxY = Math.max(8, window.innerHeight - drag.height - 96);
+    const maxY = Math.max(8, window.innerHeight - drag.height - 8);
     setLocalVideoPosition({
       x: Math.min(Math.max(8, event.clientX - drag.offsetX), maxX),
-      y: Math.min(Math.max(88, event.clientY - drag.offsetY), maxY)
+      y: Math.min(Math.max(8, event.clientY - drag.offsetY), maxY)
     });
   }
 
@@ -2977,6 +2988,7 @@ export default function App() {
     setMiniCallPosition(null);
     setLocalVideoPosition(null);
     setCallOptionsOpen(null);
+    setShowCallInvite(false);
     setRaisedHand(false);
     setVideoEffectsOn(false);
     setSpeakerMuted(false);
@@ -3146,7 +3158,7 @@ export default function App() {
 
   async function shareScreenInCall() {
     if (!navigator.mediaDevices?.getDisplayMedia) {
-      alert('Screen sharing is not supported in this browser.');
+      alert('Screen sharing is not supported by this mobile browser. If your phone supports it, try Chrome/Edge Android or use desktop.');
       return;
     }
     try {
@@ -3185,6 +3197,43 @@ export default function App() {
       setCallOptionsOpen(null);
     } catch (error) {
       if (error?.name !== 'NotAllowedError') setCallError('Screen sharing could not start on this device.');
+    }
+  }
+
+  async function invitePersonToCall(contact) {
+    if (!contact || !call.active) return;
+    if (String(contact.id) === String(me?.id) || String(contact.id) === String(callPeer.current)) {
+      alert('This person is already in this call.');
+      return;
+    }
+    const callRoomId = call.roomId || createCallRoomId();
+    setCall(current => ({
+      ...current,
+      roomId: callRoomId,
+      status: `Inviting ${contact.username}...`
+    }));
+
+    try {
+      const ack = await emitWithAck(getSocket(), 'call:offer', {
+        recipientId: contact.id,
+        offer: { livekit: true },
+        callType: call.type,
+        videoIntent: call.type === 'video' || call.videoCapable,
+        callRoomId,
+        network: callNetworkInfo()
+      });
+      if (ack && ack.ok === false) throw new Error(ack.message || 'Could not invite this person.');
+      setShowCallInvite(false);
+      setCallOptionsOpen(null);
+      setCall(current => ({
+        ...current,
+        roomId: callRoomId,
+        title: current.title.includes('Group call') ? current.title : `Group call with ${callContactName}`,
+        status: `${contact.username} invited`
+      }));
+    } catch (error) {
+      setCall(current => ({ ...current, status: 'Connected' }));
+      alert('Could not add this person: ' + (error.message || 'Please try again.'));
     }
   }
 
@@ -4126,9 +4175,14 @@ export default function App() {
               <small><Lock /> End-to-end encrypted</small>
               <span>{callDurationText}</span>
             </div>
-            <button onClick={() => setProfile(active || me)} title="Open profile">
-              <Users />
-            </button>
+            <div className="callTopActions">
+              <button onClick={() => setShowCallInvite(value => !value)} title="Add participant">
+                <UserPlus />
+              </button>
+              <button onClick={() => setCallOptionsOpen(value => value ? null : 'quick')} title="More call options">
+                <MoreVertical />
+              </button>
+            </div>
           </div>
 
           {call.type === 'video' && (
@@ -4229,6 +4283,37 @@ export default function App() {
                   <button type="button" className="callOptionsClose" onClick={() => setCallOptionsOpen(null)}>Close</button>
                 </>
               )}
+            </div>
+          )}
+
+          {showCallInvite && (
+            <div className="callInviteSheet">
+              <i />
+              <div className="callInviteHead">
+                <b>Add person</b>
+                <button onClick={() => setShowCallInvite(false)}><X /></button>
+              </div>
+              <div className="callInviteList">
+                {contacts
+                  .filter(contact =>
+                    String(contact.id) !== String(me?.id) &&
+                    String(contact.id) !== String(callPeer.current)
+                  )
+                  .slice(0, 12)
+                  .map(contact => (
+                    <button key={contact.id} type="button" onClick={() => invitePersonToCall(contact)}>
+                      <Avatar user={contact} />
+                      <span>
+                        <b>{contact.username}</b>
+                        <small>{contact.online ? 'Online' : 'Offline'}</small>
+                      </span>
+                      <UserPlus />
+                    </button>
+                  ))}
+                {contacts.filter(contact => String(contact.id) !== String(me?.id) && String(contact.id) !== String(callPeer.current)).length === 0 && (
+                  <p>No other contacts available to add.</p>
+                )}
+              </div>
             </div>
           )}
 

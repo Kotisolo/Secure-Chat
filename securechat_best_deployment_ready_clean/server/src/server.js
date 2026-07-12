@@ -435,14 +435,18 @@ function callRoomName(a, b) {
   return 'securechat-call-' + cid(a, b).replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
-async function createLiveKitToken({ userId, username, peerId }) {
+function callSessionRoomName(callRoomId) {
+  return 'securechat-call-session-' + String(callRoomId).replace(/[^a-zA-Z0-9_-]/g, '-');
+}
+
+async function createLiveKitToken({ userId, username, peerId, callRoomId }) {
   if (!LIVEKIT_URL || !LIVEKIT_API_KEY || !LIVEKIT_API_SECRET) {
     const error = new Error('LiveKit is not configured.');
     error.statusCode = 503;
     throw error;
   }
 
-  const room = callRoomName(userId, peerId);
+  const room = validUuid(callRoomId) ? callSessionRoomName(callRoomId) : callRoomName(userId, peerId);
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: String(userId),
     name: username || 'SecureChat user',
@@ -1543,8 +1547,10 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
 
 app.post('/api/calls/livekit-token', auth, asyncRoute(async (req, res) => {
   const peerId = clean(req.body.peerId || '');
+  const callRoomId = clean(req.body.callRoomId || '');
   if (!validUuid(peerId)) return res.status(400).json({ error: 'Invalid call user.' });
   if (peerId === String(req.user.id)) return res.status(400).json({ error: 'You cannot call yourself.' });
+  if (callRoomId && !validUuid(callRoomId)) return res.status(400).json({ error: 'Invalid call room.' });
 
   const peer = await pool.query('SELECT id FROM users WHERE id=$1', [peerId]);
   if (!peer.rows.length) return res.status(404).json({ error: 'Call user not found.' });
@@ -1553,7 +1559,8 @@ app.post('/api/calls/livekit-token', auth, asyncRoute(async (req, res) => {
   res.json(await createLiveKitToken({
     userId: req.user.id,
     username: req.user.username,
-    peerId
+    peerId,
+    callRoomId
   }));
 }));
 
@@ -2126,11 +2133,13 @@ io.on('connection', async socket => {
     });
   });
 
-  socket.on('call:offer', async ({ recipientId, offer, callType, videoIntent, network } = {}, callback) => {
+  socket.on('call:offer', async ({ recipientId, offer, callType, videoIntent, network, callRoomId } = {}, callback) => {
     const reply = typeof callback === 'function' ? callback : () => {};
     if (!validUuid(recipientId) || !offer || !['audio', 'video'].includes(callType)) {
       return reply({ ok: false, message: 'Invalid call request.' });
     }
+    const cleanCallRoomId = clean(callRoomId || '');
+    if (cleanCallRoomId && !validUuid(cleanCallRoomId)) return reply({ ok: false, message: 'Invalid call room.' });
     if (await usersBlocked(userId, recipientId)) {
       socket.emit('call:unavailable');
       return reply({ ok: false, message: 'This user cannot receive your call.' });
@@ -2169,7 +2178,8 @@ io.on('connection', async socket => {
       callerName: socket.user.username,
       offer,
       callType,
-      videoIntent: Boolean(videoIntent)
+      videoIntent: Boolean(videoIntent),
+      callRoomId: cleanCallRoomId || null
     });
     return reply({ ok: true });
   });
