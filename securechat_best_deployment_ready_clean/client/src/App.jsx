@@ -2012,16 +2012,6 @@ export default function App() {
     openSecurity();
   }
 
-  async function downloadAccountData() {
-    const data = await api('/api/account/export');
-    const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `securechat-data-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
   async function deleteAccount() {
     if (!confirm('Permanently delete your account, messages and call history? This cannot be undone.')) return;
     const password = prompt('Enter your password to permanently delete the account:');
@@ -3367,7 +3357,7 @@ export default function App() {
           label: 'Storage & Data',
           detail: 'Manage storage, data usage',
           icon: <BarChart3 />,
-          action: downloadAccountData
+          action: () => alert('Storage & Data settings will be connected without downloading files automatically.')
         },
         {
           label: 'Devices',
@@ -3586,7 +3576,7 @@ export default function App() {
             <button onClick={() => alert('Saved messages will be connected in the saved-chats phase.')}><Star /> Saved Messages</button>
           </div>
           <div className="railFooter">
-            <button onClick={openPrivacy}><Settings /> Settings</button>
+            <button onClick={() => { setMobileTab('settings'); setActive(null); }}><Settings /> Settings</button>
             <button onClick={requestNotifications}><Bell /> Notifications</button>
           </div>
           <div className="me">
@@ -4807,7 +4797,6 @@ export default function App() {
             </button>
             <div className="accountActions">
               <button onClick={changePassword}>Change password</button>
-              <button onClick={downloadAccountData}>Download my data</button>
               <button className="danger" onClick={deleteAccount}>Delete account</button>
             </div>
             <div className="sessionHeader">

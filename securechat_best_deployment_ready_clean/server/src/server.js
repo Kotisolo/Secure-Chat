@@ -1040,29 +1040,6 @@ app.post('/api/security/change-password', auth, asyncRoute(async (req, res) => {
   res.json({ ok: true });
 }));
 
-app.get('/api/account/export', auth, asyncRoute(async (req, res) => {
-  const [account, messages, calls] = await Promise.all([
-    pool.query('SELECT id,username,phone,about,avatar_url,created_at,last_seen FROM users WHERE id=$1', [req.user.id]),
-    pool.query(
-      `SELECT id,conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,
-        ciphertext,encryption_version,sender_device_id,file_encryption,
-        delivered_at,read_at,created_at,edited_at,scheduled_at,expires_at
-       FROM messages WHERE sender_id=$1 OR recipient_id=$1 ORDER BY created_at`,
-      [req.user.id]
-    ),
-    pool.query(
-      'SELECT id,caller_id,recipient_id,call_type,status,started_at,answered_at,ended_at FROM call_history WHERE caller_id=$1 OR recipient_id=$1 ORDER BY started_at',
-      [req.user.id]
-    )
-  ]);
-  res.json({
-    exportedAt: new Date().toISOString(),
-    account: account.rows[0],
-    messages: messages.rows,
-    calls: calls.rows
-  });
-}));
-
 app.delete('/api/account', auth, asyncRoute(async (req, res) => {
   const password = String(req.body.password || '');
   const account = await pool.query('SELECT password_hash FROM users WHERE id=$1', [req.user.id]);
