@@ -4108,3 +4108,117 @@ body{background:var(--bg);color:var(--text)}
     border-radius:24px;
   }
 }
+
+.chatHeaderMenuBackdrop{
+  position:fixed;
+  inset:0;
+  z-index:55;
+  background:transparent;
+}
+.chatHeaderMenu{
+  position:fixed;
+  top:76px;
+  right:12px;
+  z-index:56;
+  width:min(360px,82vw);
+  padding:18px 0;
+  border-radius:0 0 24px 24px;
+  background:#11181c;
+  box-shadow:0 24px 70px rgba(0,0,0,.34);
+  overflow:hidden;
+}
+.chatHeaderMenu button{
+  width:100%;
+  min-height:62px;
+  padding:0 28px;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:12px;
+  color:#f8fafc;
+  background:transparent;
+  text-align:left;
+  font-size:26px;
+  font-weight:500;
+  letter-spacing:-.02em;
+}
+.chatHeaderMenu button:hover{
+  background:rgba(255,255,255,.07);
+}
+.chatHeaderMenu .menuMoreButton{
+  justify-content:space-between;
+}
+.chatHeaderMenu .menuMoreButton span{
+  color:#c9cdd2;
+  font-size:34px;
+}
+.chatMediaPanel{
+  width:min(440px,94vw);
+  max-height:82vh;
+  overflow:auto;
+  position:relative;
+  padding:28px;
+  border-radius:28px;
+  background:#fff;
+  color:#171326;
+  box-shadow:0 30px 90px rgba(16,10,45,.24);
+}
+.chatMediaPanel h2{
+  margin:0;
+  font-size:24px;
+}
+.chatMediaPanel p{
+  margin:6px 0 18px;
+  color:#7f7892;
+}
+.chatMediaList{
+  display:grid;
+  gap:10px;
+}
+.chatMediaList a{
+  padding:14px;
+  border-radius:18px;
+  color:#171326;
+  background:#f7f5fb;
+  text-decoration:none;
+}
+.chatMediaList b,.chatMediaList span{
+  display:block;
+}
+.chatMediaList span{
+  margin-top:4px;
+  color:#7f7892;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.chatMediaList small{
+  color:#7f7892;
+}
+.chatTheme-light{
+  background:#fbfaff!important;
+  background-image:none!important;
+}
+.chatTheme-sky{
+  background:
+    radial-gradient(circle at 18% 22%,rgba(59,130,246,.12),transparent 28%),
+    radial-gradient(circle at 78% 72%,rgba(14,165,233,.1),transparent 26%),
+    #f3faff!important;
+}
+.chatTheme-dark{
+  background:#081120!important;
+  color:#fff;
+}
+@media(max-width:900px){
+  .chatHeaderMenu{
+    top:74px;
+    right:0;
+    width:min(350px,86vw);
+    border-radius:0 0 0 22px;
+  }
+  .chatHeaderMenu button{
+    min-height:68px;
+    padding:0 28px;
+    font-size:28px;
+  }
+}

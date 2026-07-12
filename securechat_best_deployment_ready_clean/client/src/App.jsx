@@ -382,9 +382,12 @@ export default function App() {
   const [replyTo, setReplyTo] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [chatMenu, setChatMenu] = useState(null);
+  const [chatHeaderMenu, setChatHeaderMenu] = useState(null);
+  const [showChatMedia, setShowChatMedia] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingMessages, setSearchingMessages] = useState(false);
+  const [chatTheme, setChatTheme] = useState(() => localStorage.getItem('sc_chat_theme') || 'opal');
   const [showScheduler, setShowScheduler] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
   const [translations, setTranslations] = useState({});
@@ -2096,6 +2099,130 @@ export default function App() {
     }
   }
 
+  function closeChatHeaderMenu() {
+    setChatHeaderMenu(null);
+  }
+
+  function activeConversationRows() {
+    if (!active || !me) return [];
+    return messages[cid(me.id, active.id)] || [];
+  }
+
+  async function reportActiveChat() {
+    if (!active) return;
+    closeChatHeaderMenu();
+    const reason = prompt(`Why are you reporting ${active.username}?`);
+    if (!reason) return;
+    try {
+      await api(`/api/users/${active.id}/report`, {
+        method: 'POST',
+        body: JSON.stringify({ reason })
+      });
+      alert('Report submitted.');
+    } catch (error) {
+      alert('Report failed: ' + error.message);
+    }
+  }
+
+  async function blockActiveChat() {
+    if (!active || !confirm(`Block ${active.username}? They will not be able to message or call you.`)) return;
+    closeChatHeaderMenu();
+    try {
+      await api(`/api/users/${active.id}/block`, { method: 'POST', body: '{}' });
+      setActive(null);
+      loadChats();
+    } catch (error) {
+      alert('Block failed: ' + error.message);
+    }
+  }
+
+  async function clearActiveChat() {
+    if (!active) return;
+    closeChatHeaderMenu();
+    await deleteChatForMe(active);
+  }
+
+  function exportActiveChat() {
+    if (!active || !me) return;
+    closeChatHeaderMenu();
+    const rows = activeConversationRows();
+    const lines = rows.map(message => {
+      const sender = String(message.senderId) === String(me.id) ? me.username : active.username;
+      const body = message.kind === 'audio' ? '[Voice message]'
+        : message.kind === 'image' ? `[Photo] ${message.fileName || ''}`
+          : message.kind === 'file' ? `[File] ${message.fileName || message.body || ''}`
+            : message.kind === 'location' ? '[Location]'
+              : message.body || '';
+      return `[${new Date(message.createdAt).toLocaleString()}] ${sender}: ${body}`;
+    });
+    const blob = new Blob([lines.join('\n') || 'No messages to export.'], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `chat-with-${active.username || 'user'}-${new Date().toISOString().slice(0, 10)}.txt`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function toggleActiveMute() {
+    if (!active) return;
+    const current = contacts.find(contact => String(contact.id) === String(active.id)) || active;
+    const muted = current.chat?.mutedUntil && new Date(current.chat.mutedUntil) > new Date();
+    closeChatHeaderMenu();
+    await updateChatPreference(current, {
+      mutedUntil: muted ? null : new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString()
+    });
+  }
+
+  async function setActiveDisappearingMessages() {
+    if (!active) return;
+    closeChatHeaderMenu();
+    const choice = prompt('Disappearing messages: enter 0 for off, 24h, 7d, or 90d.', '24h');
+    if (choice === null) return;
+    const normalized = choice.trim().toLowerCase();
+    const seconds = normalized === '0' || normalized === 'off' ? 0
+      : normalized === '24h' || normalized === '1d' ? 86400
+        : normalized === '7d' ? 604800
+          : normalized === '90d' ? 7776000
+            : Number(normalized);
+    if (!Number.isFinite(seconds) || seconds < 0) {
+      alert('Please enter 0, 24h, 7d, or 90d.');
+      return;
+    }
+    const current = contacts.find(contact => String(contact.id) === String(active.id)) || active;
+    await updateChatPreference(current, { disappearingSeconds: seconds });
+  }
+
+  function openActiveMediaPanel() {
+    closeChatHeaderMenu();
+    setShowChatMedia(true);
+  }
+
+  function addActiveShortcut() {
+    closeChatHeaderMenu();
+    alert('Shortcut ready: use your browser menu and choose “Add to Home screen” for this chat.');
+  }
+
+  function addActiveToList() {
+    if (!active) return;
+    closeChatHeaderMenu();
+    const current = contacts.find(contact => String(contact.id) === String(active.id)) || active;
+    updateChatPreference(current, { pinned: true });
+  }
+
+  function changeActiveChatTheme() {
+    closeChatHeaderMenu();
+    const choice = prompt('Choose chat theme: opal, light, sky, or dark.', chatTheme);
+    if (!choice) return;
+    const normalized = choice.trim().toLowerCase();
+    if (!['opal', 'light', 'sky', 'dark'].includes(normalized)) {
+      alert('Please choose opal, light, sky, or dark.');
+      return;
+    }
+    localStorage.setItem('sc_chat_theme', normalized);
+    setChatTheme(normalized);
+  }
+
   async function startVoiceRecording() {
     if (!active || recording) return;
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
@@ -3284,8 +3411,37 @@ export default function App() {
 
               <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
               <button className="icon" onClick={() => startCall('video')}><Video /></button>
-              <button className="icon" onClick={() => setProfile(active)}><MoreVertical /></button>
+              <button className="icon" onClick={() => setChatHeaderMenu(value => value === 'main' ? null : 'main')}><MoreVertical /></button>
             </header>
+
+            {chatHeaderMenu && (
+              <div className="chatHeaderMenuBackdrop" onClick={closeChatHeaderMenu}>
+                <div className="chatHeaderMenu" onClick={e => e.stopPropagation()}>
+                  {chatHeaderMenu === 'main' ? (
+                    <>
+                      <button onClick={() => { closeChatHeaderMenu(); setProfile(active); }}>Add to contacts</button>
+                      <button onClick={() => { closeChatHeaderMenu(); setSearchingMessages(true); }}>Search</button>
+                      <button onClick={() => { closeChatHeaderMenu(); createGroup(); }}>New group</button>
+                      <button onClick={openActiveMediaPanel}>Media, links, and docs</button>
+                      <button onClick={toggleActiveMute}>Mute notifications</button>
+                      <button onClick={setActiveDisappearingMessages}>Disappearing messages</button>
+                      <button onClick={changeActiveChatTheme}>Chat theme</button>
+                      <button className="menuMoreButton" onClick={() => setChatHeaderMenu('more')}>More <span>›</span></button>
+                    </>
+                  ) : (
+                    <>
+                      <button onClick={reportActiveChat}>Report</button>
+                      <button onClick={blockActiveChat}>Block</button>
+                      <button onClick={clearActiveChat}>Clear chat</button>
+                      <button onClick={exportActiveChat}>Export chat</button>
+                      <button onClick={addActiveShortcut}>Add shortcut</button>
+                      <button onClick={addActiveToList}>Add to list</button>
+                      <button className="menuMoreButton" onClick={() => setChatHeaderMenu('main')}>‹ Back</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
 
             {searchingMessages && (
               <div className="messageSearch">
@@ -3298,7 +3454,40 @@ export default function App() {
               </div>
             )}
 
-            <section className="msgs">
+            {showChatMedia && (
+              <div className="modal" onClick={() => setShowChatMedia(false)}>
+                <div className="chatMediaPanel" onClick={e => e.stopPropagation()}>
+                  <button className="historyClose" onClick={() => setShowChatMedia(false)}><X /></button>
+                  <h2>Media, links, and docs</h2>
+                  <p>{active?.username}</p>
+                  <div className="chatMediaList">
+                    {activeConversationRows()
+                      .filter(message => ['image', 'file', 'audio', 'location'].includes(message.kind) || /^https?:\/\//i.test(message.body || ''))
+                      .map(message => {
+                        const url = attachmentUrls[message.id] || (message.fileUrl ? resolveFileUrl(message.fileUrl) : '');
+                        return (
+                          <a
+                            key={message.id}
+                            href={message.kind === 'location' && parseLocationMessage(message)
+                              ? locationMapUrl(parseLocationMessage(message))
+                              : url || message.body || '#'}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            <b>{message.kind === 'image' ? 'Photo' : message.kind === 'audio' ? 'Voice message' : message.kind === 'location' ? 'Location' : message.kind === 'file' ? 'Document' : 'Link'}</b>
+                            <span>{message.fileName || message.body || new Date(message.createdAt).toLocaleString()}</span>
+                          </a>
+                        );
+                      })}
+                    {activeConversationRows().filter(message => ['image', 'file', 'audio', 'location'].includes(message.kind) || /^https?:\/\//i.test(message.body || '')).length === 0 && (
+                      <small>No media, links, or docs yet.</small>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <section className={`msgs chatTheme-${chatTheme}`}>
               <div className="dayChip">Today</div>
               {displayRows.map(m => {
                 const repliedMessage = m.replyToId
