@@ -369,6 +369,7 @@ export default function App() {
   const [active, setActive] = useState(null);
   const [mobileTab, setMobileTab] = useState('chats');
   const [chatListFilter, setChatListFilter] = useState('all');
+  const [settingsSearch, setSettingsSearch] = useState('');
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
@@ -3321,6 +3322,98 @@ export default function App() {
     status: 'Moments',
     settings: 'Settings'
   }[mobileTab] || 'Inbox';
+  const settingsHandle = `@${String(me?.username || 'user').trim().toLowerCase().replace(/[^a-z0-9]+/g, '') || 'user'}`;
+  const settingsSections = [
+    {
+      title: 'Account & Settings',
+      rows: [
+        {
+          label: 'Account',
+          detail: 'Manage your profile, username and phone',
+          icon: <User />,
+          action: () => setProfile(me)
+        },
+        {
+          label: 'Privacy',
+          detail: 'Control your privacy and security',
+          icon: <Lock />,
+          action: openPrivacy
+        },
+        {
+          label: 'Notifications',
+          detail: 'Message, call and app notifications',
+          icon: <Bell />,
+          action: requestNotifications
+        },
+        {
+          label: 'Chats',
+          detail: 'Chat settings, themes and wallpaper',
+          icon: <MessageCircle />,
+          action: () => setMobileTab('chats')
+        },
+        {
+          label: 'Calls',
+          detail: 'Call settings and preferences',
+          icon: <Phone />,
+          action: loadCallHistory
+        },
+        {
+          label: 'Appearance',
+          detail: 'App theme, color and language',
+          icon: <Settings />,
+          action: () => alert('Appearance settings will be connected in the theme phase.')
+        },
+        {
+          label: 'Storage & Data',
+          detail: 'Manage storage, data usage',
+          icon: <BarChart3 />,
+          action: downloadAccountData
+        },
+        {
+          label: 'Devices',
+          detail: 'Manage linked devices',
+          icon: <MonitorUp />,
+          action: openSecurity
+        },
+        {
+          label: 'Security',
+          detail: 'Password, two-step verification',
+          icon: <Shield />,
+          action: openSecurity
+        },
+        {
+          label: 'AI Assistant',
+          detail: 'Assistant settings and preferences',
+          icon: <Languages />,
+          action: () => setMobileTab('ai')
+        }
+      ]
+    },
+    {
+      title: 'Support',
+      rows: [
+        {
+          label: 'Help & Support',
+          detail: 'Get help and contact support',
+          icon: <Info />,
+          action: () => alert('Help & Support will be connected before go-live.')
+        },
+        {
+          label: 'About SecureChat',
+          detail: 'App version 1.0.0',
+          icon: <Info />,
+          action: () => alert('SecureChat version 1.0.0')
+        }
+      ]
+    }
+  ];
+  const settingsQuery = settingsSearch.trim().toLowerCase();
+  const visibleSettingsSections = settingsSections
+    .map(section => ({
+      ...section,
+      rows: section.rows.filter(row => !settingsQuery || `${row.label} ${row.detail}`.toLowerCase().includes(settingsQuery))
+    }))
+    .filter(section => section.rows.length);
   const emojiQuery = emojiSearch.trim().toLowerCase();
   const visibleEmojiSections = emojiQuery
     ? emojiSections
@@ -3508,6 +3601,59 @@ export default function App() {
         </div>
 
         <div className="chatListPane">
+        {mobileTab === 'settings' && (
+          <div className="settingsPage">
+            <div className="settingsHero">
+              <h1>Settings</h1>
+              <button type="button" onClick={requestNotifications} title="Notifications">
+                <Bell />
+              </button>
+            </div>
+
+            <label className="settingsSearch">
+              <Search />
+              <input
+                placeholder="Search settings"
+                value={settingsSearch}
+                onChange={e => setSettingsSearch(e.target.value)}
+              />
+            </label>
+
+            <button className="settingsAccountCard" type="button" onClick={() => setProfile(me)}>
+              <Avatar user={me} />
+              <span>
+                <b>{me?.username || 'User'} <Shield /></b>
+                <small>{settingsHandle}</small>
+                <em>Manage your account, profile and personal information</em>
+              </span>
+              <strong>›</strong>
+            </button>
+
+            {visibleSettingsSections.map(section => (
+              <section className="settingsSection" key={section.title}>
+                <h2>{section.title}</h2>
+                <div>
+                  {section.rows.map(row => (
+                    <button className="settingsRow" type="button" key={row.label} onClick={row.action}>
+                      <i>{row.icon}</i>
+                      <span>
+                        <b>{row.label}</b>
+                        <small>{row.detail}</small>
+                      </span>
+                      <strong>›</strong>
+                    </button>
+                  ))}
+                </div>
+              </section>
+            ))}
+
+            <button className="settingsLogout" type="button" onClick={logout}>
+              <i><LogOut /></i>
+              <span>Log Out</span>
+              <strong>›</strong>
+            </button>
+          </div>
+        )}
 
         <div className="search">
           <Search />
@@ -3663,7 +3809,7 @@ export default function App() {
           <button className={mobileTab === 'calls' ? 'active' : ''} onClick={() => { setMobileTab('calls'); loadCallHistory(); }}><Phone /><span>Calls</span></button>
           <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Languages /><span>Opal</span></button>
           <button className={mobileTab === 'status' ? 'active' : ''} onClick={() => { setMobileTab('status'); loadStatuses(); }}><History /><span>Moments</span></button>
-          <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); openPrivacy(); }}><Settings /><span>Settings</span></button>
+          <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); setActive(null); }}><Settings /><span>Settings</span></button>
         </nav>
         </div>
       </aside>
