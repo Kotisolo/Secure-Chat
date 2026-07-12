@@ -459,6 +459,439 @@ body{background:var(--bg);color:var(--text)}
   text-align:left;
   transition:.18s ease;
 }
+
+/* Refreshed in-call screen: dark, WhatsApp-style controls with working actions */
+.call{
+  position:fixed!important;
+  inset:0!important;
+  z-index:70!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:flex-start!important;
+  min-height:100vh!important;
+  padding:18px 18px max(24px, env(safe-area-inset-bottom))!important;
+  color:#fff!important;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(112,76,255,.22), transparent 30%),
+    radial-gradient(circle at 50% 25%, rgba(112,76,255,.14), transparent 44%),
+    #060914!important;
+}
+
+.callTopBar{
+  position:absolute!important;
+  top:18px!important;
+  left:18px!important;
+  right:18px!important;
+  z-index:9!important;
+  display:grid!important;
+  grid-template-columns:62px 1fr 62px!important;
+  align-items:start!important;
+  gap:12px!important;
+}
+
+.callTopBar button{
+  width:62px!important;
+  height:62px!important;
+  border:0!important;
+  border-radius:28px!important;
+  display:grid!important;
+  place-items:center!important;
+  color:#fff!important;
+  background:rgba(20,24,36,.86)!important;
+  box-shadow:none!important;
+}
+
+.callTopBar button svg{
+  width:28px!important;
+  height:28px!important;
+}
+
+.callTopBar div{
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  gap:6px!important;
+  padding-top:6px!important;
+  text-align:center!important;
+}
+
+.callTopBar b{
+  font-size:26px!important;
+  line-height:1!important;
+  color:#fff!important;
+}
+
+.callTopBar small{
+  display:flex!important;
+  align-items:center!important;
+  gap:7px!important;
+  color:rgba(255,255,255,.62)!important;
+  font-size:16px!important;
+}
+
+.callTopBar small svg{
+  width:16px!important;
+  height:16px!important;
+}
+
+.callTopBar span{
+  color:#fff!important;
+  font-size:26px!important;
+  font-weight:800!important;
+}
+
+.callInfo{
+  position:relative!important;
+  z-index:2!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  gap:14px!important;
+  margin-top:205px!important;
+  text-align:center!important;
+}
+
+.videoCall .callInfo{
+  margin-top:10px!important;
+}
+
+.callAvatar{
+  width:188px!important;
+  height:188px!important;
+  border-radius:50%!important;
+  display:grid!important;
+  place-items:center!important;
+  background:linear-gradient(145deg,#4f28f4,#812fff)!important;
+  color:#fff!important;
+  font-size:62px!important;
+  font-weight:950!important;
+  box-shadow:
+    0 0 0 54px rgba(112,76,255,.06),
+    0 0 0 104px rgba(112,76,255,.035),
+    0 30px 80px rgba(112,76,255,.38)!important;
+}
+
+.callInfo h2{
+  margin:34px 0 0!important;
+  color:#fff!important;
+  font-size:30px!important;
+  font-weight:900!important;
+}
+
+.callInfo p{
+  margin:0!important;
+  color:rgba(255,255,255,.78)!important;
+  font-size:17px!important;
+}
+
+.raisedHand{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  color:#cfc5ff!important;
+  font-weight:800!important;
+}
+
+.raisedHand svg{
+  width:17px!important;
+  height:17px!important;
+}
+
+.videoStage{
+  position:relative!important;
+  width:min(92vw,760px)!important;
+  height:min(58vh,540px)!important;
+  min-height:360px!important;
+  margin-top:118px!important;
+  border-radius:30px!important;
+  overflow:hidden!important;
+  background:#10131d!important;
+  box-shadow:0 28px 90px rgba(0,0,0,.42)!important;
+}
+
+.videoStage > video:first-child{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  background:#0c0f18!important;
+}
+
+.videoStage .local{
+  position:absolute!important;
+  right:18px!important;
+  bottom:18px!important;
+  width:170px!important;
+  height:126px!important;
+  border-radius:18px!important;
+  border:2px solid rgba(255,255,255,.72)!important;
+  object-fit:cover!important;
+  cursor:grab!important;
+  touch-action:none!important;
+  z-index:6!important;
+  background:#111827!important;
+  box-shadow:0 14px 34px rgba(0,0,0,.35)!important;
+}
+
+.videoStage .local:active{
+  cursor:grabbing!important;
+}
+
+.videoStage .localEffect{
+  filter:saturate(1.25) contrast(1.08) brightness(1.05)!important;
+}
+
+.callBtns{
+  position:absolute!important;
+  left:50%!important;
+  bottom:max(28px, env(safe-area-inset-bottom))!important;
+  z-index:10!important;
+  transform:translateX(-50%)!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:14px!important;
+  padding:14px!important;
+  border-radius:34px!important;
+  background:rgba(18,22,34,.94)!important;
+  border:1px solid rgba(255,255,255,.06)!important;
+  box-shadow:0 20px 60px rgba(0,0,0,.38)!important;
+}
+
+.callBtns button{
+  width:76px!important;
+  height:78px!important;
+  border:0!important;
+  border-radius:28px!important;
+  display:flex!important;
+  flex-direction:column!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:7px!important;
+  color:#fff!important;
+  background:#171d2c!important;
+  box-shadow:none!important;
+}
+
+.callBtns button svg{
+  width:28px!important;
+  height:28px!important;
+}
+
+.callBtns button span{
+  display:block!important;
+  font-size:12px!important;
+  font-weight:800!important;
+  color:rgba(255,255,255,.9)!important;
+}
+
+.callBtns button.off{
+  color:#b8b5c5!important;
+  background:#242939!important;
+}
+
+.callBtns button.danger{
+  background:#ff435f!important;
+  color:#fff!important;
+}
+
+.callOptionsSheet{
+  position:absolute!important;
+  left:50%!important;
+  bottom:132px!important;
+  z-index:12!important;
+  transform:translateX(-50%)!important;
+  width:min(92vw,520px)!important;
+  max-height:calc(100vh - 210px)!important;
+  overflow:auto!important;
+  padding:16px 22px 20px!important;
+  border-radius:30px!important;
+  background:#151923!important;
+  color:#fff!important;
+  border:1px solid rgba(255,255,255,.06)!important;
+  box-shadow:0 28px 100px rgba(0,0,0,.5)!important;
+}
+
+.callOptionsSheet.full{
+  width:min(92vw,480px)!important;
+}
+
+.callOptionsSheet > i{
+  display:block!important;
+  width:56px!important;
+  height:6px!important;
+  margin:0 auto 14px!important;
+  border-radius:999px!important;
+  background:rgba(255,255,255,.35)!important;
+}
+
+.callOptionsSheet h3{
+  margin:4px 0 16px!important;
+  text-align:center!important;
+  color:#fff!important;
+  font-size:26px!important;
+}
+
+.callOptionsSheet button{
+  width:100%!important;
+  min-height:82px!important;
+  padding:14px 4px!important;
+  border:0!important;
+  border-radius:0!important;
+  display:grid!important;
+  grid-template-columns:58px 1fr 34px!important;
+  grid-template-rows:auto auto!important;
+  align-items:center!important;
+  gap:3px 14px!important;
+  text-align:left!important;
+  color:#fff!important;
+  background:transparent!important;
+  border-bottom:1px solid rgba(255,255,255,.07)!important;
+  box-shadow:none!important;
+}
+
+.callOptionsSheet button > span{
+  grid-row:1 / 3!important;
+  width:48px!important;
+  height:48px!important;
+  border-radius:15px!important;
+  display:grid!important;
+  place-items:center!important;
+  background:rgba(112,76,255,.2)!important;
+  color:#fff!important;
+}
+
+.callOptionsSheet button > span svg{
+  width:24px!important;
+  height:24px!important;
+}
+
+.callOptionsSheet b{
+  font-size:18px!important;
+  color:#fff!important;
+}
+
+.callOptionsSheet small{
+  color:rgba(255,255,255,.62)!important;
+  font-size:14px!important;
+}
+
+.callOptionsSheet em{
+  grid-column:3!important;
+  grid-row:1 / 3!important;
+  justify-self:end!important;
+  color:rgba(255,255,255,.52)!important;
+  font-style:normal!important;
+  font-size:36px!important;
+  line-height:1!important;
+}
+
+.callOptionsSheet .toggle{
+  width:58px!important;
+  height:34px!important;
+  border-radius:999px!important;
+  background:#313747!important;
+  position:relative!important;
+}
+
+.callOptionsSheet .toggle::after{
+  content:''!important;
+  position:absolute!important;
+  width:26px!important;
+  height:26px!important;
+  left:4px!important;
+  top:4px!important;
+  border-radius:50%!important;
+  background:#fff!important;
+  transition:.18s ease!important;
+}
+
+.callOptionsSheet .toggle.on{
+  background:linear-gradient(135deg,#704cff,#9c3cff)!important;
+}
+
+.callOptionsSheet .toggle.on::after{
+  transform:translateX(24px)!important;
+}
+
+.callOptionsSheet .callOptionsClose{
+  display:block!important;
+  min-height:48px!important;
+  margin-top:8px!important;
+  text-align:center!important;
+  color:#a784ff!important;
+  font-size:18px!important;
+  font-weight:900!important;
+  border-bottom:0!important;
+}
+
+@media (max-width:760px){
+  .call{
+    padding:14px 14px max(18px, env(safe-area-inset-bottom))!important;
+  }
+  .callTopBar{
+    top:14px!important;
+    left:14px!important;
+    right:14px!important;
+    grid-template-columns:54px 1fr 54px!important;
+  }
+  .callTopBar button{
+    width:54px!important;
+    height:54px!important;
+    border-radius:24px!important;
+  }
+  .callTopBar b{
+    font-size:22px!important;
+  }
+  .callTopBar span{
+    font-size:22px!important;
+  }
+  .callInfo{
+    margin-top:190px!important;
+  }
+  .callAvatar{
+    width:164px!important;
+    height:164px!important;
+    font-size:54px!important;
+  }
+  .videoStage{
+    width:calc(100vw - 28px)!important;
+    height:54vh!important;
+    min-height:310px!important;
+    margin-top:112px!important;
+    border-radius:24px!important;
+  }
+  .videoStage .local{
+    width:132px!important;
+    height:98px!important;
+    border-radius:16px!important;
+  }
+  .callBtns{
+    width:calc(100vw - 24px)!important;
+    gap:8px!important;
+    padding:10px!important;
+    border-radius:28px!important;
+  }
+  .callBtns button{
+    flex:1 1 0!important;
+    width:auto!important;
+    min-width:0!important;
+    height:72px!important;
+    border-radius:24px!important;
+  }
+  .callBtns button svg{
+    width:25px!important;
+    height:25px!important;
+  }
+  .callBtns button span{
+    font-size:11px!important;
+  }
+  .callOptionsSheet{
+    bottom:116px!important;
+    width:calc(100vw - 24px)!important;
+    border-radius:28px!important;
+  }
+}
 .historyItem:hover{background:#fbfaff;transform:translateY(-1px)}
 .callMeta{flex:1;min-width:0}
 .callMeta b{display:block;color:var(--text)}

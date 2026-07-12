@@ -4,7 +4,8 @@ import {
   Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
-  Shield, Ban, Flag, Users, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical
+  Shield, Ban, Flag, Users, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
+  MonitorUp, Hand, Info
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, API_URL
@@ -448,6 +449,12 @@ export default function App() {
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [miniCallPosition, setMiniCallPosition] = useState(null);
+  const [localVideoPosition, setLocalVideoPosition] = useState(null);
+  const [callOptionsOpen, setCallOptionsOpen] = useState(null);
+  const [noiseCancellation, setNoiseCancellation] = useState(true);
+  const [cameraFacingMode, setCameraFacingMode] = useState('user');
+  const [videoEffectsOn, setVideoEffectsOn] = useState(false);
+  const [raisedHand, setRaisedHand] = useState(false);
 
   const pc = useRef(null);
   const liveKitRoom = useRef(null);
@@ -464,6 +471,7 @@ export default function App() {
   const miniLocalVideo = useRef(null);
   const miniRemoteVideo = useRef(null);
   const miniDrag = useRef({ dragging: false, moved: false });
+  const localVideoDrag = useRef({ dragging: false });
   const endRef = useRef(null);
   const typingTimer = useRef(null);
   const turnCredentialCache = useRef({ iceServers: null, expiresAt: 0 });
@@ -2857,6 +2865,47 @@ export default function App() {
     };
   }
 
+  function localVideoStyle() {
+    if (!localVideoPosition) return undefined;
+    return {
+      left: localVideoPosition.x,
+      top: localVideoPosition.y,
+      right: 'auto',
+      bottom: 'auto'
+    };
+  }
+
+  function startLocalVideoDrag(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    localVideoDrag.current = {
+      dragging: true,
+      pointerId: event.pointerId,
+      offsetX: event.clientX - rect.left,
+      offsetY: event.clientY - rect.top,
+      width: rect.width,
+      height: rect.height
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function moveLocalVideoDrag(event) {
+    const drag = localVideoDrag.current;
+    if (!drag.dragging || drag.pointerId !== event.pointerId) return;
+    const maxX = Math.max(8, window.innerWidth - drag.width - 8);
+    const maxY = Math.max(8, window.innerHeight - drag.height - 96);
+    setLocalVideoPosition({
+      x: Math.min(Math.max(8, event.clientX - drag.offsetX), maxX),
+      y: Math.min(Math.max(88, event.clientY - drag.offsetY), maxY)
+    });
+  }
+
+  function endLocalVideoDrag(event) {
+    if (localVideoDrag.current.pointerId === event.pointerId) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+      localVideoDrag.current = { dragging: false };
+    }
+  }
+
   function startMiniCallDrag(event) {
     if (event.target.closest('button')) return;
     const rect = event.currentTarget.getBoundingClientRect();
@@ -2923,6 +2972,10 @@ export default function App() {
       seconds: 0
     });
     setMiniCallPosition(null);
+    setLocalVideoPosition(null);
+    setCallOptionsOpen(null);
+    setRaisedHand(false);
+    setVideoEffectsOn(false);
   }
 
   // Toggle microphone on/off (button reflects the state)
@@ -3042,6 +3095,123 @@ export default function App() {
     }
   }
 
+  async function flipCamera() {
+    const nextFacing = cameraFacingMode === 'user' ? 'environment' : 'user';
+    try {
+      const constraints = { ...videoConstraintsForNetwork(), facingMode: { ideal: nextFacing } };
+
+      if (liveKitRoom.current) {
+        const oldTrack = liveKitLocalTracks.current.find(track => track.kind === Track.Kind.Video);
+        const nextTrack = await createLocalVideoTrack(constraints);
+        if (oldTrack) {
+          liveKitRoom.current.localParticipant.unpublishTrack?.(oldTrack.mediaStreamTrack);
+          oldTrack.stop?.();
+          liveKitLocalTracks.current = liveKitLocalTracks.current.filter(track => track !== oldTrack);
+        }
+        liveKitLocalTracks.current.push(nextTrack);
+        await liveKitRoom.current.localParticipant.publishTrack(nextTrack);
+        setCameraFacingMode(nextFacing);
+        setCamOn(true);
+        setCall(current => ({ ...current, type: 'video', videoCapable: true }));
+        rebuildLiveKitStreams();
+        return;
+      }
+
+      if (!pc.current || !localStream.current) return;
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: constraints });
+      const nextTrack = stream.getVideoTracks()[0];
+      const sender = pc.current.getSenders?.().find(item => item.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(nextTrack);
+      else pc.current.addTrack(nextTrack, localStream.current);
+      localStream.current.getVideoTracks().forEach(track => track.stop());
+      localStream.current = new MediaStream([
+        ...localStream.current.getAudioTracks(),
+        nextTrack
+      ]);
+      setCameraFacingMode(nextFacing);
+      setCamOn(true);
+      setCall(current => ({ ...current, type: 'video', videoCapable: true }));
+      attachCallMedia();
+      await tuneMobileVideoSender(pc.current);
+      await renegotiateCall('Camera flipped');
+    } catch (error) {
+      setCallError('Could not switch camera. This device or browser may only expose one camera.');
+    }
+  }
+
+  async function shareScreenInCall() {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      alert('Screen sharing is not supported in this browser.');
+      return;
+    }
+    try {
+      const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const screenTrack = displayStream.getVideoTracks()[0];
+      if (!screenTrack) return;
+
+      if (liveKitRoom.current) {
+        await liveKitRoom.current.localParticipant.publishTrack(screenTrack);
+        liveKitLocalTracks.current.push({
+          kind: Track.Kind.Video,
+          mediaStreamTrack: screenTrack,
+          stop: () => screenTrack.stop()
+        });
+        screenTrack.onended = () => rebuildLiveKitStreams();
+        setCall(current => ({ ...current, type: 'video', videoCapable: true, status: 'Screen sharing' }));
+        rebuildLiveKitStreams();
+        setCallOptionsOpen(null);
+        return;
+      }
+
+      if (!pc.current || !localStream.current) return;
+      const sender = pc.current.getSenders?.().find(item => item.track?.kind === 'video');
+      if (sender) await sender.replaceTrack(screenTrack);
+      else pc.current.addTrack(screenTrack, localStream.current);
+      localStream.current.getVideoTracks().forEach(track => track.stop());
+      localStream.current = new MediaStream([
+        ...localStream.current.getAudioTracks(),
+        screenTrack
+      ]);
+      screenTrack.onended = () => setCall(current => ({ ...current, status: 'Connected' }));
+      setCamOn(true);
+      setCall(current => ({ ...current, type: 'video', videoCapable: true, status: 'Screen sharing' }));
+      attachCallMedia();
+      await renegotiateCall('Screen sharing');
+      setCallOptionsOpen(null);
+    } catch (error) {
+      if (error?.name !== 'NotAllowedError') setCallError('Screen sharing could not start on this device.');
+    }
+  }
+
+  async function toggleNoiseCancellation() {
+    const next = !noiseCancellation;
+    setNoiseCancellation(next);
+    const tracks = localStream.current?.getAudioTracks?.() || [];
+    await Promise.all(tracks.map(track => track.applyConstraints?.({
+      echoCancellation: next,
+      noiseSuppression: next,
+      autoGainControl: next
+    }).catch(() => {})));
+  }
+
+  function sendMessageDuringCall() {
+    setCallOptionsOpen(null);
+    setCall(current => ({ ...current, minimized: true }));
+  }
+
+  function showCallDetails() {
+    alert(`${call.title}\nStatus: ${call.status || 'Connected'}\nDuration: ${String(Math.floor(call.seconds / 60)).padStart(2, '0')}:${String(call.seconds % 60).padStart(2, '0')}\nEncryption: End-to-end encrypted`);
+  }
+
+  function openCallSettings() {
+    const value = prompt('Speaker volume 0-100', String(Math.round(speakerVolume * 100)));
+    if (value === null) return;
+    const next = Math.min(100, Math.max(0, Number(value)));
+    if (!Number.isFinite(next)) return;
+    setSpeakerVolume(next / 100);
+    setSpeakerMuted(next === 0);
+  }
+
   function logout() {
     endCall(true);
     disconnectSocket();
@@ -3081,6 +3251,7 @@ export default function App() {
     return item.direction === callFilter;
   });
   const callContactName = call.title.split(' with ').pop() || call.title;
+  const callDurationText = `${String(Math.floor(call.seconds / 60)).padStart(2, '0')}:${String(call.seconds % 60).padStart(2, '0')}`;
   const callCanUseVideo = call.type === 'video' || call.videoCapable;
   const visibleContacts = contacts.filter(user => {
     if (Boolean(user.chat?.archived) !== showArchived) return false;
@@ -3940,6 +4111,187 @@ export default function App() {
 
       {call.active && !call.minimized && (
         <div className={`call ${call.type === 'video' ? 'videoCall' : 'audioCall'}`}>
+          <div className="callTopBar">
+            <button onClick={() => setCall(c => ({ ...c, minimized: true }))} title="Minimize call">
+              <Minimize2 />
+            </button>
+            <div>
+              <b>{callContactName}</b>
+              <small><Lock /> End-to-end encrypted</small>
+              <span>{callDurationText}</span>
+            </div>
+            <button onClick={() => setProfile(active || me)} title="Open profile">
+              <Users />
+            </button>
+          </div>
+
+          {call.type === 'video' && (
+            <div className="videoStage">
+              <video ref={remoteVideo} autoPlay muted playsInline />
+              <video
+                ref={localVideo}
+                autoPlay
+                muted
+                playsInline
+                className={videoEffectsOn ? 'local localEffect' : 'local'}
+                style={localVideoStyle()}
+                onPointerDown={startLocalVideoDrag}
+                onPointerMove={moveLocalVideoDrag}
+                onPointerUp={endLocalVideoDrag}
+                onPointerCancel={endLocalVideoDrag}
+                title="Drag to move your video"
+              />
+            </div>
+          )}
+
+          <div className="callInfo">
+            {call.type !== 'video' && (
+              <div className="callAvatar">{initials(callContactName)}</div>
+            )}
+            <h2>{call.title}</h2>
+            <p>{call.status || 'Connected securely...'}</p>
+            {raisedHand && <small className="raisedHand"><Hand /> Hand raised</small>}
+          </div>
+
+          {callOptionsOpen && (
+            <div className={callOptionsOpen === 'full' ? 'callOptionsSheet full' : 'callOptionsSheet'}>
+              <i />
+              {callOptionsOpen === 'full' && <h3>More options</h3>}
+              <button type="button" onClick={shareScreenInCall}>
+                <span><MonitorUp /></span>
+                <b>Share screen</b>
+                <small>Share your entire screen or an app</small>
+                <em>›</em>
+              </button>
+              <button type="button" onClick={sendMessageDuringCall}>
+                <span><MessageCircle /></span>
+                <b>Send message</b>
+                <small>Send a quick message</small>
+                <em>›</em>
+              </button>
+              <button type="button" onClick={toggleNoiseCancellation}>
+                <span><Volume2 /></span>
+                <b>Noise cancellation</b>
+                <small>Reduce background noise</small>
+                <em className={noiseCancellation ? 'toggle on' : 'toggle'} />
+              </button>
+              {callOptionsOpen === 'quick' ? (
+                <button type="button" onClick={() => setCallOptionsOpen('full')}>
+                  <span><MoreVertical /></span>
+                  <b>More options</b>
+                  <small>View additional settings</small>
+                  <em>›</em>
+                </button>
+              ) : (
+                <>
+                  <button type="button" onClick={flipCamera}>
+                    <span><Camera /></span>
+                    <b>Switch camera</b>
+                    <small>Flip between front and back</small>
+                    <em>›</em>
+                  </button>
+                  <button type="button" onClick={() => setVideoEffectsOn(value => !value)}>
+                    <span><Languages /></span>
+                    <b>Video effects</b>
+                    <small>{videoEffectsOn ? 'Effects enabled' : 'Blur background or apply effects'}</small>
+                    <em>›</em>
+                  </button>
+                  <button type="button" onClick={openCallSettings}>
+                    <span><Volume2 /></span>
+                    <b>Audio output</b>
+                    <small>Select speaker volume</small>
+                    <em>›</em>
+                  </button>
+                  <button type="button" onClick={() => setRaisedHand(value => !value)}>
+                    <span><Hand /></span>
+                    <b>Raise hand</b>
+                    <small>{raisedHand ? 'Lower your hand' : 'Let others know you want to speak'}</small>
+                    <em>›</em>
+                  </button>
+                  <button type="button" onClick={showCallDetails}>
+                    <span><Info /></span>
+                    <b>Call details</b>
+                    <small>View participants and encryption</small>
+                    <em>›</em>
+                  </button>
+                  <button type="button" onClick={openCallSettings}>
+                    <span><Settings /></span>
+                    <b>Call settings</b>
+                    <small>Manage your call preferences</small>
+                    <em>›</em>
+                  </button>
+                  <button type="button" className="callOptionsClose" onClick={() => setCallOptionsOpen(null)}>Close</button>
+                </>
+              )}
+            </div>
+          )}
+
+          <div className="callBtns">
+            <button
+              className={micOn ? '' : 'off'}
+              onClick={toggleMic}
+              title={micOn ? 'Mute microphone' : 'Unmute microphone'}
+            >
+              {micOn ? <Mic /> : <MicOff />}
+              <span>Mute</span>
+            </button>
+
+            {callCanUseVideo && (
+              <button
+                className={camOn ? '' : 'off'}
+                onClick={toggleCamera}
+                title={camOn ? 'Turn camera off' : 'Turn camera on after call connects'}
+              >
+                {camOn ? <Video /> : <VideoOff />}
+                <span>Camera</span>
+              </button>
+            )}
+
+            {call.type === 'video' && (
+              <button onClick={flipCamera} title="Switch camera">
+                <Camera />
+                <span>Flip</span>
+              </button>
+            )}
+
+            <button
+              className={speakerMuted ? 'off' : ''}
+              onClick={() => setSpeakerMuted(value => !value)}
+              title={speakerMuted ? 'Turn speaker on' : 'Mute speaker'}
+            >
+              {speakerMuted ? <VolumeX /> : <Volume2 />}
+              <span>Speaker</span>
+            </button>
+
+            <button onClick={() => setCallOptionsOpen(value => value ? null : 'quick')} title="More options">
+              <MoreVertical />
+              <span>More</span>
+            </button>
+
+            <button className="danger" onClick={() => endCall()} title="End call">
+              <PhoneOff />
+              <span>End</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {false && call.active && !call.minimized && (
+        <div className={`call ${call.type === 'video' ? 'videoCall' : 'audioCall'}`}>
+          <div className="callTopBar">
+            <button onClick={() => setCall(c => ({ ...c, minimized: true }))} title="Minimize call">
+              <Minimize2 />
+            </button>
+            <div>
+              <b>{callContactName}</b>
+              <small><Lock /> End-to-end encrypted</small>
+              <span>{callDurationText}</span>
+            </div>
+            <button onClick={() => setProfile(active || me)} title="Open profile">
+              <Users />
+            </button>
+          </div>
+
           <div className="callInfo">
             {call.type !== 'video' && (
               <div className="callAvatar">{initials(callContactName)}</div>
