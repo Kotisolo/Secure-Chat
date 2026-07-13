@@ -3306,12 +3306,12 @@ export default function App() {
     return true;
   });
   const mobileTitle = {
-    chats: 'Chats',
+    chats: 'Opal',
     calls: 'Calls',
     ai: 'Opal',
     status: 'Moments',
     settings: 'Settings'
-  }[mobileTab] || 'Chats';
+  }[mobileTab] || 'Opal';
   const settingsHandle = `@${String(me?.username || 'user').trim().toLowerCase().replace(/[^a-z0-9]+/g, '') || 'user'}`;
   const settingsSections = [
     {
@@ -3558,7 +3558,6 @@ export default function App() {
             <div className="brandMark"><MessageCircle /></div>
             <div><b className="desktopBrand">Chat <em>Opal</em></b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
             <div className="mobileTitleActions">
-              <button onClick={() => alert('Camera story capture will open from the Status screen.')} title="Camera"><Camera /></button>
               <button onClick={() => setProfile(me)} title="Menu"><MoreVertical /></button>
             </div>
           </div>

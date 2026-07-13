@@ -6450,3 +6450,117 @@ body{background:var(--bg);color:var(--text)}
     height:23px!important;
   }
 }
+
+/* Opal mobile landing: clean user list rows, no boxed user cards */
+.side.tab-chats .mobileTitleActions{
+  margin-left:auto!important;
+}
+.side.tab-chats .mobileTitleActions button{
+  box-shadow:0 7px 18px rgba(35,28,66,.07)!important;
+}
+.side.tab-chats .chat{
+  background:transparent!important;
+  box-shadow:none!important;
+  border-radius:0!important;
+  border-bottom:1px solid #eeeaf6!important;
+}
+.side.tab-chats .chat:last-child{
+  border-bottom:0!important;
+}
+.side.tab-chats .chatMain{
+  background:transparent!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+}
+
+@media(min-width:901px){
+  .side.tab-chats .chat{
+    border-bottom:1px solid #eeeaf6!important;
+  }
+  .side.tab-chats .chatMain{
+    min-height:66px!important;
+    grid-template-columns:46px minmax(0,1fr) 54px!important;
+    padding:9px 8px!important;
+  }
+  .side.tab-chats .chatMain .avatar{
+    width:46px!important;
+    height:46px!important;
+    border-radius:15px!important;
+  }
+}
+
+@media(max-width:900px){
+  .side.tab-chats .desktopNavRail .appTitle{
+    height:70px!important;
+    padding:18px 30px 8px!important;
+  }
+  .side.tab-chats .mobileBrand{
+    color:#151323!important;
+    font-size:30px!important;
+    font-weight:820!important;
+    letter-spacing:-.045em!important;
+  }
+  .side.tab-chats .mobileTitleActions button{
+    width:48px!important;
+    height:48px!important;
+    border-radius:17px!important;
+  }
+  .side.tab-chats .chatListPane .search{
+    height:48px!important;
+    margin:6px 30px 20px!important;
+    border-radius:18px!important;
+  }
+  .side.tab-chats .chatFilterChips{
+    padding:0 30px 22px!important;
+    gap:13px!important;
+  }
+  .side.tab-chats .chatFilterChips button{
+    height:38px!important;
+    min-height:38px!important;
+    border-radius:15px!important;
+    font-size:12.5px!important;
+  }
+  .side.tab-chats .archiveToggle{
+    height:54px!important;
+    margin:0 30px 18px!important;
+    border-radius:18px!important;
+    font-size:15.5px!important;
+  }
+  .side.tab-chats .list{
+    padding:0 30px 96px!important;
+    gap:0!important;
+  }
+  .side.tab-chats .chatMain{
+    min-height:74px!important;
+    grid-template-columns:48px minmax(0,1fr) 58px!important;
+    padding:12px 0!important;
+    column-gap:16px!important;
+  }
+  .side.tab-chats .chatMain .avatar{
+    width:48px!important;
+    height:48px!important;
+    border-radius:16px!important;
+    font-size:18px!important;
+  }
+  .side.tab-chats .chatMain b{
+    font-size:16px!important;
+    font-weight:760!important;
+    letter-spacing:-.01em!important;
+  }
+  .side.tab-chats .chatMain span{
+    font-size:13px!important;
+    font-weight:480!important;
+    color:#716c7d!important;
+  }
+  .side.tab-chats .chatMain time{
+    font-size:11px!important;
+    font-weight:650!important;
+    color:#706a7d!important;
+  }
+  .side.tab-chats .chatMain .unreadBadge{
+    min-width:21px!important;
+    height:21px!important;
+    border-radius:10px!important;
+    font-size:10px!important;
+  }
+}
