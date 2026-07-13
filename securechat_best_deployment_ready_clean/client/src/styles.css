@@ -460,6 +460,210 @@ body{background:var(--bg);color:var(--text)}
   transition:.18s ease;
 }
 
+/* Single-source settings: bottom tab is profile, Opal three-dot menu owns settings */
+.profileSettingsPage{
+  display:block!important;
+}
+.settingsProfileHero{
+  margin:10px 0 18px;
+  padding:24px 18px;
+  border-radius:28px;
+  background:linear-gradient(180deg,#ffffff 0%,#fbf9ff 100%);
+  border:1px solid rgba(113,76,255,.12);
+  box-shadow:0 18px 44px rgba(37,25,84,.09);
+  text-align:center;
+}
+.settingsProfileHero>.profileAvatarWrap{
+  width:96px;
+  height:96px;
+  margin:0 auto 14px;
+  position:relative;
+}
+.settingsProfileHero .avatar.big,
+.settingsProfileHero .avatar{
+  width:96px!important;
+  height:96px!important;
+  border-radius:30px!important;
+  font-size:34px!important;
+  box-shadow:0 14px 30px rgba(112,76,255,.26);
+}
+.profilePresence{
+  position:absolute;
+  right:2px;
+  bottom:5px;
+  width:18px;
+  height:18px;
+  border-radius:999px;
+  background:#a9a3b8;
+  border:4px solid #fff;
+}
+.profilePresence.online{
+  background:#31cf70;
+}
+.settingsProfileHero h2{
+  margin:0;
+  color:#121020;
+  font-size:24px;
+  line-height:1.05;
+  letter-spacing:-.04em;
+}
+.settingsProfileHero p{
+  margin:7px 0 8px;
+  color:#6b6678;
+  font-size:14px;
+  font-weight:700;
+}
+.settingsProfileHero small{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  gap:6px;
+  color:#777186;
+  font-size:12px;
+  font-weight:700;
+}
+.settingsProfileHero>.profilePhotoModern{
+  width:100%;
+  justify-content:center;
+  margin:18px 0 10px;
+  border-radius:18px;
+  background:linear-gradient(135deg,#7453ff,#963df1);
+  color:#fff;
+  box-shadow:0 14px 30px rgba(112,76,255,.22);
+}
+.settingsProfileOpen{
+  width:100%;
+  min-height:50px;
+  padding:0 16px;
+  border-radius:18px;
+  background:#fff;
+  border:1px solid #eee9f7;
+  color:#211a39;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  font-weight:800;
+  box-shadow:0 10px 24px rgba(36,28,70,.07);
+}
+.settingsProfileOpen strong{
+  margin-left:auto;
+  color:#704cff;
+  font-size:22px;
+}
+.settingsProfileHero>strong{
+  display:none!important;
+}
+.opalSettingsMenuBackdrop{
+  position:fixed;
+  inset:0;
+  z-index:80;
+  display:flex;
+  justify-content:flex-end;
+  align-items:flex-start;
+  padding:88px 24px 24px;
+  background:rgba(15,12,28,.18);
+  backdrop-filter:blur(8px);
+}
+.opalSettingsMenu{
+  width:min(380px,calc(100vw - 32px));
+  max-height:calc(100dvh - 120px);
+  overflow:auto;
+  border-radius:28px;
+  background:#fff;
+  border:1px solid rgba(112,76,255,.12);
+  box-shadow:0 28px 80px rgba(27,20,53,.22);
+  padding:16px;
+}
+.opalSettingsMenuHead{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:14px;
+  padding:4px 4px 14px;
+}
+.opalSettingsMenuHead b{
+  display:block;
+  color:#131020;
+  font-size:22px;
+  line-height:1.05;
+  letter-spacing:-.035em;
+}
+.opalSettingsMenuHead small{
+  display:block;
+  margin-top:5px;
+  color:#746f82;
+  font-size:12px;
+  font-weight:650;
+}
+.opalSettingsMenuHead button{
+  width:38px;
+  height:38px;
+  border-radius:14px;
+  background:#f5f2fb;
+  color:#704cff;
+}
+.opalMenuSection{
+  margin:10px 0 14px;
+}
+.opalMenuSection h3{
+  margin:0 0 8px;
+  padding:0 6px;
+  color:#8a8495;
+  font-size:12px;
+  font-weight:850;
+}
+.opalSettingsMenu .settingsRow{
+  min-height:54px;
+  padding:10px 8px;
+  border-radius:16px;
+  background:transparent;
+}
+.opalSettingsMenu .settingsRow:hover{
+  background:#f7f4ff;
+}
+.opalSettingsMenu .settingsRow i{
+  width:36px;
+  height:36px;
+  border-radius:13px;
+  background:#f3edff;
+  color:#704cff;
+}
+.opalSettingsMenu .settingsRow span b{
+  font-size:14px;
+}
+.opalSettingsMenu .settingsRow span small{
+  font-size:11px;
+}
+.opalMenuLogout{
+  margin-top:6px;
+  border-radius:18px!important;
+}
+
+@media(max-width:900px){
+  .profileSettingsPage{
+    padding-bottom:110px!important;
+  }
+  .profileSettingsPage .settingsHero h1{
+    font-size:34px!important;
+    color:#151120!important;
+  }
+  .settingsProfileHero{
+    margin-top:12px!important;
+    padding:22px 18px!important;
+  }
+  .opalSettingsMenuBackdrop{
+    align-items:flex-end;
+    justify-content:center;
+    padding:18px 18px max(92px,env(safe-area-inset-bottom));
+  }
+  .opalSettingsMenu{
+    width:100%;
+    max-height:74dvh;
+    border-radius:28px;
+    padding:14px;
+  }
+}
+
 /* Mobile-first call refinements: lighter fonts, add-person picker, full draggable preview */
 .call .callTopBar b{
   font-size:19px!important;

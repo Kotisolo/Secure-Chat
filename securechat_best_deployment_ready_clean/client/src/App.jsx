@@ -369,7 +369,7 @@ export default function App() {
   const [active, setActive] = useState(null);
   const [mobileTab, setMobileTab] = useState('chats');
   const [chatListFilter, setChatListFilter] = useState('all');
-  const [settingsSearch, setSettingsSearch] = useState('');
+  const [showOpalMenu, setShowOpalMenu] = useState(false);
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
@@ -3351,7 +3351,7 @@ export default function App() {
           label: 'Appearance',
           detail: 'App theme, color and language',
           icon: <Settings />,
-          action: () => alert('Appearance settings will be connected in the theme phase.')
+          action: changeActiveChatTheme
         },
         {
           label: 'Storage & Data',
@@ -3397,13 +3397,6 @@ export default function App() {
       ]
     }
   ];
-  const settingsQuery = settingsSearch.trim().toLowerCase();
-  const visibleSettingsSections = settingsSections
-    .map(section => ({
-      ...section,
-      rows: section.rows.filter(row => !settingsQuery || `${row.label} ${row.detail}`.toLowerCase().includes(settingsQuery))
-    }))
-    .filter(section => section.rows.length);
   const emojiQuery = emojiSearch.trim().toLowerCase();
   const visibleEmojiSections = emojiQuery
     ? emojiSections
@@ -3558,7 +3551,7 @@ export default function App() {
             <div className="brandMark"><MessageCircle /></div>
             <div><b className="desktopBrand">Chat <em>Opal</em></b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
             <div className="mobileTitleActions">
-              <button onClick={() => setProfile(me)} title="Menu"><MoreVertical /></button>
+              <button onClick={() => setShowOpalMenu(value => !value)} title="Menu"><MoreVertical /></button>
             </div>
           </div>
           <button className="newChatButton" onClick={() => {
@@ -3575,7 +3568,7 @@ export default function App() {
             <button onClick={() => alert('Saved messages will be connected in the saved-chats phase.')}><Star /> Saved Messages</button>
           </div>
           <div className="railFooter">
-            <button onClick={() => { setMobileTab('settings'); setActive(null); }}><Settings /> Settings</button>
+            <button onClick={() => { setShowOpalMenu(false); setMobileTab('settings'); setActive(null); }}><Settings /> Settings</button>
             <button onClick={requestNotifications}><Bell /> Notifications</button>
           </div>
           <div className="me">
@@ -3591,56 +3584,76 @@ export default function App() {
 
         <div className="chatListPane">
         {mobileTab === 'settings' && (
-          <div className="settingsPage">
+          <div className="settingsPage profileSettingsPage">
             <div className="settingsHero">
-              <h1>Settings</h1>
-              <button type="button" onClick={requestNotifications} title="Notifications">
-                <Bell />
+              <h1>Profile</h1>
+              <button type="button" onClick={() => setProfile(me)} title="Full profile">
+                <User />
               </button>
             </div>
 
-            <label className="settingsSearch">
-              <Search />
-              <input
-                placeholder="Search settings"
-                value={settingsSearch}
-                onChange={e => setSettingsSearch(e.target.value)}
-              />
-            </label>
+            <div className="settingsProfileHero">
+              <div className="profileAvatarWrap">
+                <Avatar user={me} big />
+                <span className={ready ? 'profilePresence online' : 'profilePresence'} />
+              </div>
+              <h2>{me?.username || 'User'}</h2>
+              <p>{settingsHandle}</p>
+              <small><span className={ready ? 'dot online' : 'dot'} /> {ready ? 'Online' : 'Offline'} • SecureChat profile</small>
+              <label className="profilePhoto profilePhotoModern">
+                <Camera />
+                Change profile photo
+                <input hidden type="file" accept="image/*" onChange={uploadAvatar} />
+              </label>
+              <button className="settingsProfileOpen" type="button" onClick={() => {
+                setProfileMode('full');
+                setProfile(me);
+              }}>
+                <User /> View full profile <strong>›</strong>
+              </button>
+            </div>
+          </div>
+        )}
 
-            <button className="settingsAccountCard" type="button" onClick={() => setProfile(me)}>
-              <Avatar user={me} />
-              <span>
-                <b>{me?.username || 'User'} <Shield /></b>
-                <small>{settingsHandle}</small>
-                <em>Manage your account, profile and personal information</em>
-              </span>
-              <strong>›</strong>
-            </button>
-
-            {visibleSettingsSections.map(section => (
-              <section className="settingsSection" key={section.title}>
-                <h2>{section.title}</h2>
+        {showOpalMenu && (
+          <div className="opalSettingsMenuBackdrop" onClick={() => setShowOpalMenu(false)}>
+            <div className="opalSettingsMenu" onClick={e => e.stopPropagation()}>
+              <div className="opalSettingsMenuHead">
                 <div>
-                  {section.rows.map(row => (
-                    <button className="settingsRow" type="button" key={row.label} onClick={row.action}>
-                      <i>{row.icon}</i>
-                      <span>
-                        <b>{row.label}</b>
-                        <small>{row.detail}</small>
-                      </span>
-                      <strong>›</strong>
-                    </button>
-                  ))}
+                  <b>Settings</b>
+                  <small>Account, privacy, calls and app tools</small>
                 </div>
-              </section>
-            ))}
-
-            <button className="settingsLogout" type="button" onClick={logout}>
-              <i><LogOut /></i>
-              <span>Log Out</span>
-              <strong>›</strong>
-            </button>
+                <button type="button" onClick={() => setShowOpalMenu(false)} title="Close"><X /></button>
+              </div>
+              {settingsSections.map(section => (
+                <section className="opalMenuSection" key={section.title}>
+                  <h3>{section.title}</h3>
+                  <div>
+                    {section.rows.map(row => (
+                      <button className="settingsRow" type="button" key={row.label} onClick={() => {
+                        setShowOpalMenu(false);
+                        row.action();
+                      }}>
+                        <i>{row.icon}</i>
+                        <span>
+                          <b>{row.label}</b>
+                          <small>{row.detail}</small>
+                        </span>
+                        <strong>›</strong>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
+              <button className="settingsLogout opalMenuLogout" type="button" onClick={() => {
+                setShowOpalMenu(false);
+                logout();
+              }}>
+                <i><LogOut /></i>
+                <span>Log Out</span>
+                <strong>›</strong>
+              </button>
+            </div>
           </div>
         )}
 
@@ -3798,7 +3811,7 @@ export default function App() {
           <button className={mobileTab === 'calls' ? 'active' : ''} onClick={() => { setMobileTab('calls'); loadCallHistory(); }}><Phone /><span>Calls</span></button>
           <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Languages /><span>Opal</span></button>
           <button className={mobileTab === 'status' ? 'active' : ''} onClick={() => { setMobileTab('status'); loadStatuses(); }}><History /><span>Moments</span></button>
-          <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); setActive(null); }}><Settings /><span>Settings</span></button>
+          <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setShowOpalMenu(false); setMobileTab('settings'); setActive(null); }}><Settings /><span>Settings</span></button>
         </nav>
         </div>
       </aside>
@@ -4742,12 +4755,6 @@ export default function App() {
               <Avatar user={me} />
               <div><h2>{me?.username}</h2><small>{me?.phone}</small></div>
               <button onClick={() => setProfile(me)}>Edit profile</button>
-            </div>
-            <div className="settingsShortcuts">
-              <button onClick={() => { setPrivacy(null); openSecurity(); }}><Lock /><span>Account & security</span></button>
-              <button onClick={requestNotifications}><Bell /><span>Notifications</span></button>
-              <button onClick={createRecoveryCode}><KeyRound /><span>Recovery code</span></button>
-              <button className="danger" onClick={logout}><LogOut /><span>Log out</span></button>
             </div>
             <h3>Privacy</h3>
             {[ 
