@@ -6564,3 +6564,277 @@ body{background:var(--bg);color:var(--text)}
     font-size:10px!important;
   }
 }
+
+/* Best final mobile Opal landing: strict vertical flow, no overlap */
+@media(max-width:900px){
+  .side.tab-chats{
+    background:#fbfaff!important;
+    padding:0!important;
+  }
+  .side.tab-chats .desktopNavRail{
+    display:block!important;
+    background:transparent!important;
+  }
+  .side.tab-chats .desktopNavRail .appTitle{
+    position:static!important;
+    height:86px!important;
+    min-height:86px!important;
+    padding:24px 30px 10px!important;
+    display:flex!important;
+    align-items:center!important;
+    background:transparent!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+  .side.tab-chats .mobileBrand{
+    color:#151323!important;
+    font-size:34px!important;
+    line-height:1!important;
+    font-weight:850!important;
+    letter-spacing:-.055em!important;
+  }
+  .side.tab-chats .mobileTitleActions{
+    margin-left:auto!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+  }
+  .side.tab-chats .mobileTitleActions button{
+    width:48px!important;
+    height:48px!important;
+    border-radius:17px!important;
+    color:#704cff!important;
+    background:#fff!important;
+    border:1px solid #eeeaf6!important;
+    box-shadow:0 7px 18px rgba(35,28,66,.07)!important;
+  }
+  .side.tab-chats .mobileTitleActions button svg{
+    width:22px!important;
+    height:22px!important;
+  }
+  .side.tab-chats .chatListPane{
+    height:calc(100dvh - 86px)!important;
+    display:block!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    padding:0 0 108px!important;
+    background:transparent!important;
+  }
+  .side.tab-chats .chatListPane .search{
+    position:static!important;
+    height:48px!important;
+    min-height:48px!important;
+    margin:4px 30px 18px!important;
+    padding:0 15px!important;
+    border-radius:18px!important;
+    background:#f1eef8!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+  .side.tab-chats .chatListPane .search svg{
+    width:22px!important;
+    height:22px!important;
+    color:#9892a8!important;
+  }
+  .side.tab-chats .chatListPane .search input{
+    height:100%!important;
+    font-size:15px!important;
+    font-weight:560!important;
+    color:#151323!important;
+  }
+  .side.tab-chats .chatListPane .search input::placeholder{
+    color:#7f798f!important;
+  }
+  .side.tab-chats .chatListPane .searchTune{
+    display:none!important;
+  }
+  .side.tab-chats .chatFilterChips{
+    position:static!important;
+    z-index:auto!important;
+    display:grid!important;
+    grid-template-columns:repeat(4,minmax(0,1fr))!important;
+    height:38px!important;
+    min-height:38px!important;
+    margin:0 30px 22px!important;
+    padding:0!important;
+    gap:13px!important;
+    overflow:visible!important;
+  }
+  .side.tab-chats .chatFilterChips button{
+    width:100%!important;
+    height:38px!important;
+    min-height:38px!important;
+    padding:0 5px!important;
+    border-radius:15px!important;
+    display:grid!important;
+    place-items:center!important;
+    background:#f3f1f8!important;
+    color:#1d1a2a!important;
+    font-size:12.5px!important;
+    line-height:1!important;
+    font-weight:720!important;
+    box-shadow:none!important;
+  }
+  .side.tab-chats .chatFilterChips button.active{
+    color:#fff!important;
+    background:linear-gradient(135deg,#5d5af2,#874cf7)!important;
+    box-shadow:none!important;
+  }
+  .side.tab-chats .chatFilterChips span{
+    display:none!important;
+  }
+  .side.tab-chats .storiesHeader,
+  .side.tab-chats .contactStories,
+  .side.tab-chats .statusHeader,
+  .side.tab-chats .aiOpalPanel{
+    display:none!important;
+  }
+  .side.tab-chats .archiveToggle{
+    position:static!important;
+    z-index:auto!important;
+    width:auto!important;
+    height:54px!important;
+    min-height:54px!important;
+    margin:0 30px 20px!important;
+    padding:0 14px!important;
+    border-radius:18px!important;
+    display:flex!important;
+    align-items:center!important;
+    gap:14px!important;
+    color:#704cff!important;
+    background:#fff!important;
+    border:1px solid #eeeaf6!important;
+    box-shadow:0 7px 18px rgba(35,28,66,.07)!important;
+    transform:none!important;
+    clear:none!important;
+    font-size:15.5px!important;
+    font-weight:760!important;
+  }
+  .side.tab-chats .archiveToggle svg{
+    width:23px!important;
+    height:23px!important;
+  }
+  .side.tab-chats .archiveToggle span{
+    flex:1!important;
+  }
+  .side.tab-chats .archiveToggle b{
+    display:none!important;
+  }
+  .side.tab-chats .archiveToggle::after{
+    content:'›'!important;
+    color:#704cff!important;
+    font-size:27px!important;
+    line-height:1!important;
+  }
+  .side.tab-chats .list{
+    display:flex!important;
+    flex-direction:column!important;
+    gap:0!important;
+    padding:0 30px 0!important;
+    overflow:visible!important;
+  }
+  .side.tab-chats .chat{
+    background:transparent!important;
+    border:0!important;
+    border-bottom:1px solid #eeeaf6!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+    margin:0!important;
+  }
+  .side.tab-chats .chat:last-child{
+    border-bottom:0!important;
+  }
+  .side.tab-chats .chatMain{
+    min-height:74px!important;
+    padding:12px 0!important;
+    display:grid!important;
+    grid-template-columns:48px minmax(0,1fr) 58px!important;
+    grid-template-rows:auto auto!important;
+    column-gap:16px!important;
+    row-gap:2px!important;
+    align-items:center!important;
+    background:transparent!important;
+    border-radius:0!important;
+    box-shadow:none!important;
+  }
+  .side.tab-chats .chatMain .avatar{
+    grid-column:1!important;
+    grid-row:1 / span 2!important;
+    width:48px!important;
+    height:48px!important;
+    border-radius:16px!important;
+    font-size:18px!important;
+  }
+  .side.tab-chats .chatMain>div:nth-child(2){
+    grid-column:2!important;
+    grid-row:1 / span 2!important;
+    min-width:0!important;
+  }
+  .side.tab-chats .chatMain b{
+    display:block!important;
+    max-width:100%!important;
+    color:#11101b!important;
+    font-size:16px!important;
+    line-height:1.15!important;
+    font-weight:760!important;
+    letter-spacing:-.01em!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  .side.tab-chats .chatMain span{
+    display:block!important;
+    max-width:100%!important;
+    margin-top:5px!important;
+    color:#716c7d!important;
+    font-size:13px!important;
+    line-height:1.15!important;
+    font-weight:480!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  .side.tab-chats .chatMain time{
+    grid-column:3!important;
+    grid-row:1!important;
+    justify-self:end!important;
+    align-self:start!important;
+    max-width:58px!important;
+    margin:2px 0 0!important;
+    color:#706a7d!important;
+    font-size:11px!important;
+    line-height:1.1!important;
+    font-weight:650!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  .side.tab-chats .chatMain .unreadBadge{
+    grid-column:3!important;
+    grid-row:2!important;
+    justify-self:end!important;
+    align-self:end!important;
+    min-width:21px!important;
+    height:21px!important;
+    border-radius:10px!important;
+    font-size:10px!important;
+  }
+  .side.tab-chats .bottomNav{
+    left:24px!important;
+    right:24px!important;
+    bottom:14px!important;
+    height:70px!important;
+    border-radius:24px!important;
+    background:rgba(255,255,255,.97)!important;
+    border:1px solid #eeeaf6!important;
+    box-shadow:0 12px 34px rgba(35,28,66,.14)!important;
+  }
+  .side.tab-chats .bottomNav button{
+    font-size:10px!important;
+    font-weight:680!important;
+  }
+  .side.tab-chats .bottomNav button svg{
+    width:23px!important;
+    height:23px!important;
+  }
+}
