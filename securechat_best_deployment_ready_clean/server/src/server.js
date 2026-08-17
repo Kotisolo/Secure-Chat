@@ -1038,6 +1038,66 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
   }
 });
 
+app.post('/api/auth/request-login-otp', authRateLimit, asyncRoute(async (req, res) => {
+  const phone = clean(req.body.phone);
+  if (phone.length < 6) return res.status(400).json({ error: 'Enter your registered phone number.' });
+
+  const r = await pool.query('SELECT id,email FROM users WHERE phone=$1', [phone]);
+  const u = r.rows[0];
+  if (!u || !u.email) return res.json({ ok: true });
+
+  const otp = String(crypto.randomInt(100000, 1000000));
+  const otpHash = await bcrypt.hash(otp, 10);
+  await pool.query(
+    "INSERT INTO login_otps(user_id,otp_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '10 minutes')",
+    [u.id, otpHash]
+  );
+  await sendOtpEmail(u.email, otp);
+  res.json({ ok: true });
+}));
+
+app.post('/api/auth/login-otp', authRateLimit, asyncRoute(async (req, res) => {
+  const phone = clean(req.body.phone);
+  const otp = clean(req.body.otp);
+  const twoStepPin = String(req.body.twoStepPin || '');
+
+  if (phone.length < 6) return res.status(400).json({ error: 'Enter your registered phone number.' });
+  if (!/^\d{6}$/.test(otp)) return res.status(400).json({ error: 'Enter the 6-digit code.' });
+
+  const ur = await pool.query('SELECT * FROM users WHERE phone=$1', [phone]);
+  const u = ur.rows[0];
+  if (!u) return res.status(404).json({ error: 'Phone number not registered.' });
+
+  const rr = await pool.query(
+    'SELECT * FROM login_otps WHERE user_id=$1 AND used_at IS NULL AND expires_at>NOW() ORDER BY created_at DESC LIMIT 1',
+    [u.id]
+  );
+  const pending = rr.rows[0];
+  const valid = pending ? await bcrypt.compare(otp, pending.otp_hash) : false;
+  if (!valid) return res.status(401).json({ error: 'Invalid or expired code.' });
+
+  if (u.two_step_pin_hash && !(await bcrypt.compare(twoStepPin, u.two_step_pin_hash))) {
+    return res.status(401).json({
+      error: twoStepPin ? 'Incorrect two-step verification PIN.' : 'Two-step verification PIN required.',
+      twoStepRequired: true
+    });
+  }
+
+  await pool.query('UPDATE login_otps SET used_at=NOW() WHERE id=$1', [pending.id]);
+  await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [u.id]);
+
+  const out = user(u);
+  const sessionId = await createSession(req, u.id);
+  io.to(userRoom(u.id)).emit('security:new-login', {
+    deviceName: clean(req.body.deviceName || req.get('user-agent') || 'Unknown device').slice(0, 160),
+    time: new Date().toISOString()
+  });
+  res.json({
+    token: sign({ ...out, sessionVersion: u.session_version, sessionId }),
+    user: out
+  });
+}));
+
 app.post('/api/auth/request-reset', authRateLimit, asyncRoute(async (req, res) => {
   const phone = clean(req.body.phone);
   if (phone.length < 6) return res.status(400).json({ error: 'Enter registered phone number.' });
