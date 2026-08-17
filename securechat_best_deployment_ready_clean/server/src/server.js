@@ -14,6 +14,7 @@ const { Pool } = require('pg');
 const { createAdapter } = require('@socket.io/redis-adapter');
 const Redis = require('ioredis');
 const { AccessToken } = require('livekit-server-sdk');
+const webpush = require('web-push');
 
 const PORT = process.env.PORT || 8080;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -25,6 +26,15 @@ const METERED_TURN_API_URL = (process.env.METERED_TURN_API_URL || process.env.ME
 const LIVEKIT_URL = (process.env.LIVEKIT_URL || '').trim();
 const LIVEKIT_API_KEY = (process.env.LIVEKIT_API_KEY || '').trim();
 const LIVEKIT_API_SECRET = (process.env.LIVEKIT_API_SECRET || '').trim();
+const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || '').trim();
+const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || '').trim();
+const VAPID_SUBJECT = (process.env.VAPID_SUBJECT || 'mailto:support@example.com').trim();
+const PUSH_CONFIGURED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+if (PUSH_CONFIGURED) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+} else {
+  console.log('Push notifications disabled: VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY not configured.');
+}
 const STATIC_TURN_URLS = (
   process.env.TURN_URLS ||
   process.env.VITE_TURN_URLS ||
@@ -123,6 +133,8 @@ const upload = multer({
 
 const online = new Map();
 const groupCallParticipants = new Map();
+const pendingCalls = new Map(); // recipientId -> { callerId, callerName, offer, callType, timer, callHistoryId }
+const PENDING_CALL_WINDOW_MS = 45 * 1000;
 const { Server } = require('socket.io');
 
 const io = new Server(server, {
@@ -312,6 +324,29 @@ async function isUserOnline(userId) {
   if (!redisPresence) return false;
   const count = await redisPresence.scard(onlineKey(userId)).catch(() => 0);
   return count > 0;
+}
+
+async function sendPushToUser(userId, payload) {
+  if (!PUSH_CONFIGURED) return;
+  const subs = await pool.query(
+    'SELECT id,endpoint,p256dh,auth FROM push_subscriptions WHERE user_id=$1',
+    [userId]
+  ).catch(() => ({ rows: [] }));
+  const body = JSON.stringify(payload);
+  await Promise.all(subs.rows.map(async sub => {
+    try {
+      await webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        body
+      );
+    } catch (error) {
+      if (error.statusCode === 404 || error.statusCode === 410) {
+        await pool.query('DELETE FROM push_subscriptions WHERE id=$1', [sub.id]).catch(() => {});
+      } else {
+        console.error('push send', error.message);
+      }
+    }
+  }));
 }
 
 function userRoom(userId) {
@@ -664,9 +699,40 @@ app.get('/api/health', (req, res) => {
     },
     livekit: {
       configured: Boolean(LIVEKIT_URL && LIVEKIT_API_KEY && LIVEKIT_API_SECRET)
+    },
+    push: {
+      configured: PUSH_CONFIGURED
     }
   });
 });
+
+app.get('/api/push/vapid-public-key', (req, res) => {
+  if (!PUSH_CONFIGURED) return res.status(404).json({ error: 'Push notifications are not configured.' });
+  res.json({ publicKey: VAPID_PUBLIC_KEY });
+});
+
+app.post('/api/push/subscribe', auth, asyncRoute(async (req, res) => {
+  const endpoint = clean(req.body.endpoint);
+  const p256dh = clean(req.body.keys?.p256dh);
+  const authKey = clean(req.body.keys?.auth);
+  if (!endpoint || !p256dh || !authKey) {
+    return res.status(400).json({ error: 'Invalid push subscription.' });
+  }
+  await pool.query(
+    `INSERT INTO push_subscriptions(user_id,endpoint,p256dh,auth)
+     VALUES($1,$2,$3,$4)
+     ON CONFLICT(endpoint) DO UPDATE SET user_id=$1,p256dh=$3,auth=$4,last_seen=NOW()`,
+    [req.user.id, endpoint, p256dh, authKey]
+  );
+  res.status(201).json({ ok: true });
+}));
+
+app.delete('/api/push/subscribe', auth, asyncRoute(async (req, res) => {
+  const endpoint = clean(req.body.endpoint);
+  if (!endpoint) return res.status(400).json({ error: 'Endpoint required.' });
+  await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1 AND user_id=$2', [endpoint, req.user.id]);
+  res.json({ ok: true });
+}));
 
 app.get('/api/turn/credentials', auth, asyncRoute(async (req, res) => {
   res.json(await fetchMeteredTurnCredentials());
@@ -2123,6 +2189,12 @@ io.on('connection', async socket => {
 
   if (wasOffline) socket.broadcast.emit('user:online', { userId });
 
+  const pendingCall = pendingCalls.get(userId);
+  if (pendingCall) {
+    const { timer, callHistoryId, ...incomingPayload } = pendingCall;
+    socket.emit('call:incoming', incomingPayload);
+  }
+
   const delivered = await pool.query(
     'UPDATE messages SET delivered_at=NOW() WHERE recipient_id=$1 AND delivered_at IS NULL RETURNING sender_id,conversation_id',
     [userId]
@@ -2185,30 +2257,71 @@ io.on('connection', async socket => {
       recipientOnline: available,
       network: callNetworkSummary(network)
     });
-    await pool.query(
-      `INSERT INTO call_history(caller_id,recipient_id,call_type,status,ended_at)
-       VALUES($1,$2,$3,$4,$5)`,
-      [userId, recipientId, videoIntent ? 'video' : callType, available ? 'ringing' : 'missed', available ? null : new Date()]
-    ).catch(() => {});
-    if (!available) {
+
+    const canWakeViaPush = PUSH_CONFIGURED && !available;
+    if (!available && !canWakeViaPush) {
+      await pool.query(
+        `INSERT INTO call_history(caller_id,recipient_id,call_type,status,ended_at)
+         VALUES($1,$2,$3,'missed',NOW())`,
+        [userId, recipientId, videoIntent ? 'video' : callType]
+      ).catch(() => {});
       socket.emit('call:unavailable');
       return reply({ ok: false, message: 'User is not online.' });
     }
 
-    io.to(userRoom(recipientId)).emit('call:incoming', {
+    const historyResult = await pool.query(
+      `INSERT INTO call_history(caller_id,recipient_id,call_type,status)
+       VALUES($1,$2,$3,'ringing') RETURNING id`,
+      [userId, recipientId, videoIntent ? 'video' : callType]
+    ).catch(() => ({ rows: [] }));
+    const callHistoryId = historyResult.rows[0]?.id || null;
+
+    const incomingPayload = {
       callerId: userId,
       callerName: socket.user.username,
       offer,
       callType,
       videoIntent: Boolean(videoIntent),
       callRoomId: cleanCallRoomId || null
-    });
-    return reply({ ok: true });
+    };
+
+    if (available) {
+      io.to(userRoom(recipientId)).emit('call:incoming', incomingPayload);
+      return reply({ ok: true });
+    }
+
+    const existingPending = pendingCalls.get(recipientId);
+    if (existingPending) clearTimeout(existingPending.timer);
+    const timer = setTimeout(async () => {
+      pendingCalls.delete(recipientId);
+      if (callHistoryId) {
+        await pool.query(
+          `UPDATE call_history SET status='missed',ended_at=NOW() WHERE id=$1 AND status='ringing'`,
+          [callHistoryId]
+        ).catch(() => {});
+      }
+      io.to(userRoom(userId)).emit('call:unavailable');
+    }, PENDING_CALL_WINDOW_MS);
+    pendingCalls.set(recipientId, { ...incomingPayload, callHistoryId, timer });
+
+    sendPushToUser(recipientId, {
+      type: 'incoming-call',
+      callerId: userId,
+      callerName: socket.user.username,
+      callType
+    }).catch(error => console.error('push call notify', error.message));
+
+    return reply({ ok: true, ringing: true });
   });
 
   socket.on('call:answer', async ({ callerId, answer, network } = {}, callback) => {
     const reply = typeof callback === 'function' ? callback : () => {};
     if (!validUuid(callerId) || !answer) return reply({ ok: false, message: 'Invalid call answer.' });
+    const pending = pendingCalls.get(userId);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingCalls.delete(userId);
+    }
     await pool.query(
       `UPDATE call_history SET status='answered',answered_at=NOW()
        WHERE id=(SELECT id FROM call_history WHERE caller_id=$1 AND recipient_id=$2 AND status='ringing' ORDER BY started_at DESC LIMIT 1)`,
@@ -2251,6 +2364,11 @@ io.on('connection', async socket => {
 
   socket.on('call:end', async ({ recipientId } = {}) => {
     if (!validUuid(recipientId)) return;
+    const pendingForRecipient = pendingCalls.get(recipientId);
+    if (pendingForRecipient) {
+      clearTimeout(pendingForRecipient.timer);
+      pendingCalls.delete(recipientId);
+    }
     await pool.query(
       `UPDATE call_history SET status=CASE WHEN status='ringing' THEN 'missed' ELSE 'completed' END,ended_at=NOW()
        WHERE id=(SELECT id FROM call_history
@@ -2263,6 +2381,11 @@ io.on('connection', async socket => {
 
   socket.on('call:decline', async ({ callerId } = {}) => {
     if (!validUuid(callerId)) return;
+    const pending = pendingCalls.get(userId);
+    if (pending) {
+      clearTimeout(pending.timer);
+      pendingCalls.delete(userId);
+    }
     await pool.query(
       `UPDATE call_history SET status='declined',ended_at=NOW()
        WHERE id=(SELECT id FROM call_history WHERE caller_id=$1 AND recipient_id=$2 AND status='ringing' ORDER BY started_at DESC LIMIT 1)`,

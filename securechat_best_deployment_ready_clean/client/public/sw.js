@@ -13,6 +13,36 @@ self.addEventListener('activate', event => {
   );
 });
 
+self.addEventListener('push', event => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    data = { title: 'SecureChat', body: event.data ? event.data.text() : '' };
+  }
+
+  if (data.type === 'incoming-call') {
+    const title = `Incoming ${data.callType === 'video' ? 'video' : 'voice'} call`;
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        body: `${data.callerName || 'Someone'} is calling you`,
+        tag: 'incoming-call-' + (data.callerId || ''),
+        requireInteraction: true,
+        data
+      })
+    );
+    return;
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'SecureChat', {
+      body: data.body || '',
+      tag: data.tag || undefined,
+      data
+    })
+  );
+});
+
 self.addEventListener('notificationclick', event => {
   event.notification.close();
   event.waitUntil(
