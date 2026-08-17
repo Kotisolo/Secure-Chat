@@ -106,7 +106,46 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: false }));
 
-app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+
+app.get('/uploads/:filename', asyncRoute(async (req, res) => {
+  const filename = req.params.filename;
+  if (!/^[a-zA-Z0-9_-]+\.[a-z0-9]+$/.test(filename)) return res.status(400).end();
+
+  let requester;
+  try {
+    requester = await verifyAuthToken(String(req.query.token || ''));
+  } catch {
+    return res.status(401).end();
+  }
+
+  const owner = await pool.query('SELECT uploader_id FROM uploaded_files WHERE filename=$1', [filename]);
+  if (!owner.rows.length) return res.status(404).end();
+  const uploaderId = String(owner.rows[0].uploader_id);
+
+  if (uploaderId !== requester.id) {
+    const authorized = await pool.query(
+      `SELECT 1 WHERE EXISTS(
+         SELECT 1 FROM messages
+         WHERE file_url=$2 AND (sender_id=$1 OR recipient_id=$1) AND (sender_id=$3 OR recipient_id=$3)
+       ) OR EXISTS(
+         SELECT 1 FROM channel_posts cp
+         JOIN channel_followers cf ON cf.channel_id=cp.channel_id AND cf.user_id=$1
+         WHERE cp.file_url=$2 AND cp.author_id=$3
+       ) OR EXISTS(
+         SELECT 1 FROM group_members gm1
+         JOIN group_members gm2 ON gm2.group_id=gm1.group_id AND gm2.user_id=$3
+         WHERE gm1.user_id=$1
+       )`,
+      [requester.id, '/uploads/' + filename, uploaderId]
+    );
+    if (!authorized.rows.length) return res.status(403).end();
+  }
+
+  res.sendFile(path.join(UPLOADS_DIR, filename), error => {
+    if (error && !res.headersSent) res.status(404).end();
+  });
+}));
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -534,6 +573,40 @@ async function usersBlocked(a, b) {
   return Boolean(result.rows.length);
 }
 
+async function getContactIds(userId) {
+  const result = await pool.query(
+    `SELECT DISTINCT CASE WHEN sender_id=$1 THEN recipient_id ELSE sender_id END contact_id
+     FROM messages WHERE sender_id=$1 OR recipient_id=$1
+     UNION
+     SELECT DISTINCT gm2.user_id FROM group_members gm1
+     JOIN group_members gm2 ON gm2.group_id=gm1.group_id AND gm2.user_id<>gm1.user_id
+     WHERE gm1.user_id=$1`,
+    [userId]
+  );
+  return result.rows.map(row => String(row.contact_id));
+}
+
+async function broadcastPresence(userId, event) {
+  const privacy = await pool.query(
+    'SELECT last_seen_visibility FROM user_privacy WHERE user_id=$1',
+    [userId]
+  ).catch(() => ({ rows: [] }));
+  if (privacy.rows[0]?.last_seen_visibility === 'nobody') return;
+
+  const contactIds = await getContactIds(userId);
+  if (!contactIds.length) return;
+  const blocked = await pool.query(
+    `SELECT blocker_id, blocked_id FROM user_blocks
+     WHERE (blocker_id=$1 AND blocked_id=ANY($2)) OR (blocked_id=$1 AND blocker_id=ANY($2))`,
+    [userId, contactIds]
+  ).catch(() => ({ rows: [] }));
+  const blockedSet = new Set(blocked.rows.map(row => String(row.blocker_id) === String(userId) ? row.blocked_id : row.blocker_id));
+
+  contactIds
+    .filter(id => !blockedSet.has(id))
+    .forEach(id => io.to(userRoom(id)).emit(event, { userId }));
+}
+
 function sign(u) {
   return jwt.sign(
     {
@@ -609,6 +682,23 @@ async function completeOAuthLogin(req, res, provider, profile) {
   }));
 }
 
+async function verifyAuthToken(token) {
+  const decoded = jwt.verify(token, JWT_SECRET);
+  const result = await pool.query('SELECT session_version FROM users WHERE id=$1', [decoded.id]);
+  if (!result.rows.length || Number(decoded.sv || 0) !== Number(result.rows[0].session_version || 0)) {
+    throw new Error('Session expired.');
+  }
+  decoded.id = String(decoded.id);
+  if (decoded.sid) {
+    const session = await pool.query(
+      'UPDATE user_sessions SET last_seen=NOW() WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL RETURNING id',
+      [decoded.sid, decoded.id]
+    );
+    if (!session.rows.length) throw new Error('Device session expired.');
+  }
+  return decoded;
+}
+
 async function auth(req, res, next) {
   const h = req.headers.authorization || '';
 
@@ -617,20 +707,7 @@ async function auth(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(h.slice(7), JWT_SECRET);
-    const result = await pool.query('SELECT session_version FROM users WHERE id=$1', [decoded.id]);
-    if (!result.rows.length || Number(decoded.sv || 0) !== Number(result.rows[0].session_version || 0)) {
-      return res.status(401).json({ error: 'Session expired. Please log in again.' });
-    }
-    req.user = decoded;
-    req.user.id = String(decoded.id);
-    if (decoded.sid) {
-      const session = await pool.query(
-        'UPDATE user_sessions SET last_seen=NOW() WHERE id=$1 AND user_id=$2 AND revoked_at IS NULL RETURNING id',
-        [decoded.sid, decoded.id]
-      );
-      if (!session.rows.length) return res.status(401).json({ error: 'This device session was logged out.' });
-    }
+    req.user = await verifyAuthToken(h.slice(7));
     next();
   } catch {
     return res.status(401).json({ error: 'Invalid session.' });
@@ -1036,6 +1113,9 @@ app.get('/api/users', auth, asyncRoute(async (req, res) => {
       p.last_seen_visibility,p.profile_visibility,p.about_visibility
      FROM users u LEFT JOIN user_privacy p ON p.user_id=u.id
      WHERE u.id<>$1 AND (LOWER(u.username) LIKE LOWER($2) OR u.phone LIKE $2)
+       AND NOT EXISTS (
+         SELECT 1 FROM user_blocks b
+         WHERE (b.blocker_id=$1 AND b.blocked_id=u.id) OR (b.blocker_id=u.id AND b.blocked_id=$1))
      ORDER BY u.username LIMIT 30`,
     [req.user.id, '%' + q + '%']
   );
@@ -1588,6 +1668,9 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
       CASE WHEN m.sender_id=$1 THEN ru.about ELSE su.about END contact_about,
       CASE WHEN m.sender_id=$1 THEN ru.avatar_url ELSE su.avatar_url END contact_avatar_url,
       CASE WHEN m.sender_id=$1 THEN ru.last_seen ELSE su.last_seen END contact_last_seen,
+      CASE WHEN m.sender_id=$1 THEN rp.profile_visibility ELSE sp.profile_visibility END contact_profile_visibility,
+      CASE WHEN m.sender_id=$1 THEN rp.about_visibility ELSE sp.about_visibility END contact_about_visibility,
+      CASE WHEN m.sender_id=$1 THEN rp.last_seen_visibility ELSE sp.last_seen_visibility END contact_last_seen_visibility,
       COALESCE(cp.pinned,FALSE) pinned,
       COALESCE(cp.archived,FALSE) archived,
       cp.muted_until,
@@ -1599,6 +1682,8 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
     FROM messages m
     JOIN users su ON su.id=m.sender_id
     JOIN users ru ON ru.id=m.recipient_id
+    LEFT JOIN user_privacy sp ON sp.user_id=su.id
+    LEFT JOIN user_privacy rp ON rp.user_id=ru.id
     LEFT JOIN chat_preferences cp ON cp.user_id=$1 AND cp.conversation_id=m.conversation_id
     WHERE (m.sender_id=$1 OR m.recipient_id=$1) AND m.deleted_at IS NULL
       AND m.sent_at IS NOT NULL AND (m.expires_at IS NULL OR m.expires_at>NOW())
@@ -1619,7 +1704,10 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
           phone: x.contact_phone,
           about: x.contact_about,
           avatar_url: x.contact_avatar_url,
-          last_seen: x.contact_last_seen
+          last_seen: x.contact_last_seen,
+          profile_visibility: x.contact_profile_visibility,
+          about_visibility: x.contact_about_visibility,
+          last_seen_visibility: x.contact_last_seen_visibility
         }),
         lastMessage: msg(x),
         pinned: x.pinned,
@@ -1657,10 +1745,13 @@ app.get('/api/calls', auth, asyncRoute(async (req, res) => {
     `SELECT c.*,
       CASE WHEN c.caller_id=$1 THEN recipient.id ELSE caller.id END contact_id,
       CASE WHEN c.caller_id=$1 THEN recipient.username ELSE caller.username END contact_name,
-      CASE WHEN c.caller_id=$1 THEN recipient.avatar_url ELSE caller.avatar_url END contact_avatar
+      CASE WHEN c.caller_id=$1 THEN recipient.avatar_url ELSE caller.avatar_url END contact_avatar,
+      CASE WHEN c.caller_id=$1 THEN recipientp.profile_visibility ELSE callerp.profile_visibility END contact_profile_visibility
      FROM call_history c
      JOIN users caller ON caller.id=c.caller_id
      JOIN users recipient ON recipient.id=c.recipient_id
+     LEFT JOIN user_privacy callerp ON callerp.user_id=caller.id
+     LEFT JOIN user_privacy recipientp ON recipientp.user_id=recipient.id
      WHERE c.caller_id=$1 OR c.recipient_id=$1
      ORDER BY c.started_at DESC LIMIT 100`,
     [req.user.id]
@@ -1670,7 +1761,7 @@ app.get('/api/calls', auth, asyncRoute(async (req, res) => {
     direction: String(row.caller_id) === String(req.user.id) ? 'outgoing' : 'incoming',
     contactId: String(row.contact_id),
     contactName: row.contact_name,
-    contactAvatar: row.contact_avatar,
+    contactAvatar: row.contact_profile_visibility === 'nobody' ? null : row.contact_avatar,
     type: row.call_type,
     status: row.status,
     startedAt: row.started_at,
@@ -1973,7 +2064,7 @@ app.delete('/api/messages/:messageId', auth, asyncRoute(async (req, res) => {
   const messageId = req.params.messageId;
   if (!validUuid(messageId)) return res.status(400).json({ error: 'Invalid message.' });
   const result = await pool.query(
-    'SELECT id,sender_id,recipient_id,conversation_id FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
+    'SELECT id,sender_id,recipient_id,conversation_id,file_url FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
     [messageId, req.user.id]
   );
   if (!result.rows.length) return res.status(404).json({ error: 'Message not found.' });
@@ -1983,6 +2074,11 @@ app.delete('/api/messages/:messageId', auth, asyncRoute(async (req, res) => {
       return res.status(403).json({ error: 'Only the sender can delete for everyone.' });
     }
     await pool.query('UPDATE messages SET deleted_at=NOW() WHERE id=$1', [messageId]);
+    if (message.file_url) {
+      const filename = path.basename(message.file_url);
+      fs.unlink(path.join(UPLOADS_DIR, filename), () => {});
+      pool.query('DELETE FROM uploaded_files WHERE filename=$1', [filename]).catch(() => {});
+    }
     io.to(userRoom(message.recipient_id)).emit('message:deleted', {
       messageId,
       conversationId: message.conversation_id
@@ -2115,17 +2211,38 @@ app.post('/api/profile/avatar', auth, uploadRateLimit, upload.single('file'), as
   fs.unlink(req.file.path, () => {});
   const avatarUrl = `data:${req.file.mimetype};base64,${avatarBuffer.toString('base64')}`;
   const result = await pool.query(
-    `UPDATE users SET avatar_url=$1 WHERE id=$2
-     RETURNING id,username,phone,about,avatar_url,last_seen`,
+    `WITH updated AS (
+       UPDATE users SET avatar_url=$1 WHERE id=$2
+       RETURNING id,username,phone,about,avatar_url,last_seen
+     )
+     SELECT updated.*, p.profile_visibility, p.about_visibility, p.last_seen_visibility
+     FROM updated LEFT JOIN user_privacy p ON p.user_id=updated.id`,
     [avatarUrl, req.user.id]
   );
   const updatedUser = user(result.rows[0]);
-  io.emit('user:profile-updated', updatedUser);
+  const contactIds = await pool.query(
+    `SELECT DISTINCT CASE WHEN sender_id=$1 THEN recipient_id ELSE sender_id END contact_id
+     FROM messages WHERE sender_id=$1 OR recipient_id=$1
+     UNION
+     SELECT DISTINCT gm2.user_id FROM group_members gm1
+     JOIN group_members gm2 ON gm2.group_id=gm1.group_id AND gm2.user_id<>gm1.user_id
+     WHERE gm1.user_id=$1`,
+    [req.user.id]
+  );
+  const { phone, ...broadcastUser } = updatedUser;
+  contactIds.rows.forEach(row => {
+    io.to(userRoom(row.contact_id)).emit('user:profile-updated', broadcastUser);
+  });
   res.json(updatedUser);
 }));
 
-app.post('/api/upload', auth, uploadRateLimit, upload.single('file'), (req, res) => {
+app.post('/api/upload', auth, uploadRateLimit, upload.single('file'), asyncRoute(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'File required.' });
+
+  await pool.query(
+    'INSERT INTO uploaded_files(filename,uploader_id) VALUES($1,$2) ON CONFLICT DO NOTHING',
+    [req.file.filename, req.user.id]
+  );
 
   res.json({
     url: '/uploads/' + req.file.filename,
@@ -2133,7 +2250,7 @@ app.post('/api/upload', auth, uploadRateLimit, upload.single('file'), (req, res)
     mime: req.file.mimetype,
     size: req.file.size
   });
-});
+}));
 
 app.use((err, req, res, next) => {
   console.error('request error', err.message);
@@ -2187,7 +2304,7 @@ io.on('connection', async socket => {
 
   await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [userId]).catch(() => {});
 
-  if (wasOffline) socket.broadcast.emit('user:online', { userId });
+  if (wasOffline) broadcastPresence(userId, 'user:online').catch(error => console.error('presence broadcast', error.message));
 
   const pendingCall = pendingCalls.get(userId);
   if (pendingCall) {
@@ -2208,13 +2325,15 @@ io.on('connection', async socket => {
     });
   });
 
-  socket.on('typing:start', ({ recipientId, conversationId } = {}) => {
+  socket.on('typing:start', async ({ recipientId, conversationId } = {}) => {
     if (!validUuid(recipientId)) return;
+    if (await usersBlocked(userId, recipientId)) return;
     io.to(userRoom(recipientId)).emit('typing:start', { userId, conversationId: clean(conversationId) });
   });
 
-  socket.on('typing:stop', ({ recipientId } = {}) => {
+  socket.on('typing:stop', async ({ recipientId } = {}) => {
     if (!validUuid(recipientId)) return;
+    if (await usersBlocked(userId, recipientId)) return;
     io.to(userRoom(recipientId)).emit('typing:stop', { userId });
   });
 
@@ -2451,7 +2570,7 @@ io.on('connection', async socket => {
 
       await pool.query('UPDATE users SET last_seen=NOW() WHERE id=$1', [userId]).catch(() => {});
 
-      socket.broadcast.emit('user:offline', { userId });
+      broadcastPresence(userId, 'user:offline').catch(error => console.error('presence broadcast', error.message));
     }
   });
 });
