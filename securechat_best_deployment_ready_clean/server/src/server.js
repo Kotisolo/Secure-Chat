@@ -2384,19 +2384,21 @@ app.post('/api/flicks', auth, flickUpload.single('video'), asyncRoute(async (req
   if (!req.file) return res.status(400).json({ error: 'Video file required.' });
 
   const caption = clean(req.body.caption || '').slice(0, 500);
+  const audience = req.body.audience === 'everyone' ? 'everyone' : 'contacts';
   const extension = req.file.mimetype === 'video/webm' ? 'webm' : req.file.mimetype === 'video/quicktime' ? 'mov' : 'mp4';
   const key = `flicks/${crypto.randomUUID()}.${extension}`;
   const videoUrl = await uploadToR2(req.file.buffer, key, req.file.mimetype);
 
   const result = await pool.query(
-    `INSERT INTO flicks(author_id,video_url,caption) VALUES($1,$2,$3) RETURNING *`,
-    [req.user.id, videoUrl, caption]
+    `INSERT INTO flicks(author_id,video_url,caption,audience) VALUES($1,$2,$3,$4) RETURNING *`,
+    [req.user.id, videoUrl, caption, audience]
   );
   const flick = result.rows[0];
   res.status(201).json({
     id: flick.id,
     videoUrl: flick.video_url,
     caption: flick.caption,
+    audience: flick.audience,
     createdAt: flick.created_at,
     viewCount: flick.view_count,
     likeCount: 0,
@@ -2418,6 +2420,12 @@ app.get('/api/flicks', auth, asyncRoute(async (req, res) => {
      WHERE f.deleted_at IS NULL
        AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=f.author_id) OR (b.blocker_id=f.author_id AND b.blocked_id=$1))
        AND ($2::timestamptz IS NULL OR f.created_at<$2)
+       AND (
+         f.author_id=$1
+         OR f.audience='everyone'
+         OR EXISTS(SELECT 1 FROM messages m WHERE (m.sender_id=$1 AND m.recipient_id=f.author_id) OR (m.sender_id=f.author_id AND m.recipient_id=$1))
+         OR EXISTS(SELECT 1 FROM group_members gm1 JOIN group_members gm2 ON gm2.group_id=gm1.group_id WHERE gm1.user_id=$1 AND gm2.user_id=f.author_id)
+       )
      ORDER BY f.created_at DESC
      LIMIT $3`,
     [req.user.id, cursor, limit]
@@ -2427,6 +2435,7 @@ app.get('/api/flicks', auth, asyncRoute(async (req, res) => {
     id: row.id,
     videoUrl: row.video_url,
     caption: row.caption,
+    audience: row.audience,
     createdAt: row.created_at,
     viewCount: row.view_count,
     likeCount: row.like_count,

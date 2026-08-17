@@ -428,6 +428,7 @@ export default function App() {
   const [flicksHasMore, setFlicksHasMore] = useState(true);
   const [flicksConfigured, setFlicksConfigured] = useState(true);
   const [flickUploading, setFlickUploading] = useState(false);
+  const [flickAudience, setFlickAudience] = useState('contacts');
   const [activeFlickId, setActiveFlickId] = useState(null);
   const flickVideoRefs = useRef({});
   const [groupInvite, setGroupInvite] = useState(null);
@@ -1050,9 +1051,9 @@ export default function App() {
   }
 
   async function createChannel() {
-    const name = prompt('Channel name:');
+    const name = prompt('Circle name:');
     if (!name) return;
-    const description = prompt('Channel description (optional):') || '';
+    const description = prompt('Circle description (optional):') || '';
     await api('/api/channels', {
       method: 'POST', body: JSON.stringify({ name, description })
     });
@@ -1086,7 +1087,7 @@ export default function App() {
   }
 
   async function publishChannelPost() {
-    const body = prompt('Write a channel update:');
+    const body = prompt('Share with your Circle:');
     if (!body || !selectedChannel) return;
     await api(`/api/channels/${selectedChannel.id}/posts`, {
       method: 'POST', body: JSON.stringify({ body, kind: 'text' })
@@ -1109,7 +1110,7 @@ export default function App() {
       });
       setChannelPosts(await api(`/api/channels/${selectedChannel.id}/posts`));
     } catch (error) {
-      alert('Channel media failed: ' + error.message);
+      alert('Circle media failed: ' + error.message);
     }
   }
 
@@ -1366,6 +1367,7 @@ export default function App() {
       const form = new FormData();
       form.append('video', file);
       form.append('caption', '');
+      form.append('audience', flickAudience);
       const flick = await api('/api/flicks', { method: 'POST', body: form, headers: {} });
       setFlicks(current => [flick, ...current]);
     } catch (error) {
@@ -3801,7 +3803,7 @@ export default function App() {
           }}><Plus /> New Chat</button>
           <div className="railMenu">
             <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('all'); }}><MessageCircle /> Chats <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0) || ''}</span></button>
-            <button onClick={loadStatuses}><History /> Status</button>
+            <button onClick={loadStatuses}><History /> Echoes</button>
             <button onClick={loadCallHistory}><Phone /> Calls</button>
             <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /> Flicks</button>
           </div>
@@ -3913,7 +3915,7 @@ export default function App() {
           <button className={chatListFilter === 'channels' ? 'active' : ''} onClick={() => {
             setChatListFilter('channels');
             loadChannels('', false);
-          }}>Channels</button>
+          }}>Circles</button>
         </div>
         {['all', 'unread'].includes(chatListFilter) && <>
           <div className="storiesHeader">
@@ -3944,6 +3946,10 @@ export default function App() {
             <>
               <div className="flicksHeader">
                 <h2>Flicks</h2>
+                <div className="flicksAudienceToggle">
+                  <button type="button" className={flickAudience === 'contacts' ? 'active' : ''} onClick={() => setFlickAudience('contacts')} title="Only your contacts will see new Flicks you share">Contacts</button>
+                  <button type="button" className={flickAudience === 'everyone' ? 'active' : ''} onClick={() => setFlickAudience('everyone')} title="Anyone using the app will see new Flicks you share">Everyone</button>
+                </div>
                 <label className="flicksUpload">
                   {flickUploading ? 'Uploading...' : <><Plus /> New</>}
                   <input hidden type="file" accept="video/mp4,video/webm,video/quicktime" capture="environment" disabled={flickUploading} onChange={uploadFlick} />
@@ -4008,11 +4014,11 @@ export default function App() {
           <Archive /> <span>{showArchived ? 'Back to chats' : 'Archived chats'}</span> {!showArchived && <b>{contacts.filter(user => user.chat?.archived).length} chats</b>}
         </button>}
         {['all', 'unread'].includes(chatListFilter) && <div className="statusHeader">
-          <button onClick={loadStatuses}><div className="statusRing"><Avatar user={me} /></div> Status</button>
-          <button onClick={createTextStatus} title="Create Status"><Plus /></button>
+          <button onClick={loadStatuses}><div className="statusRing"><Avatar user={me} /></div> Echoes</button>
+          <button onClick={createTextStatus} title="Share an Echo"><Plus /></button>
         </div>}
         {chatListFilter === 'channels' && <div className="channelHeader">
-          <button onClick={() => loadChannels()}><MessageCircle /> Channels</button>
+          <button onClick={() => loadChannels()}><MessageCircle /> Circles</button>
           <button onClick={createChannel}><Plus /></button>
         </div>}
         {chatListFilter === 'groups' && <div className="groupHeader">
@@ -4105,7 +4111,7 @@ export default function App() {
         </div>}
         <nav className="bottomNav" aria-label="Primary navigation">
           <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Chats</span></button>
-          <button onClick={loadStatuses}><History /><span>Status</span></button>
+          <button onClick={loadStatuses}><History /><span>Echoes</span></button>
           <button onClick={loadCallHistory}><Phone /><span>Calls</span></button>
           <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /><span>Flicks</span></button>
           <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setShowOpalMenu(false); setMobileTab('settings'); setActive(null); }}><Settings /><span>Settings</span></button>
@@ -5275,18 +5281,18 @@ export default function App() {
             <div className="statusHero">
               <div className="statusHeroIcon"><History /></div>
               <div>
-                <h2>Status</h2>
-                <p>Share moments that disappear after 24 hours.</p>
+                <h2>Echoes</h2>
+                <p>Pass along a passing thought. It fades in 24 hours.</p>
               </div>
             </div>
-            <button className="createStatus" onClick={createTextStatus}><Plus /> Add text Status</button>
+            <button className="createStatus" onClick={createTextStatus}><Plus /> Share an Echo</button>
             <div className="statusMediaButtons">
               <label><Image /> Photo<input hidden type="file" accept="image/*" capture="environment" onChange={e => createMediaStatus(e, 'image')} /></label>
               <label><Video /> Video<input hidden type="file" accept="video/*" capture="environment" onChange={e => createMediaStatus(e, 'video')} /></label>
               <label><Mic /> Voice<input hidden type="file" accept="audio/*" capture onChange={e => createMediaStatus(e, 'audio')} /></label>
             </div>
             <details className="statusPrivacy">
-              <summary>Status audience · {contacts.length - statusExcluded.length} contacts</summary>
+              <summary>Who hears this Echo · {contacts.length - statusExcluded.length} contacts</summary>
               {contacts.map(contact => (
                 <label key={contact.id}>
                   <input
@@ -5301,14 +5307,14 @@ export default function App() {
               ))}
             </details>
             <div className="statusList">
-              {statuses.length === 0 && <p className="empty">No active Status updates.</p>}
+              {statuses.length === 0 && <p className="empty">No Echoes right now.</p>}
               {statuses.map(status => (
                 <div className={(status.viewed ? 'statusItem viewed' : 'statusItem') + (status.muted ? ' muted' : '')} key={status.id} onClick={() => viewStatus(status)}>
                   <Avatar user={{ username: status.username, avatarUrl: status.avatarUrl }} />
                   <div>
-                    <b>{status.userId === me.id ? 'My Status' : status.username}</b>
+                    <b>{status.userId === me.id ? 'My Echoes' : status.username}</b>
                     {status.kind === 'image' && status.mediaUrl ? (
-                      <img className="statusMedia" src={status.mediaUrl} alt="Status" />
+                      <img className="statusMedia" src={status.mediaUrl} alt="Echo" />
                     ) : status.kind === 'video' && status.mediaUrl ? (
                       <video className="statusMedia" src={status.mediaUrl} controls onClick={e => e.stopPropagation()} />
                     ) : status.kind === 'audio' && status.mediaUrl ? (
@@ -5335,7 +5341,7 @@ export default function App() {
                           e.stopPropagation();
                           replyToStatus(status);
                         }}><Reply /></button>
-                        <button title={status.muted ? 'Unmute Status' : 'Mute Status'} onClick={e => {
+                        <button title={status.muted ? 'Unmute Echoes' : 'Mute Echoes'} onClick={e => {
                           e.stopPropagation();
                           toggleStatusMute(status);
                         }}><BellOff /></button>
@@ -5364,13 +5370,13 @@ export default function App() {
                 <div className="channelHero">
                   <div className="channelHeroIcon"><MessageCircle /></div>
                   <div>
-                    <h2>Channels</h2>
-                    <p>Discover updates from people and communities.</p>
+                    <h2>Circles</h2>
+                    <p>Join topic-based communities and see what they're sharing.</p>
                   </div>
                 </div>
                 <div className="channelSearch">
                   <Search />
-                  <input placeholder="Discover channels" onChange={e => loadChannels(e.target.value)} />
+                  <input placeholder="Discover Circles" onChange={e => loadChannels(e.target.value)} />
                   <button onClick={createChannel}><Plus /> Create</button>
                 </div>
                 <div className="channelList">
@@ -5379,10 +5385,10 @@ export default function App() {
                       <div className="avatar"><MessageCircle /></div>
                       <button className="channelName" onClick={() => openChannel(channel)}>
                         <b>{channel.name}</b>
-                        <small>{channel.followerCount} followers · {channel.description}</small>
+                        <small>{channel.followerCount} members · {channel.description}</small>
                       </button>
                       <button onClick={() => toggleChannelFollow(channel)}>
-                        {channel.following ? 'Following' : 'Follow'}
+                        {channel.following ? 'Joined' : 'Join'}
                       </button>
                     </div>
                   ))}
@@ -5390,7 +5396,7 @@ export default function App() {
               </>
             ) : (
               <>
-                <button className="channelBack" onClick={() => setSelectedChannel(null)}><ArrowLeft /> Channels</button>
+                <button className="channelBack" onClick={() => setSelectedChannel(null)}><ArrowLeft /> Circles</button>
                 <div className="selectedChannelHero">
                   <div className="avatar"><MessageCircle /></div>
                   <div>
@@ -5398,7 +5404,7 @@ export default function App() {
                     <p>{selectedChannel.description}</p>
                   </div>
                   <button onClick={() => toggleChannelFollow(selectedChannel)}>
-                    {selectedChannel.following ? 'Unfollow' : 'Follow'}
+                    {selectedChannel.following ? 'Leave' : 'Join'}
                   </button>
                 </div>
                 {selectedChannel.ownerId === me.id && (
@@ -5414,7 +5420,7 @@ export default function App() {
                   {channelPosts.map(post => (
                     <article key={post.id}>
                       {post.kind === 'image' && post.fileUrl && (
-                        <img src={resolveFileUrl(post.fileUrl)} alt={post.fileName || 'Channel photo'} />
+                        <img src={resolveFileUrl(post.fileUrl)} alt={post.fileName || 'Circle photo'} />
                       )}
                       {post.kind === 'video' && post.fileUrl && (
                         <video src={resolveFileUrl(post.fileUrl)} controls />

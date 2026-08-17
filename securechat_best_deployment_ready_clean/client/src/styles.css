@@ -7082,6 +7082,21 @@ body{background:var(--bg);color:var(--text)}
   --shadow-sm:0 1px 2px rgba(16,17,26,.04),0 1px 3px rgba(16,17,26,.06);
   --shadow-md:0 4px 16px rgba(16,17,26,.07),0 2px 4px rgba(16,17,26,.04);
   --shadow-lg:0 20px 48px rgba(16,17,26,.12),0 6px 16px rgba(16,17,26,.06);
+  --opal-gradient:linear-gradient(120deg,#7c3aed 0%,#2dd4bf 22%,#fb7185 46%,#fbbf24 70%,#7c3aed 100%);
+  --opal-shadow:0 8px 26px rgba(124,58,237,.28),0 2px 10px rgba(45,212,191,.18);
+}
+.opal-shimmer{
+  background:var(--opal-gradient);
+  background-size:260% 260%;
+  animation:opalShift 9s ease-in-out infinite;
+}
+@keyframes opalShift{
+  0%{background-position:0% 50%}
+  50%{background-position:100% 50%}
+  100%{background-position:0% 50%}
+}
+@media (prefers-reduced-motion: reduce){
+  .opal-shimmer{animation:none;background-position:30% 50%}
 }
 
 /* ---------- base & primitives ---------- */
@@ -7121,9 +7136,10 @@ body{color:var(--text);font-family:'Inter',system-ui,-apple-system,'Segoe UI',Ar
 }
 .opalLogo.badge{
   width:76px;height:76px;margin:0 auto 20px;border-radius:22px;
-  background:linear-gradient(135deg,var(--primary),var(--secondary));
-  display:grid;place-items:center;color:#fff;box-shadow:var(--shadow-md);
+  background:var(--opal-gradient);background-size:260% 260%;animation:opalShift 9s ease-in-out infinite;
+  display:grid;place-items:center;color:#fff;box-shadow:var(--opal-shadow);
 }
+@media (prefers-reduced-motion: reduce){.opalLogo.badge{animation:none;background-position:30% 50%}}
 .opalLogo.badge svg{width:32px;height:32px}
 .opalCard h1{margin:0 0 6px;font-size:32px;font-weight:800;letter-spacing:-.02em;color:var(--text)}
 .opalCard h1 em{font-style:normal;background:linear-gradient(135deg,var(--primary),var(--secondary));-webkit-background-clip:text;background-clip:text;color:transparent}
@@ -7133,7 +7149,8 @@ body{color:var(--text);font-family:'Inter',system-ui,-apple-system,'Segoe UI',Ar
 .authFeatures span{display:flex;align-items:center;gap:12px;min-height:48px;padding:10px 14px;border:1px solid var(--line);border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600;font-size:13px}
 .authFeatures span svg{color:var(--primary);flex-shrink:0}
 .authFeatures span small{display:block;color:var(--muted);font-weight:400;margin-top:1px}
-button.primary.opalPrimary{width:100%;height:50px;font-size:15px}
+button.primary.opalPrimary{width:100%;height:50px;font-size:15px;background:var(--opal-gradient);background-size:260% 260%;animation:opalShift 9s ease-in-out infinite;box-shadow:var(--opal-shadow)}
+@media (prefers-reduced-motion: reduce){button.primary.opalPrimary{animation:none;background-position:30% 50%}}
 button.ghostLogin.opalGhost{width:100%;height:50px;margin-top:10px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600}
 button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .authBack{position:absolute;top:20px;left:20px;width:38px;height:38px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
@@ -7169,7 +7186,8 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .appTitle b{font-size:18px;letter-spacing:-.01em}
 .appTitle b em{font-style:normal;color:var(--primary)}
 .appTitle small{color:var(--muted);font-size:11px}
-.brandMark{width:42px;height:42px;border-radius:12px;color:#fff;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--secondary));box-shadow:var(--shadow-sm);flex-shrink:0}
+.brandMark{width:42px;height:42px;border-radius:12px;color:#fff;display:grid;place-items:center;background:var(--opal-gradient);background-size:260% 260%;animation:opalShift 9s ease-in-out infinite;box-shadow:var(--opal-shadow);flex-shrink:0}
+@media (prefers-reduced-motion: reduce){.brandMark{animation:none;background-position:30% 50%}}
 .mobileTitleActions{margin-left:auto}
 .mobileTitleActions button{width:36px;height:36px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
 .newChatButton{margin:14px 16px;height:44px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-weight:600;font-size:14px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:var(--shadow-sm)}
@@ -7392,7 +7410,10 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 }
 .flicksPanel{display:none;flex:1;min-height:0;flex-direction:column;background:#000}
 .tab-ai .flicksPanel{display:flex}
-.flicksHeader{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+.flicksHeader{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:14px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+.flicksAudienceToggle{display:flex;gap:2px;padding:2px;border-radius:14px;background:var(--panel2)}
+.flicksAudienceToggle button{height:28px;padding:0 10px;border-radius:12px;color:var(--muted);font-weight:600;font-size:11px}
+.flicksAudienceToggle button.active{background:var(--panel);color:var(--primary);box-shadow:var(--shadow-sm)}
 .flicksHeader h2{margin:0;color:var(--text);font-size:18px}
 .flicksUpload{height:36px;padding:0 14px;border-radius:18px;background:var(--primary);color:#fff;font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer}
 .flicksFeed{flex:1;overflow-y:auto;scroll-snap-type:y mandatory;background:#000}
@@ -7510,4 +7531,23 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .dialogClose{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
 .stopLocationIcon{width:52px;height:52px;margin:0 auto 10px;border-radius:50%;background:#fef2f2;color:var(--red);display:grid;place-items:center}
 .dangerStop{width:100%;height:42px;margin-top:14px;border-radius:var(--radius-md);background:var(--red);color:#fff;font-weight:600}
+
+/* ---------- opal call screen (replaces generic dark-panel call UI) ---------- */
+.incoming{background:linear-gradient(150deg,rgba(20,16,32,.97),rgba(12,13,22,.97));border:1px solid rgba(255,255,255,.08);box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px rgba(124,58,237,.12) inset;position:relative;overflow:hidden}
+.incoming::before{content:"";position:absolute;inset:-40% -40% auto auto;width:180px;height:180px;background:var(--opal-gradient);filter:blur(46px);opacity:.35;pointer-events:none}
+.incoming .who b{color:#fff}
+.incoming .who small{color:rgba(255,255,255,.65)}
+.incomingBtns .accept{background:var(--opal-gradient);background-size:220% 220%;animation:opalShift 6s ease-in-out infinite,ringPulse 1.2s infinite;box-shadow:0 0 0 4px rgba(124,58,237,.18)}
+.incomingBtns .danger{background:var(--red)}
+@media (prefers-reduced-motion:reduce){.incomingBtns .accept{animation:none}}
+
+.call{background:radial-gradient(circle at 22% 15%,rgba(124,58,237,.32),transparent 55%),radial-gradient(circle at 82% 85%,rgba(45,212,191,.24),transparent 55%),radial-gradient(circle at 85% 10%,rgba(251,113,133,.16),transparent 45%),linear-gradient(160deg,#0b0c14,#14101f)}
+.callTopBar button{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.06)}
+.callAvatar{background:var(--opal-gradient);background-size:220% 220%;animation:opalShift 8s ease-in-out infinite;box-shadow:0 10px 40px rgba(124,58,237,.35)}
+@media (prefers-reduced-motion:reduce){.callAvatar{animation:none}}
+.callBtns button{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.1);backdrop-filter:blur(6px);transition:transform .15s ease,box-shadow .15s ease}
+.callBtns button:hover{transform:translateY(-2px);box-shadow:0 0 0 3px rgba(124,58,237,.2)}
+.callBtns button.off{background:rgba(255,255,255,.92);color:#14101f}
+.callBtns button.danger{background:var(--red);box-shadow:0 8px 24px rgba(239,68,68,.35)}
+.mini{box-shadow:0 0 0 1px rgba(124,58,237,.25),var(--shadow-lg)}
 .softCancel{width:100%;height:42px;margin-top:8px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600}
