@@ -12,6 +12,10 @@ CREATE TABLE IF NOT EXISTS password_resets(
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  otp_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW());
 CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id,created_at);
+CREATE TABLE IF NOT EXISTS login_otps(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ otp_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_login_otps_user ON login_otps(user_id,created_at);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider VARCHAR(20);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_subject TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth_identity ON users(oauth_provider,oauth_subject) WHERE oauth_provider IS NOT NULL AND oauth_subject IS NOT NULL;

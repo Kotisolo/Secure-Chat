@@ -6,3 +6,4 @@
 *.log
 **/uploads/*
 !**/uploads/.gitkeep
+.claude/

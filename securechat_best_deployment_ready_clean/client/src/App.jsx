@@ -364,9 +364,11 @@ export default function App() {
     twoStepPin: '',
     resetPhone: '',
     resetOtp: '',
-    resetPassword: ''
+    resetPassword: '',
+    loginOtp: ''
   });
   const [resetStep, setResetStep] = useState('phone');
+  const [loginStep, setLoginStep] = useState('phone');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -632,17 +634,35 @@ export default function App() {
     }
   }
 
+  async function requestLoginOtp(e) {
+    e.preventDefault();
+    setErr('');
+    setAuthLoading(true);
+    try {
+      await api('/api/auth/request-login-otp', {
+        method: 'POST',
+        body: JSON.stringify({ phone: form.phone })
+      });
+      setLoginStep('otp');
+      setErr('If that phone is registered, a login code was emailed to you.');
+    } catch (x) {
+      setErr(x.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function login(e) {
     e.preventDefault();
     setErr('');
     setAuthLoading(true);
 
     try {
-      const d = await api('/api/auth/login', {
+      const d = await api('/api/auth/login-otp', {
         method: 'POST',
         body: JSON.stringify({
           phone: form.phone,
-          password: form.password,
+          otp: form.loginOtp,
           twoStepPin: form.twoStepPin,
           deviceName: navigator.userAgent
         })
@@ -3524,12 +3544,12 @@ export default function App() {
 
                 <div className="authHeading">
                   <h1>{authMode === 'register' ? 'Create Account' : authMode === 'reset' ? 'Reset Password' : 'Welcome Back'}</h1>
-                  <p>{authMode === 'register' ? "Let's get you started!" : authMode === 'reset' ? (resetStep === 'phone' ? "We'll email you a reset code." : 'Enter the code we emailed you.') : 'Glad to see you again!'}</p>
+                  <p>{authMode === 'register' ? "Let's get you started!" : authMode === 'reset' ? (resetStep === 'phone' ? "We'll email you a reset code." : 'Enter the code we emailed you.') : authMode === 'login' ? (loginStep === 'phone' ? "We'll email you a login code." : 'Enter the code we emailed you.') : 'Glad to see you again!'}</p>
                 </div>
 
                 {authMode !== 'reset' && (
                   <div className="tabs opalTabs">
-                    <button type="button" className={authMode === 'login' ? 'on' : ''} onClick={() => setAuthMode('login')}>
+                    <button type="button" className={authMode === 'login' ? 'on' : ''} onClick={() => { setErr(''); setLoginStep('phone'); setAuthMode('login'); }}>
                       Login
                     </button>
                     <button type="button" className={authMode === 'register' ? 'on' : ''} onClick={() => setAuthMode('register')}>
@@ -3540,29 +3560,35 @@ export default function App() {
 
                 {err && <div className="err" role="alert">{err}</div>}
 
-                {authMode === 'login' && (
-                  <form onSubmit={login} className="opalForm">
-                    <label className="opalInput"><Phone /><input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} /></label>
-                    <label className="opalInput"><Lock /><input placeholder="Password" type={showPassword ? 'text' : 'password'} value={form.password} onChange={e => f('password', e.target.value)} /><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></label>
-                    <label className="opalInput"><KeyRound /><input placeholder="6-digit PIN (if enabled)" inputMode="numeric" maxLength="6" value={form.twoStepPin} onChange={e => f('twoStepPin', e.target.value.replace(/\D/g, ''))} /></label>
+                {authMode === 'login' && loginStep === 'phone' && (
+                  <form onSubmit={requestLoginOtp} className="opalForm">
+                    <label className="opalInput"><Phone /><input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} required /></label>
                     <div className="authOptions">
                       <label><input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me</label>
-                      <button type="button" className="link" onClick={() => {
-                        setErr('');
-                        setResetStep('phone');
-                        setAuthMode('reset');
-                      }}>
-                        Forgot password?
-                      </button>
                     </div>
                     <button className="primary opalPrimary" disabled={authLoading}>
-                      {authLoading ? 'Signing in...' : 'Log In'}
+                      {authLoading ? 'Sending code...' : 'Send Login Code'}
                     </button>
                     <div className="socialDivider"><span />or continue with<span /></div>
                     <div className="socialLoginRow">
                       <button type="button" onClick={() => socialLogin('google')} disabled={authLoading}><b>G</b> Google</button>
                       <button type="button" onClick={() => socialLogin('apple')} disabled={authLoading}><b>A</b> Apple</button>
                     </div>
+                    <p className="authSwitch">Don't have an account? <button type="button" onClick={() => setAuthMode('register')}>Register</button></p>
+                  </form>
+                )}
+
+                {authMode === 'login' && loginStep === 'otp' && (
+                  <form onSubmit={login} className="opalForm">
+                    <label className="opalInput"><KeyRound /><input placeholder="6-digit code from email" inputMode="numeric" maxLength="6" value={form.loginOtp} onChange={e => f('loginOtp', e.target.value.replace(/\D/g, ''))} required /></label>
+                    <label className="opalInput"><Lock /><input placeholder="6-digit PIN (if enabled)" inputMode="numeric" maxLength="6" value={form.twoStepPin} onChange={e => f('twoStepPin', e.target.value.replace(/\D/g, ''))} /></label>
+                    <div className="authOptions">
+                      <label><input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me</label>
+                      <button type="button" className="link" onClick={() => setLoginStep('phone')}>Use a different phone</button>
+                    </div>
+                    <button className="primary opalPrimary" disabled={authLoading}>
+                      {authLoading ? 'Signing in...' : 'Log In'}
+                    </button>
                     <p className="authSwitch">Don't have an account? <button type="button" onClick={() => setAuthMode('register')}>Register</button></p>
                   </form>
                 )}
