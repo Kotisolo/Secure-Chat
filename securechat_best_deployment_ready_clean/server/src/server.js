@@ -15,6 +15,7 @@ const { createAdapter } = require('@socket.io/redis-adapter');
 const Redis = require('ioredis');
 const { AccessToken } = require('livekit-server-sdk');
 const webpush = require('web-push');
+const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const PORT = process.env.PORT || 8080;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -30,6 +31,20 @@ const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || '').trim();
 const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || '').trim();
 const VAPID_SUBJECT = (process.env.VAPID_SUBJECT || 'mailto:support@example.com').trim();
 const PUSH_CONFIGURED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
+const R2_ENDPOINT = (process.env.R2_ENDPOINT || '').trim();
+const R2_ACCESS_KEY_ID = (process.env.R2_ACCESS_KEY_ID || '').trim();
+const R2_SECRET_ACCESS_KEY = (process.env.R2_SECRET_ACCESS_KEY || '').trim();
+const R2_BUCKET = (process.env.R2_BUCKET || '').trim();
+const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+const R2_CONFIGURED = Boolean(R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET && R2_PUBLIC_URL);
+const r2Client = R2_CONFIGURED ? new S3Client({
+  region: 'auto',
+  endpoint: R2_ENDPOINT,
+  credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY }
+}) : null;
+if (!R2_CONFIGURED) {
+  console.log('Flicks video feed disabled: R2_ENDPOINT/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET/R2_PUBLIC_URL not configured.');
+}
 if (PUSH_CONFIGURED) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
 } else {
@@ -130,6 +145,25 @@ const upload = multer({
     cb(allowed.has(file.mimetype) ? null : new Error('Unsupported file type.'), allowed.has(file.mimetype));
   }
 });
+
+const flickUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
+    cb(allowed.has(file.mimetype) ? null : new Error('Only MP4, WebM, or MOV videos are allowed.'), allowed.has(file.mimetype));
+  }
+});
+
+async function uploadToR2(buffer, key, contentType) {
+  await r2Client.send(new PutObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType
+  }));
+  return `${R2_PUBLIC_URL}/${key}`;
+}
 
 const online = new Map();
 const groupCallParticipants = new Map();
@@ -2337,6 +2371,102 @@ app.post('/api/upload', auth, uploadRateLimit, upload.single('file'), asyncRoute
     mime: req.file.mimetype,
     size: req.file.size
   });
+}));
+
+app.get('/api/flicks/config', auth, (req, res) => {
+  res.json({ configured: R2_CONFIGURED });
+});
+
+app.post('/api/flicks', auth, flickUpload.single('video'), asyncRoute(async (req, res) => {
+  if (!R2_CONFIGURED) return res.status(503).json({ error: 'Video feed is not configured yet.' });
+  if (!req.file) return res.status(400).json({ error: 'Video file required.' });
+
+  const caption = clean(req.body.caption || '').slice(0, 500);
+  const extension = req.file.mimetype === 'video/webm' ? 'webm' : req.file.mimetype === 'video/quicktime' ? 'mov' : 'mp4';
+  const key = `flicks/${crypto.randomUUID()}.${extension}`;
+  const videoUrl = await uploadToR2(req.file.buffer, key, req.file.mimetype);
+
+  const result = await pool.query(
+    `INSERT INTO flicks(author_id,video_url,caption) VALUES($1,$2,$3) RETURNING *`,
+    [req.user.id, videoUrl, caption]
+  );
+  const flick = result.rows[0];
+  res.status(201).json({
+    id: flick.id,
+    videoUrl: flick.video_url,
+    caption: flick.caption,
+    createdAt: flick.created_at,
+    viewCount: flick.view_count,
+    likeCount: 0,
+    liked: false,
+    author: { id: req.user.id, username: req.user.username }
+  });
+}));
+
+app.get('/api/flicks', auth, asyncRoute(async (req, res) => {
+  const cursor = req.query.cursor ? new Date(req.query.cursor) : null;
+  const limit = Math.min(Number(req.query.limit) || 10, 30);
+
+  const result = await pool.query(
+    `SELECT f.*, u.username author_username, u.avatar_url author_avatar_url,
+      (SELECT COUNT(*)::int FROM flick_likes WHERE flick_id=f.id) like_count,
+      EXISTS(SELECT 1 FROM flick_likes WHERE flick_id=f.id AND user_id=$1) liked
+     FROM flicks f
+     JOIN users u ON u.id=f.author_id
+     WHERE f.deleted_at IS NULL
+       AND NOT EXISTS(SELECT 1 FROM user_blocks b WHERE (b.blocker_id=$1 AND b.blocked_id=f.author_id) OR (b.blocker_id=f.author_id AND b.blocked_id=$1))
+       AND ($2::timestamptz IS NULL OR f.created_at<$2)
+     ORDER BY f.created_at DESC
+     LIMIT $3`,
+    [req.user.id, cursor, limit]
+  );
+
+  const items = result.rows.map(row => ({
+    id: row.id,
+    videoUrl: row.video_url,
+    caption: row.caption,
+    createdAt: row.created_at,
+    viewCount: row.view_count,
+    likeCount: row.like_count,
+    liked: row.liked,
+    author: { id: row.author_id, username: row.author_username, avatarUrl: row.author_avatar_url }
+  }));
+  res.json({ items, nextCursor: items.length === limit ? items[items.length - 1].createdAt : null });
+}));
+
+app.post('/api/flicks/:id/view', auth, asyncRoute(async (req, res) => {
+  await pool.query('UPDATE flicks SET view_count=view_count+1 WHERE id=$1', [req.params.id]);
+  res.json({ ok: true });
+}));
+
+app.post('/api/flicks/:id/like', auth, asyncRoute(async (req, res) => {
+  await pool.query(
+    'INSERT INTO flick_likes(flick_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING',
+    [req.params.id, req.user.id]
+  );
+  res.json({ ok: true });
+}));
+
+app.delete('/api/flicks/:id/like', auth, asyncRoute(async (req, res) => {
+  await pool.query('DELETE FROM flick_likes WHERE flick_id=$1 AND user_id=$2', [req.params.id, req.user.id]);
+  res.json({ ok: true });
+}));
+
+app.delete('/api/flicks/:id', auth, asyncRoute(async (req, res) => {
+  const result = await pool.query(
+    'UPDATE flicks SET deleted_at=NOW() WHERE id=$1 AND author_id=$2 RETURNING video_url',
+    [req.params.id, req.user.id]
+  );
+  if (!result.rows.length) return res.status(404).json({ error: 'Flick not found.' });
+
+  if (R2_CONFIGURED) {
+    const videoUrl = result.rows[0].video_url;
+    if (videoUrl.startsWith(R2_PUBLIC_URL + '/')) {
+      const key = videoUrl.slice(R2_PUBLIC_URL.length + 1);
+      r2Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key })).catch(error => console.error('r2 delete', error.message));
+    }
+  }
+  res.json({ ok: true });
 }));
 
 app.use((err, req, res, next) => {

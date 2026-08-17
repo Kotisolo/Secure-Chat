@@ -7375,3 +7375,139 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .callOptionsSheet button:hover{background:var(--panel2)}
 .callOptionsSheet b{color:var(--text);font-size:13px}
 .callOptionsSheet small{display:block;color:var(--muted);font-size:11px}
+
+/* =====================================================================
+   Flicks (short-video feed) — replaces the old AI Assistant panel.
+   ===================================================================== */
+.tab-ai .search,
+.tab-ai .chatFilterChips,
+.tab-ai .contactStories,
+.tab-ai .archiveToggle,
+.tab-ai .statusHeader,
+.tab-ai .channelHeader,
+.tab-ai .groupHeader,
+.tab-ai .groupRow,
+.tab-ai .list{
+  display:none!important;
+}
+.flicksPanel{display:none;flex:1;min-height:0;flex-direction:column;background:#000}
+.tab-ai .flicksPanel{display:flex}
+.flicksHeader{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
+.flicksHeader h2{margin:0;color:var(--text);font-size:18px}
+.flicksUpload{height:36px;padding:0 14px;border-radius:18px;background:var(--primary);color:#fff;font-weight:600;font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer}
+.flicksFeed{flex:1;overflow-y:auto;scroll-snap-type:y mandatory;background:#000}
+.flickItem{position:relative;height:100%;min-height:520px;scroll-snap-align:start;background:#000;display:flex;align-items:center;justify-content:center}
+.flickVideo{width:100%;height:100%;object-fit:contain;background:#000;cursor:pointer}
+.flickOverlay{position:absolute;left:0;right:70px;bottom:0;padding:18px;background:linear-gradient(0deg,rgba(0,0,0,.75),transparent);color:#fff}
+.flickAuthor{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.flickAuthor b{font-size:14px}
+.flickCaption{margin:0;font-size:13px;color:rgba(255,255,255,.9)}
+.flickActions{position:absolute;right:14px;bottom:24px;display:flex;flex-direction:column;align-items:center;gap:18px}
+.flickLike{display:flex;flex-direction:column;align-items:center;gap:2px;color:#fff;font-size:11px;font-weight:600}
+.flickLike.liked{color:#fbbf24}
+.flickLike svg{width:28px;height:28px}
+.flickDelete{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;display:grid;place-items:center}
+.flicksEmpty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.7);text-align:center;padding:40px}
+.flicksEmpty svg{width:48px;height:48px;color:var(--primary)}
+.flicksEmpty h2{margin:0;color:#fff;font-size:18px}
+.flicksEmpty p{margin:0;color:rgba(255,255,255,.6);font-size:13px}
+
+/* =====================================================================
+   2026 Design Rewrite — Phase 3: settings, emoji picker, location.
+   ===================================================================== */
+
+/* ---------- settings pages ---------- */
+.settingsPage{padding:0 0 24px}
+.settingsHero{display:flex;align-items:center;justify-content:space-between;padding:18px 20px}
+.settingsHero h1{margin:0;font-size:20px;color:var(--text)}
+.settingsHero button{width:36px;height:36px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
+.settingsProfileHero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 20px 20px;gap:6px}
+.profileAvatarWrap{position:relative;margin-bottom:6px}
+.profilePresence{position:absolute;right:2px;bottom:2px;width:14px;height:14px;border-radius:50%;background:var(--muted);border:2px solid var(--panel)}
+.profilePresence.online{background:var(--online)}
+.settingsProfileHero h2{margin:0;font-size:18px;color:var(--text)}
+.settingsProfileHero p{margin:0;color:var(--muted);font-size:13px}
+.settingsProfileHero small{color:var(--muted);font-size:12px;display:flex;align-items:center;gap:4px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block}
+.dot.online{background:var(--online)}
+.profilePhoto.profilePhotoModern{margin-top:10px;height:38px;padding:0 16px;border-radius:19px;background:var(--panel2);color:var(--primary);font-weight:600;font-size:13px;display:flex;align-items:center;gap:8px;cursor:pointer}
+.settingsProfileOpen{margin-top:10px;width:100%;max-width:280px;height:44px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px}
+.opalSettingsMenuBackdrop{position:fixed;inset:0;background:rgba(15,16,23,.45);z-index:65;display:flex;justify-content:flex-end}
+.opalSettingsMenu{width:340px;max-width:90vw;height:100%;background:var(--panel);overflow-y:auto;box-shadow:var(--shadow-lg)}
+.opalSettingsMenuHead{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid var(--line)}
+.opalSettingsMenuHead b{color:var(--text);font-size:16px}
+.opalSettingsMenuHead small{color:var(--muted);font-size:12px}
+.opalSettingsMenuHead button{width:34px;height:34px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
+.opalMenuSection{padding:10px 0}
+.opalMenuSection h3{margin:0;padding:8px 20px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.settingsRow{width:100%;display:flex;align-items:center;gap:14px;padding:12px 20px;background:transparent;text-align:left;border-bottom:0}
+.settingsRow:hover{background:var(--panel2)}
+.settingsRow i{width:36px;height:36px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--primary);display:grid;place-items:center;font-style:normal;flex-shrink:0}
+.settingsRow span{flex:1;min-width:0}
+.settingsRow b{display:block;color:var(--text);font-size:14px}
+.settingsRow small{display:block;color:var(--muted);font-size:12px}
+.settingsRow strong{color:var(--muted);font-weight:400}
+.settingsLogout.opalMenuLogout{width:calc(100% - 40px);margin:10px 20px;height:44px;border-radius:var(--radius-md);background:#fef2f2;color:var(--red);font-weight:600}
+.twoStepButton{width:100%;height:46px;margin:18px 24px 10px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px}
+.accountActions{display:flex;gap:10px;padding:0 24px 10px}
+.accountActions button{flex:1;height:40px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);font-weight:600;font-size:13px}
+.sessionHeader{display:flex;align-items:center;justify-content:space-between;padding:14px 24px 8px}
+.sessionHeader b{color:var(--text)}
+.sessionHeader button{color:var(--primary);font-weight:600;font-size:13px;background:transparent}
+.sessionList{padding:0 24px}
+.sessionList>div{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}
+.sessionList b{display:block;color:var(--text);font-size:13px}
+.sessionList small{color:var(--muted);font-size:11px}
+.sessionList button{color:var(--red);font-weight:600;font-size:12px;background:transparent}
+.groupCallLaunch{display:flex;gap:10px;padding:0 24px 14px}
+.groupCallLaunch button{flex:1;height:42px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px}
+.groupMute{width:calc(100% - 48px);margin:0 24px 10px;height:42px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px}
+.groupAdminActions{display:flex;gap:10px;padding:0 24px 14px}
+.groupAdminActions button{flex:1;height:40px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);font-weight:600;font-size:13px}
+
+/* ---------- emoji picker ---------- */
+.emoji{position:absolute;bottom:76px;left:12px;right:12px;max-width:380px;height:340px;display:flex;flex-direction:column;z-index:12}
+.emojiSearch{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid var(--line)}
+.emojiSearch input{flex:1;background:transparent;border:0;outline:0;color:var(--text);font-size:13px}
+.emojiSearch svg{color:var(--muted);width:16px;height:16px}
+.emojiScroll{flex:1;overflow-y:auto;padding:10px 14px}
+.emojiSection h4{margin:6px 0;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.emojiGrid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px}
+.emojiGrid button{font-size:20px;height:34px;border-radius:8px}
+.emojiGrid button:hover{background:var(--panel2)}
+.emojiCategoryBar{display:flex;justify-content:space-around;padding:6px 10px;border-top:1px solid var(--line)}
+.emojiCategoryBar button{width:32px;height:32px;border-radius:var(--radius-sm);color:var(--muted);display:grid;place-items:center}
+.emojiCategoryBar button.active{background:var(--panel2);color:var(--primary)}
+
+/* ---------- location sharing ---------- */
+.locationSheet{position:absolute;left:0;right:0;bottom:0;background:var(--panel);border-radius:var(--radius-lg) var(--radius-lg) 0 0;box-shadow:var(--shadow-lg);padding:16px;z-index:12}
+.locationSheetHeader{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.locationSheetHeader b{color:var(--text);font-size:15px}
+.locationSheetHeader button{width:32px;height:32px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
+.locationDuration{width:100%;display:flex;align-items:center;gap:12px;padding:10px 6px;background:transparent;text-align:left;border-radius:var(--radius-sm)}
+.locationDuration.active{background:var(--panel2)}
+.locationDuration span{color:var(--primary);flex-shrink:0}
+.locationDuration div{flex:1}
+.locationDuration b{display:block;color:var(--text);font-size:13px}
+.locationDuration small{color:var(--muted);font-size:11px}
+.locationDuration i{width:18px;height:18px;border-radius:50%;border:2px solid var(--line)}
+.locationDuration.active i{border-color:var(--primary);background:var(--primary)}
+.shareLocationButton{width:100%;height:44px;margin-top:10px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-weight:600}
+.liveLocationBar{position:absolute;left:12px;right:12px;bottom:76px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-md);box-shadow:var(--shadow-md);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;z-index:12}
+.liveLocationBar b{display:flex;align-items:center;gap:6px;color:var(--text);font-size:13px}
+.liveLocationBar span{color:var(--muted);font-size:11px}
+.liveLocationBar button{height:32px;padding:0 14px;border-radius:16px;background:#fef2f2;color:var(--red);font-weight:600;font-size:12px}
+.locationMessage{display:flex;gap:10px;align-items:center}
+.locationCopy b{display:flex;align-items:center;gap:6px;font-size:13px}
+.locationCopy small{display:block;opacity:.75;font-size:11px}
+.locationOpenButton,.locationStopInline{margin-top:6px;height:30px;padding:0 12px;border-radius:14px;background:rgba(0,0,0,.15);color:inherit;font-size:11px;font-weight:600}
+.bubble.mine .locationOpenButton,.bubble.mine .locationStopInline{background:rgba(255,255,255,.2)}
+.locationMiniMap{width:56px;height:56px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--primary);display:grid;place-items:center;flex-shrink:0}
+.locationViewerOverlay{position:fixed;inset:0;z-index:75;background:rgba(15,16,23,.6);display:grid;place-items:center;padding:20px}
+.locationViewerCard,.stopLocationDialog{background:var(--panel);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:20px;width:400px;max-width:100%;color:var(--text)}
+.locationViewerHead{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.locationViewerHead button{width:34px;height:34px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
+.dialogClose{position:absolute;top:12px;right:12px;width:32px;height:32px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
+.stopLocationIcon{width:52px;height:52px;margin:0 auto 10px;border-radius:50%;background:#fef2f2;color:var(--red);display:grid;place-items:center}
+.dangerStop{width:100%;height:42px;margin-top:14px;border-radius:var(--radius-md);background:var(--red);color:#fff;font-weight:600}
+.softCancel{width:100%;height:42px;margin-top:8px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600}

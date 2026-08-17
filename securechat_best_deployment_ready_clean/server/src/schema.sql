@@ -224,3 +224,22 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages(conversation_id
 CREATE INDEX IF NOT EXISTS idx_messages_recipient_delivery ON messages(recipient_id,delivered_at) WHERE delivered_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_recipient_read ON messages(recipient_id,read_at) WHERE read_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_user_devices_active ON user_devices(user_id,last_seen DESC) WHERE revoked_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS flicks(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+ author_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ video_url TEXT NOT NULL,
+ thumbnail_url TEXT,
+ caption VARCHAR(500) DEFAULT '',
+ duration_seconds INTEGER,
+ view_count INTEGER NOT NULL DEFAULT 0,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ deleted_at TIMESTAMPTZ);
+CREATE TABLE IF NOT EXISTS flick_likes(
+ flick_id UUID NOT NULL REFERENCES flicks(id) ON DELETE CASCADE,
+ user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+ PRIMARY KEY(flick_id,user_id));
+CREATE INDEX IF NOT EXISTS idx_flicks_feed ON flicks(created_at DESC) WHERE deleted_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_flicks_author ON flicks(author_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_flick_likes_flick ON flick_likes(flick_id);

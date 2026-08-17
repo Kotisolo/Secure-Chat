@@ -422,6 +422,14 @@ export default function App() {
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupMessages, setGroupMessages] = useState({});
   const [groupText, setGroupText] = useState('');
+  const [flicks, setFlicks] = useState([]);
+  const [flicksLoading, setFlicksLoading] = useState(false);
+  const [flicksCursor, setFlicksCursor] = useState(null);
+  const [flicksHasMore, setFlicksHasMore] = useState(true);
+  const [flicksConfigured, setFlicksConfigured] = useState(true);
+  const [flickUploading, setFlickUploading] = useState(false);
+  const [activeFlickId, setActiveFlickId] = useState(null);
+  const flickVideoRefs = useRef({});
   const [groupInvite, setGroupInvite] = useState(null);
   const [selectedGroupMessage, setSelectedGroupMessage] = useState(null);
   const [groupRecording, setGroupRecording] = useState(false);
@@ -1328,6 +1336,93 @@ export default function App() {
       getSocket()?.emit('group:typing', { groupId: selectedGroup.id, typing: false });
     }, 900);
   }
+
+  async function loadFlicks(reset = false) {
+    if (flicksLoading) return;
+    setFlicksLoading(true);
+    try {
+      const cursor = reset ? null : flicksCursor;
+      const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+      const data = await api('/api/flicks' + query);
+      setFlicks(current => reset ? data.items : [...current, ...data.items]);
+      setFlicksCursor(data.nextCursor);
+      setFlicksHasMore(Boolean(data.nextCursor));
+      setFlicksConfigured(true);
+    } catch (error) {
+      if (String(error.message || '').toLowerCase().includes('not configured')) {
+        setFlicksConfigured(false);
+      }
+    } finally {
+      setFlicksLoading(false);
+    }
+  }
+
+  async function uploadFlick(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setFlickUploading(true);
+    try {
+      const form = new FormData();
+      form.append('video', file);
+      form.append('caption', '');
+      const flick = await api('/api/flicks', { method: 'POST', body: form, headers: {} });
+      setFlicks(current => [flick, ...current]);
+    } catch (error) {
+      alert('Could not upload video: ' + error.message);
+    } finally {
+      setFlickUploading(false);
+    }
+  }
+
+  async function toggleFlickLike(flick) {
+    setFlicks(current => current.map(f => f.id === flick.id
+      ? { ...f, liked: !f.liked, likeCount: f.likeCount + (f.liked ? -1 : 1) }
+      : f));
+    try {
+      await api(`/api/flicks/${flick.id}/like`, { method: flick.liked ? 'DELETE' : 'POST' });
+    } catch {
+      setFlicks(current => current.map(f => f.id === flick.id
+        ? { ...f, liked: flick.liked, likeCount: flick.likeCount }
+        : f));
+    }
+  }
+
+  async function deleteFlick(id) {
+    if (!confirm('Delete this video?')) return;
+    try {
+      await api(`/api/flicks/${id}`, { method: 'DELETE' });
+      setFlicks(current => current.filter(f => f.id !== id));
+    } catch (error) {
+      alert('Could not delete video: ' + error.message);
+    }
+  }
+
+  useEffect(() => {
+    if (mobileTab !== 'ai' || flicks.length || !me) return;
+    loadFlicks(true);
+  }, [mobileTab, me]);
+
+  useEffect(() => {
+    const observers = [];
+    Object.entries(flickVideoRefs.current).forEach(([id, video]) => {
+      if (!video) return;
+      const observer = new IntersectionObserver(entries => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && entry.intersectionRatio > 0.6) {
+            setActiveFlickId(id);
+            video.play().catch(() => {});
+            api(`/api/flicks/${id}/view`, { method: 'POST' }).catch(() => {});
+          } else {
+            video.pause();
+          }
+        });
+      }, { threshold: [0, 0.6, 1] });
+      observer.observe(video);
+      observers.push(observer);
+    });
+    return () => observers.forEach(o => o.disconnect());
+  }, [flicks]);
 
   async function toggleGroupMute() {
     const muted = selectedGroup.mutedUntil && new Date(selectedGroup.mutedUntil) > new Date();
@@ -3708,7 +3803,7 @@ export default function App() {
             <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('all'); }}><MessageCircle /> Chats <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0) || ''}</span></button>
             <button className={chatListFilter === 'groups' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('groups'); }}><Users /> Groups</button>
             <button onClick={loadCallHistory}><Phone /> Calls</button>
-            <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Languages /> AI Assistant</button>
+            <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /> Flicks</button>
             <button onClick={() => { setChatListFilter('all'); setMobileTab('chats'); }}><User /> Contacts</button>
             <button onClick={() => alert('Saved messages will be connected in the saved-chats phase.')}><Star /> Saved Messages</button>
           </div>
@@ -3841,16 +3936,76 @@ export default function App() {
             ))}
           </div>
         </>}
-        <div className="aiOpalPanel">
-          <div className="aiOrb"><Languages /></div>
-          <h2>AI Opal</h2>
-          <p>AI language tools are planned for the next phase. Your chat, calls, files, and settings stay available while this screen is prepared.</p>
-          <div className="aiActionGrid">
-            <button onClick={() => alert('AI translation will be connected after go-live.')}><Languages /><span>Translate messages</span></button>
-            <button onClick={() => alert('Chat summary will be connected after go-live.')}><MessageCircle /><span>Summarize chats</span></button>
-            <button onClick={() => alert('AI writing help will be connected after go-live.')}><Pencil /><span>Write a message</span></button>
-            <button onClick={() => alert('Smart tools will be connected after go-live.')}><Settings /><span>Smart tools</span></button>
-          </div>
+        <div className="flicksPanel">
+          {!flicksConfigured ? (
+            <div className="flicksEmpty">
+              <Video />
+              <h2>Flicks</h2>
+              <p>The video feed isn't set up yet. Check back soon.</p>
+            </div>
+          ) : (
+            <>
+              <div className="flicksHeader">
+                <h2>Flicks</h2>
+                <label className="flicksUpload">
+                  {flickUploading ? 'Uploading...' : <><Plus /> New</>}
+                  <input hidden type="file" accept="video/mp4,video/webm,video/quicktime" capture="environment" disabled={flickUploading} onChange={uploadFlick} />
+                </label>
+              </div>
+              <div
+                className="flicksFeed"
+                onScroll={e => {
+                  const el = e.target;
+                  if (flicksHasMore && !flicksLoading && el.scrollTop + el.clientHeight > el.scrollHeight - el.clientHeight) {
+                    loadFlicks(false);
+                  }
+                }}
+              >
+                {flicks.length === 0 && !flicksLoading && (
+                  <div className="flicksEmpty">
+                    <Video />
+                    <h2>No Flicks yet</h2>
+                    <p>Be the first to share a short video.</p>
+                  </div>
+                )}
+                {flicks.map(flick => (
+                  <div className="flickItem" key={flick.id}>
+                    <video
+                      ref={el => { flickVideoRefs.current[flick.id] = el; }}
+                      src={flick.videoUrl}
+                      className="flickVideo"
+                      loop
+                      muted
+                      playsInline
+                      onClick={e => {
+                        const el = e.currentTarget;
+                        el.paused ? el.play().catch(() => {}) : el.pause();
+                      }}
+                    />
+                    <div className="flickOverlay">
+                      <div className="flickAuthor">
+                        <Avatar user={flick.author} />
+                        <b>{flick.author.username}</b>
+                      </div>
+                      {flick.caption && <p className="flickCaption">{flick.caption}</p>}
+                    </div>
+                    <div className="flickActions">
+                      <button className={flick.liked ? 'flickLike liked' : 'flickLike'} onClick={() => toggleFlickLike(flick)}>
+                        <Star />
+                        <span>{flick.likeCount || ''}</span>
+                      </button>
+                      {String(flick.author.id) === String(me?.id) && (
+                        <button className="flickDelete" onClick={() => deleteFlick(flick.id)}>
+                          <Trash2 />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                {flicksLoading && <p className="empty">Loading...</p>}
+              </div>
+            </>
+          )}
         </div>
         {['all', 'unread'].includes(chatListFilter) && <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> <span>{showArchived ? 'Back to chats' : 'Archived chats'}</span> {!showArchived && <b>{contacts.filter(user => user.chat?.archived).length} chats</b>}
@@ -3954,7 +4109,7 @@ export default function App() {
         <nav className="bottomNav" aria-label="Primary navigation">
           <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Chats</span></button>
           <button className={mobileTab === 'calls' ? 'active' : ''} onClick={() => { setMobileTab('calls'); loadCallHistory(); }}><Phone /><span>Calls</span></button>
-          <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Languages /><span>Opal</span></button>
+          <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /><span>Flicks</span></button>
           <button className={mobileTab === 'status' ? 'active' : ''} onClick={() => { setMobileTab('status'); loadStatuses(); }}><History /><span>Moments</span></button>
           <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setShowOpalMenu(false); setMobileTab('settings'); setActive(null); }}><Settings /><span>Settings</span></button>
         </nav>
@@ -4424,22 +4579,6 @@ export default function App() {
           </>
         )}
       </main>
-
-      <aside className="desktopAssistantPanel">
-        <div className="assistantCard">
-          <div className="assistantTitle">
-            <div><b>AI Assistant</b><small>How can I help you today?</small></div>
-            <Languages />
-          </div>
-          <button onClick={() => alert('AI translation will be connected after go-live.')}><Languages /> Translate this chat</button>
-          <button onClick={() => alert('Conversation summary will be connected after go-live.')}><MessageCircle /> Summarize conversation</button>
-          <button onClick={() => alert('Smart reply suggestions will be connected after go-live.')}><Pencil /> Suggest a reply</button>
-          <div className="assistantAsk">
-            <input placeholder="Ask anything..." />
-            <button onClick={() => alert('AI Assistant will be connected after go-live.')}><Send /></button>
-          </div>
-        </div>
-      </aside>
 
       {incoming && !call.active && (
         <div className="incoming">
