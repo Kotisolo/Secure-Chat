@@ -200,6 +200,11 @@ CREATE TABLE IF NOT EXISTS user_privacy(
  read_receipts BOOLEAN NOT NULL DEFAULT TRUE,
  silence_unknown_calls BOOLEAN NOT NULL DEFAULT FALSE,
  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS uploaded_files(
+ filename TEXT PRIMARY KEY,
+ uploader_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_uploaded_files_uploader ON uploaded_files(uploader_id);
 CREATE TABLE IF NOT EXISTS push_subscriptions(
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
