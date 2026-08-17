@@ -108,45 +108,6 @@ app.use(express.urlencoded({ extended: false }));
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 
-app.get('/uploads/:filename', asyncRoute(async (req, res) => {
-  const filename = req.params.filename;
-  if (!/^[a-zA-Z0-9_-]+\.[a-z0-9]+$/.test(filename)) return res.status(400).end();
-
-  let requester;
-  try {
-    requester = await verifyAuthToken(String(req.query.token || ''));
-  } catch {
-    return res.status(401).end();
-  }
-
-  const owner = await pool.query('SELECT uploader_id FROM uploaded_files WHERE filename=$1', [filename]);
-  if (!owner.rows.length) return res.status(404).end();
-  const uploaderId = String(owner.rows[0].uploader_id);
-
-  if (uploaderId !== requester.id) {
-    const authorized = await pool.query(
-      `SELECT 1 WHERE EXISTS(
-         SELECT 1 FROM messages
-         WHERE file_url=$2 AND (sender_id=$1 OR recipient_id=$1) AND (sender_id=$3 OR recipient_id=$3)
-       ) OR EXISTS(
-         SELECT 1 FROM channel_posts cp
-         JOIN channel_followers cf ON cf.channel_id=cp.channel_id AND cf.user_id=$1
-         WHERE cp.file_url=$2 AND cp.author_id=$3
-       ) OR EXISTS(
-         SELECT 1 FROM group_members gm1
-         JOIN group_members gm2 ON gm2.group_id=gm1.group_id AND gm2.user_id=$3
-         WHERE gm1.user_id=$1
-       )`,
-      [requester.id, '/uploads/' + filename, uploaderId]
-    );
-    if (!authorized.rows.length) return res.status(403).end();
-  }
-
-  res.sendFile(path.join(UPLOADS_DIR, filename), error => {
-    if (error && !res.headersSent) res.status(404).end();
-  });
-}));
-
 const upload = multer({
   storage: multer.diskStorage({
     destination: (r, f, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
@@ -713,6 +674,45 @@ async function auth(req, res, next) {
     return res.status(401).json({ error: 'Invalid session.' });
   }
 }
+
+app.get('/uploads/:filename', asyncRoute(async (req, res) => {
+  const filename = req.params.filename;
+  if (!/^[a-zA-Z0-9_-]+\.[a-z0-9]+$/.test(filename)) return res.status(400).end();
+
+  let requester;
+  try {
+    requester = await verifyAuthToken(String(req.query.token || ''));
+  } catch {
+    return res.status(401).end();
+  }
+
+  const owner = await pool.query('SELECT uploader_id FROM uploaded_files WHERE filename=$1', [filename]);
+  if (!owner.rows.length) return res.status(404).end();
+  const uploaderId = String(owner.rows[0].uploader_id);
+
+  if (uploaderId !== requester.id) {
+    const authorized = await pool.query(
+      `SELECT 1 WHERE EXISTS(
+         SELECT 1 FROM messages
+         WHERE file_url=$2 AND (sender_id=$1 OR recipient_id=$1) AND (sender_id=$3 OR recipient_id=$3)
+       ) OR EXISTS(
+         SELECT 1 FROM channel_posts cp
+         JOIN channel_followers cf ON cf.channel_id=cp.channel_id AND cf.user_id=$1
+         WHERE cp.file_url=$2 AND cp.author_id=$3
+       ) OR EXISTS(
+         SELECT 1 FROM group_members gm1
+         JOIN group_members gm2 ON gm2.group_id=gm1.group_id AND gm2.user_id=$3
+         WHERE gm1.user_id=$1
+       )`,
+      [requester.id, '/uploads/' + filename, uploaderId]
+    );
+    if (!authorized.rows.length) return res.status(403).end();
+  }
+
+  res.sendFile(path.join(UPLOADS_DIR, filename), error => {
+    if (error && !res.headersSent) res.status(404).end();
+  });
+}));
 
 function user(u) {
   const hideProfile = u.profile_visibility === 'nobody';
