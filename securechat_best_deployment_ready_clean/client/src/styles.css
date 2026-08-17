@@ -7261,3 +7261,117 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
   .side{width:100%;min-width:100%}
   .bubble{max-width:82%}
 }
+
+/* =====================================================================
+   2026 Design Rewrite — Phase 2: calls, groups, status, channels.
+   Appended last, same technique as Phase 1 above.
+   ===================================================================== */
+
+/* ---------- shared hero + list-row primitives (calls/status/channels) ---------- */
+.callsHero,.statusHero,.channelHero{display:flex;align-items:center;gap:14px;padding:22px 24px 8px}
+.callsHeroIcon,.statusHeroIcon,.channelHeroIcon{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;display:grid;place-items:center;flex-shrink:0}
+.callsHero h2,.statusHero h2,.channelHero h2{margin:0;font-size:19px;color:var(--text)}
+.callsHero p,.statusHero p,.channelHero p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.historyClose{position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
+.historyCard,.statusCard,.channelCard{padding-bottom:20px;max-height:82vh;overflow-y:auto}
+.historyList,.statusList{padding:6px 24px}
+.historyItem{width:100%;display:flex;align-items:center;gap:12px;padding:10px 0;text-align:left;background:transparent;border-bottom:1px solid var(--line)}
+.callMeta{flex:1;min-width:0}
+.callMeta b{color:var(--text);font-size:14px}
+.callMeta small{display:block;color:var(--muted);font-size:12px}
+.callTypeIcon{width:36px;height:36px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--primary);display:grid;place-items:center;flex-shrink:0}
+.callFilters{display:flex;gap:8px;padding:8px 24px}
+.callFilters button{height:32px;padding:0 14px;border-radius:16px;background:var(--panel2);color:var(--muted);font-weight:600;font-size:13px}
+.callFilters button.active{background:var(--primary);color:#fff}
+.callLogActions{padding:14px 24px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.callLogActions button{height:40px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600;font-size:13px}
+.createStatus{width:calc(100% - 48px);margin:0 24px 12px;height:44px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-weight:600;display:flex;align-items:center;justify-content:center;gap:8px}
+.statusMediaButtons{display:flex;gap:8px;padding:0 24px 12px}
+.statusMediaButtons label{flex:1;height:42px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center;gap:6px}
+.statusPrivacy{margin:0 24px 12px;padding:12px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-size:13px}
+.statusPrivacy label{display:flex;align-items:center;gap:8px;padding:6px 0;color:var(--text)}
+.statusItem{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.statusItem.viewed{opacity:.6}
+.statusItem b{color:var(--text);font-size:14px;display:block}
+.statusItem small{color:var(--muted);font-size:12px}
+.statusMedia{max-width:100%;border-radius:var(--radius-sm);margin-top:4px}
+.statusActions{display:flex;gap:6px}
+.statusActions button{width:32px;height:32px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
+.channelFeed{padding:6px 24px 24px}
+.channelFeed article{background:var(--panel2);border-radius:var(--radius-md);padding:14px;margin-bottom:10px}
+.channelFeed article small{color:var(--muted);font-size:12px}
+.channelSearch{padding:0 24px 12px;display:flex;gap:8px}
+.channelSearch input{flex:1;height:40px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);border:0;padding:0 14px}
+.channelList{padding:0 24px}
+.channelName{color:var(--text)}
+.channelName small{color:var(--muted);display:block}
+
+/* ---------- privacy/security/settings rows shared across modals ---------- */
+.privacyRow,.settingsRow{display:flex;align-items:center;justify-content:space-between;padding:12px 24px;border-bottom:1px solid var(--line);color:var(--text);font-size:14px}
+.privacyRow select{background:var(--panel2);color:var(--text);border:0;border-radius:var(--radius-sm);padding:6px 10px}
+.settingsProfile{display:flex;align-items:center;gap:12px;padding:20px 24px;border-bottom:1px solid var(--line)}
+.settingsProfile h2{margin:0;font-size:16px;color:var(--text)}
+.settingsProfile small{color:var(--muted)}
+.settingsProfile button{margin-left:auto;height:36px;padding:0 14px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--primary);font-weight:600;font-size:13px}
+
+/* ---------- groups ---------- */
+.groupConversation{display:flex;flex-direction:column;height:60vh}
+.groupMessageList{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:6px}
+.groupBubble{max-width:70%;padding:8px 12px;border-radius:var(--radius-md);box-shadow:var(--shadow-sm);font-size:13px}
+.groupBubble.mine{align-self:flex-end;background:var(--primary);color:#fff}
+.groupBubble.theirs{align-self:flex-start;background:var(--panel2);color:var(--text)}
+.groupBubble.mentioned{outline:2px solid var(--cyan)}
+.groupBubble b{display:block;font-size:11px;opacity:.75;margin-bottom:2px}
+.groupBubble small{display:block;opacity:.65;font-size:10px;margin-top:3px}
+.groupCompose{display:flex;align-items:center;gap:8px;padding:10px 14px;border-top:1px solid var(--line)}
+.groupCompose input{flex:1;height:40px;border-radius:20px;background:var(--panel2);color:var(--text);border:0;padding:0 14px}
+.groupCompose label,.groupCompose button{width:36px;height:36px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center;flex-shrink:0}
+.groupRecord.active{background:var(--red);color:#fff}
+.inviteCard{padding:20px;text-align:center}
+.inviteCard img{width:180px;height:180px;margin:0 auto 12px;border-radius:var(--radius-md)}
+.inviteCard input{width:100%;height:40px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);border:0;padding:0 12px;margin-bottom:10px;text-align:center}
+.inviteCard button{height:38px;border-radius:var(--radius-sm);padding:0 16px;margin:0 4px;background:var(--panel2);color:var(--text);font-weight:600}
+
+/* ---------- incoming call card ---------- */
+.incoming{position:fixed;top:20px;right:20px;z-index:70;width:320px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:20px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.incoming .who b{display:block;color:var(--text);font-size:16px}
+.incoming .who small{color:var(--muted)}
+.incomingBtns{display:flex;gap:16px;margin-top:6px}
+.incomingBtns button{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;color:#fff}
+.incomingBtns .accept{background:var(--online)}
+.incomingBtns .danger{background:var(--red)}
+
+/* ---------- active call screen ---------- */
+.call{position:fixed;inset:0;z-index:80;background:linear-gradient(160deg,#0b0c14,#181a2b);display:flex;flex-direction:column;color:#fff}
+.callTopBar{display:flex;align-items:center;gap:12px;padding:16px 18px;color:#fff}
+.callTopBar button{width:38px;height:38px;border-radius:var(--radius-sm);background:rgba(255,255,255,.12);color:#fff;display:grid;place-items:center}
+.callTopBar>div{flex:1}
+.callTopBar b{display:block;font-size:15px}
+.callTopBar small{display:flex;align-items:center;gap:4px;color:rgba(255,255,255,.7);font-size:11px}
+.callTopBar span{display:block;color:rgba(255,255,255,.6);font-size:12px}
+.callTopActions{display:flex;gap:8px;flex:0!important}
+.callInfo{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;text-align:center}
+.callAvatar{width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;font-size:32px;font-weight:700;display:grid;place-items:center}
+.callInfo h2{margin:0;font-size:22px}
+.callInfo p{margin:0;color:rgba(255,255,255,.7)}
+.videoStage{position:absolute;inset:0;background:#000}
+.videoStage video{width:100%;height:100%;object-fit:cover}
+.videoStage .local{position:absolute;width:110px;height:150px;border-radius:var(--radius-md);border:2px solid rgba(255,255,255,.8);object-fit:cover;box-shadow:var(--shadow-lg)}
+.callBtns{display:flex;justify-content:center;gap:14px;padding:20px 18px 32px;flex-wrap:wrap}
+.callBtns button{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:9px}
+.callBtns button.off{background:#fff;color:#111}
+.callBtns button.danger{background:var(--red)}
+.mini{position:fixed;right:20px;bottom:20px;z-index:70;border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);cursor:pointer;overflow:hidden}
+.mini.videoMini{width:140px;height:190px;background:#000}
+.miniRemoteVideo{width:100%;height:100%;object-fit:cover}
+.miniLocalVideo{position:absolute;width:44px;height:60px;right:8px;top:8px;border-radius:8px;object-fit:cover;border:1px solid rgba(255,255,255,.6)}
+.miniOverlay{position:absolute;left:0;right:0;bottom:0;padding:8px;background:linear-gradient(0deg,rgba(0,0,0,.7),transparent);color:#fff}
+.miniOverlay b{display:block;font-size:11px}
+.miniOverlay small{font-size:10px;opacity:.8}
+.miniVideoControls{position:absolute;top:8px;left:8px}
+.miniEnd{width:28px;height:28px;border-radius:50%;display:grid;place-items:center}
+.callOptionsSheet{position:absolute;left:16px;right:16px;bottom:110px;background:var(--panel);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:10px;color:var(--text)}
+.callOptionsSheet button{width:100%;display:flex;align-items:center;gap:12px;padding:10px 8px;text-align:left;background:transparent;border-radius:var(--radius-sm)}
+.callOptionsSheet button:hover{background:var(--panel2)}
+.callOptionsSheet b{color:var(--text);font-size:13px}
+.callOptionsSheet small{display:block;color:var(--muted);font-size:11px}
