@@ -277,6 +277,14 @@ const VoiceMessage = ({ src, mine = false, onClick }) => {
   );
 };
 const cid = (a, b) => [String(a), String(b)].sort().join('-');
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
 const t = v => {
   try {
     return new Date(v).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -511,14 +519,9 @@ export default function App() {
 
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
-
-    navigator.serviceWorker.getRegistrations?.()
-      .then(registrations => registrations.forEach(registration => registration.unregister()))
-      .catch(() => {});
-
-    window.caches?.keys?.()
-      .then(keys => Promise.all(keys.map(key => window.caches.delete(key))))
-      .catch(() => {});
+    navigator.serviceWorker.register('/sw.js').catch(error => {
+      console.error('Service worker registration failed', error);
+    });
   }, []);
 
   useEffect(() => () => {
@@ -720,9 +723,42 @@ export default function App() {
     }
   }
 
+  async function subscribeToPush() {
+    try {
+      if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+      if (!('Notification' in window)) return;
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') return;
+      }
+      if (Notification.permission !== 'granted') return;
+
+      const { publicKey } = await api('/api/push/vapid-public-key').catch(() => ({}));
+      if (!publicKey) return;
+
+      const registration = await navigator.serviceWorker.ready;
+      let subscription = await registration.pushManager.getSubscription();
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicKey)
+        });
+      }
+
+      await api('/api/push/subscribe', {
+        method: 'POST',
+        body: JSON.stringify(subscription.toJSON())
+      });
+    } catch (error) {
+      console.error('Push subscription failed', error.message);
+    }
+  }
+
   async function enterApp() {
     if (socketReady.current) return;
     socketReady.current = true;
+
+    subscribeToPush();
 
     const s = connectSocket();
 
