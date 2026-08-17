@@ -31,19 +31,21 @@ const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || '').trim();
 const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || '').trim();
 const VAPID_SUBJECT = (process.env.VAPID_SUBJECT || 'mailto:support@example.com').trim();
 const PUSH_CONFIGURED = Boolean(VAPID_PUBLIC_KEY && VAPID_PRIVATE_KEY);
-const R2_ENDPOINT = (process.env.R2_ENDPOINT || '').trim();
-const R2_ACCESS_KEY_ID = (process.env.R2_ACCESS_KEY_ID || '').trim();
-const R2_SECRET_ACCESS_KEY = (process.env.R2_SECRET_ACCESS_KEY || '').trim();
-const R2_BUCKET = (process.env.R2_BUCKET || '').trim();
-const R2_PUBLIC_URL = (process.env.R2_PUBLIC_URL || '').trim().replace(/\/+$/, '');
-const R2_CONFIGURED = Boolean(R2_ENDPOINT && R2_ACCESS_KEY_ID && R2_SECRET_ACCESS_KEY && R2_BUCKET && R2_PUBLIC_URL);
-const r2Client = R2_CONFIGURED ? new S3Client({
-  region: 'auto',
-  endpoint: R2_ENDPOINT,
-  credentials: { accessKeyId: R2_ACCESS_KEY_ID, secretAccessKey: R2_SECRET_ACCESS_KEY }
+const STORAGE_ENDPOINT = (process.env.STORAGE_ENDPOINT || '').trim();
+const STORAGE_REGION = (process.env.STORAGE_REGION || 'auto').trim();
+const STORAGE_ACCESS_KEY_ID = (process.env.STORAGE_ACCESS_KEY_ID || '').trim();
+const STORAGE_SECRET_ACCESS_KEY = (process.env.STORAGE_SECRET_ACCESS_KEY || '').trim();
+const STORAGE_BUCKET = (process.env.STORAGE_BUCKET || '').trim();
+const STORAGE_PUBLIC_URL = (process.env.STORAGE_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+const STORAGE_CONFIGURED = Boolean(STORAGE_ENDPOINT && STORAGE_ACCESS_KEY_ID && STORAGE_SECRET_ACCESS_KEY && STORAGE_BUCKET && STORAGE_PUBLIC_URL);
+const r2Client = STORAGE_CONFIGURED ? new S3Client({
+  region: STORAGE_REGION,
+  endpoint: STORAGE_ENDPOINT,
+  forcePathStyle: true,
+  credentials: { accessKeyId: STORAGE_ACCESS_KEY_ID, secretAccessKey: STORAGE_SECRET_ACCESS_KEY }
 }) : null;
-if (!R2_CONFIGURED) {
-  console.log('Flicks video feed disabled: R2_ENDPOINT/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET/R2_PUBLIC_URL not configured.');
+if (!STORAGE_CONFIGURED) {
+  console.log('Flicks video feed disabled: STORAGE_ENDPOINT/STORAGE_ACCESS_KEY_ID/STORAGE_SECRET_ACCESS_KEY/STORAGE_BUCKET/STORAGE_PUBLIC_URL not configured.');
 }
 if (PUSH_CONFIGURED) {
   webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
@@ -157,12 +159,12 @@ const flickUpload = multer({
 
 async function uploadToR2(buffer, key, contentType) {
   await r2Client.send(new PutObjectCommand({
-    Bucket: R2_BUCKET,
+    Bucket: STORAGE_BUCKET,
     Key: key,
     Body: buffer,
     ContentType: contentType
   }));
-  return `${R2_PUBLIC_URL}/${key}`;
+  return `${STORAGE_PUBLIC_URL}/${key}`;
 }
 
 const online = new Map();
@@ -2374,11 +2376,11 @@ app.post('/api/upload', auth, uploadRateLimit, upload.single('file'), asyncRoute
 }));
 
 app.get('/api/flicks/config', auth, (req, res) => {
-  res.json({ configured: R2_CONFIGURED });
+  res.json({ configured: STORAGE_CONFIGURED });
 });
 
 app.post('/api/flicks', auth, flickUpload.single('video'), asyncRoute(async (req, res) => {
-  if (!R2_CONFIGURED) return res.status(503).json({ error: 'Video feed is not configured yet.' });
+  if (!STORAGE_CONFIGURED) return res.status(503).json({ error: 'Video feed is not configured yet.' });
   if (!req.file) return res.status(400).json({ error: 'Video file required.' });
 
   const caption = clean(req.body.caption || '').slice(0, 500);
@@ -2459,11 +2461,11 @@ app.delete('/api/flicks/:id', auth, asyncRoute(async (req, res) => {
   );
   if (!result.rows.length) return res.status(404).json({ error: 'Flick not found.' });
 
-  if (R2_CONFIGURED) {
+  if (STORAGE_CONFIGURED) {
     const videoUrl = result.rows[0].video_url;
-    if (videoUrl.startsWith(R2_PUBLIC_URL + '/')) {
-      const key = videoUrl.slice(R2_PUBLIC_URL.length + 1);
-      r2Client.send(new DeleteObjectCommand({ Bucket: R2_BUCKET, Key: key })).catch(error => console.error('r2 delete', error.message));
+    if (videoUrl.startsWith(STORAGE_PUBLIC_URL + '/')) {
+      const key = videoUrl.slice(STORAGE_PUBLIC_URL.length + 1);
+      r2Client.send(new DeleteObjectCommand({ Bucket: STORAGE_BUCKET, Key: key })).catch(error => console.error('r2 delete', error.message));
     }
   }
   res.json({ ok: true });
