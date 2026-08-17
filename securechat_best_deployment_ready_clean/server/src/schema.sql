@@ -8,6 +8,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_created_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS two_step_pin_hash TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(255);
+CREATE TABLE IF NOT EXISTS password_resets(
+ id UUID PRIMARY KEY DEFAULT gen_random_uuid(), user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+ otp_hash TEXT NOT NULL, expires_at TIMESTAMPTZ NOT NULL, used_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT NOW());
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id,created_at);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_provider VARCHAR(20);
 ALTER TABLE users ADD COLUMN IF NOT EXISTS oauth_subject TEXT;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oauth_identity ON users(oauth_provider,oauth_subject) WHERE oauth_provider IS NOT NULL AND oauth_subject IS NOT NULL;

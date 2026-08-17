@@ -5,7 +5,7 @@ import {
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
-  MonitorUp, Hand, Info
+  MonitorUp, Hand, Info, Mail
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, API_URL
@@ -350,13 +350,15 @@ export default function App() {
   const [form, setForm] = useState({
     username: '',
     phone: '',
+    email: '',
     password: '',
     confirmPassword: '',
     twoStepPin: '',
     resetPhone: '',
-    recoveryCode: '',
+    resetOtp: '',
     resetPassword: ''
   });
+  const [resetStep, setResetStep] = useState('phone');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
@@ -609,6 +611,7 @@ export default function App() {
         body: JSON.stringify({
           username: form.username,
           phone: form.phone,
+          email: form.email,
           password: form.password,
           deviceName: navigator.userAgent
         })
@@ -660,6 +663,24 @@ export default function App() {
     window.location.href = `${API_URL}/api/auth/oauth/${provider}/start?deviceName=${deviceName}`;
   }
 
+  async function requestReset(e) {
+    e.preventDefault();
+    setErr('');
+    setAuthLoading(true);
+    try {
+      await api('/api/auth/request-reset', {
+        method: 'POST',
+        body: JSON.stringify({ phone: form.resetPhone })
+      });
+      setResetStep('otp');
+      setErr('If that phone is registered, a code was emailed to you.');
+    } catch (error) {
+      setErr(error.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   async function resetPassword(e) {
     e.preventDefault();
     setErr('');
@@ -670,16 +691,17 @@ export default function App() {
         method: 'POST',
         body: JSON.stringify({
           phone: form.resetPhone,
-          recoveryCode: form.recoveryCode,
+          otp: form.resetOtp,
           password: form.resetPassword
         })
       });
       setAuthMode('login');
+      setResetStep('phone');
       setForm(current => ({
         ...current,
         password: '',
         resetPassword: '',
-        recoveryCode: ''
+        resetOtp: ''
       }));
       setErr('Password changed. Please log in with your new password.');
     } catch (error) {
@@ -3466,7 +3488,7 @@ export default function App() {
 
                 <div className="authHeading">
                   <h1>{authMode === 'register' ? 'Create Account' : authMode === 'reset' ? 'Reset Password' : 'Welcome Back'}</h1>
-                  <p>{authMode === 'register' ? "Let's get you started!" : authMode === 'reset' ? 'Use your recovery code to set a new password.' : 'Glad to see you again!'}</p>
+                  <p>{authMode === 'register' ? "Let's get you started!" : authMode === 'reset' ? (resetStep === 'phone' ? "We'll email you a reset code." : 'Enter the code we emailed you.') : 'Glad to see you again!'}</p>
                 </div>
 
                 {authMode !== 'reset' && (
@@ -3491,6 +3513,7 @@ export default function App() {
                       <label><input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me</label>
                       <button type="button" className="link" onClick={() => {
                         setErr('');
+                        setResetStep('phone');
                         setAuthMode('reset');
                       }}>
                         Forgot password?
@@ -3508,13 +3531,11 @@ export default function App() {
                   </form>
                 )}
 
-                {authMode === 'reset' && (
-                  <form onSubmit={resetPassword} className="opalForm">
+                {authMode === 'reset' && resetStep === 'phone' && (
+                  <form onSubmit={requestReset} className="opalForm">
                     <label className="opalInput"><Phone /><input placeholder="Registered phone number" value={form.resetPhone} onChange={e => f('resetPhone', e.target.value)} required /></label>
-                    <label className="opalInput"><KeyRound /><input placeholder="Recovery code" value={form.recoveryCode} onChange={e => f('recoveryCode', e.target.value.toUpperCase())} required /></label>
-                    <label className="opalInput"><Lock /><input placeholder="New password" type={showPassword ? 'text' : 'password'} value={form.resetPassword} onChange={e => f('resetPassword', e.target.value)} minLength={8} required /><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></label>
                     <button className="primary opalPrimary" disabled={authLoading}>
-                      {authLoading ? 'Changing password...' : 'Reset Password'}
+                      {authLoading ? 'Sending code...' : 'Send Reset Code'}
                     </button>
                     <p className="authSwitch">Remembered it? <button type="button" onClick={() => {
                       setErr('');
@@ -3523,10 +3544,22 @@ export default function App() {
                   </form>
                 )}
 
+                {authMode === 'reset' && resetStep === 'otp' && (
+                  <form onSubmit={resetPassword} className="opalForm">
+                    <label className="opalInput"><KeyRound /><input placeholder="6-digit code from email" inputMode="numeric" maxLength="6" value={form.resetOtp} onChange={e => f('resetOtp', e.target.value.replace(/\D/g, ''))} required /></label>
+                    <label className="opalInput"><Lock /><input placeholder="New password" type={showPassword ? 'text' : 'password'} value={form.resetPassword} onChange={e => f('resetPassword', e.target.value)} minLength={8} required /><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></label>
+                    <button className="primary opalPrimary" disabled={authLoading}>
+                      {authLoading ? 'Changing password...' : 'Reset Password'}
+                    </button>
+                    <p className="authSwitch"><button type="button" onClick={() => setResetStep('phone')}>Use a different phone</button></p>
+                  </form>
+                )}
+
                 {authMode === 'register' && (
                   <form onSubmit={register} className="opalForm">
                     <label className="opalInput"><User /><input placeholder="Full name" value={form.username} onChange={e => f('username', e.target.value)} /></label>
                     <label className="opalInput"><Phone /><input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} /></label>
+                    <label className="opalInput"><Mail /><input placeholder="Email address" type="email" value={form.email} onChange={e => f('email', e.target.value)} /></label>
                     <label className="opalInput"><Lock /><input placeholder="Password" type={showPassword ? 'text' : 'password'} value={form.password} onChange={e => f('password', e.target.value)} /><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></label>
                     <label className="opalInput"><Lock /><input placeholder="Confirm password" type={showConfirmPassword ? 'text' : 'password'} value={form.confirmPassword} onChange={e => f('confirmPassword', e.target.value)} /><button type="button" onClick={() => setShowConfirmPassword(value => !value)}>{showConfirmPassword ? <EyeOff /> : <Eye />}</button></label>
                     <label className="termsRow"><input type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} /> I agree to the <span>Terms of Service</span> and <span>Privacy Policy</span></label>
