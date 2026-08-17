@@ -205,6 +205,28 @@ function clean(v) {
   return typeof v === 'string' ? v.trim().replace(/[<>]/g, '') : '';
 }
 
+function isEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+}
+
+const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
+const RESEND_FROM = process.env.RESEND_FROM || 'SecureChat <onboarding@resend.dev>';
+
+async function sendOtpEmail(to, otp) {
+  const subject = 'SecureChat password reset code';
+  const text = `Your SecureChat password reset code is ${otp}. It expires in 10 minutes. If you did not request this, ignore this email.`;
+  if (RESEND_API_KEY) {
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { Authorization: 'Bearer ' + RESEND_API_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ from: RESEND_FROM, to: [to], subject, text })
+    });
+    if (!r.ok) throw new Error('Email send failed: ' + (await r.text()));
+    return;
+  }
+  console.warn('RESEND_API_KEY not configured; OTP for', to, 'is', otp);
+}
+
 function generateRecoveryCode() {
   return crypto.randomBytes(10).toString('hex').toUpperCase().match(/.{1,4}/g).join('-');
 }
@@ -796,15 +818,20 @@ app.all('/api/auth/oauth/:provider/callback', authRateLimit, asyncRoute(async (r
 app.post('/api/auth/register', authRateLimit, async (req, res) => {
   const username = clean(req.body.username);
   const phone = clean(req.body.phone);
+  const email = clean(req.body.email).toLowerCase();
   const password = String(req.body.password || '');
 
   if (username.length < 2) return res.status(400).json({ error: 'Name must be at least 2 characters.' });
   if (phone.length < 6) return res.status(400).json({ error: 'Enter a valid phone number.' });
+  if (!isEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
   if (password.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
 
   try {
     if ((await pool.query('SELECT id FROM users WHERE phone=$1', [phone])).rows.length) {
       return res.status(409).json({ error: 'Phone already registered.' });
+    }
+    if ((await pool.query('SELECT id FROM users WHERE email=$1', [email])).rows.length) {
+      return res.status(409).json({ error: 'Email already registered.' });
     }
 
     const hash = await bcrypt.hash(password, 12);
@@ -812,10 +839,10 @@ app.post('/api/auth/register', authRateLimit, async (req, res) => {
     const recoveryCodeHash = await bcrypt.hash(recoveryCode, 12);
 
     const r = await pool.query(
-      `INSERT INTO users(username,phone,password_hash,recovery_code_hash,recovery_code_created_at)
-       VALUES($1,$2,$3,$4,NOW())
+      `INSERT INTO users(username,phone,email,password_hash,recovery_code_hash,recovery_code_created_at)
+       VALUES($1,$2,$3,$4,$5,NOW())
        RETURNING id,username,phone,about,avatar_url,last_seen,session_version`,
-      [username, phone, hash, recoveryCodeHash]
+      [username, phone, email, hash, recoveryCodeHash]
     );
 
     const u = user(r.rows[0]);
@@ -868,39 +895,57 @@ app.post('/api/auth/login', authRateLimit, async (req, res) => {
   }
 });
 
+app.post('/api/auth/request-reset', authRateLimit, asyncRoute(async (req, res) => {
+  const phone = clean(req.body.phone);
+  if (phone.length < 6) return res.status(400).json({ error: 'Enter registered phone number.' });
+
+  const r = await pool.query('SELECT id,email FROM users WHERE phone=$1', [phone]);
+  const u = r.rows[0];
+  if (!u || !u.email) return res.json({ ok: true });
+
+  const otp = String(crypto.randomInt(100000, 1000000));
+  const otpHash = await bcrypt.hash(otp, 10);
+  await pool.query(
+    "INSERT INTO password_resets(user_id,otp_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '10 minutes')",
+    [u.id, otpHash]
+  );
+  await sendOtpEmail(u.email, otp);
+  res.json({ ok: true });
+}));
+
 app.post('/api/auth/reset-password', authRateLimit, asyncRoute(async (req, res) => {
   const phone = clean(req.body.phone);
-  const recoveryCode = clean(req.body.recoveryCode).toUpperCase();
+  const otp = clean(req.body.otp);
   const password = String(req.body.password || '');
 
-  if (phone.length < 6 || !recoveryCode) {
-    return res.status(400).json({ error: 'Phone number and recovery code are required.' });
-  }
+  if (phone.length < 6) return res.status(400).json({ error: 'Enter registered phone number.' });
+  if (!/^\d{6}$/.test(otp)) return res.status(400).json({ error: 'Enter the 6-digit code.' });
   if (password.length < 8) {
     return res.status(400).json({ error: 'Password must be at least 8 characters.' });
   }
 
-  const result = await pool.query(
-    'SELECT id,recovery_code_hash FROM users WHERE phone=$1',
-    [phone]
-  );
-  const account = result.rows[0];
-  const valid = account?.recovery_code_hash
-    ? await bcrypt.compare(recoveryCode, account.recovery_code_hash)
-    : false;
+  const ur = await pool.query('SELECT id FROM users WHERE phone=$1', [phone]);
+  const account = ur.rows[0];
+  if (!account) return res.status(404).json({ error: 'Phone number not registered.' });
 
+  const rr = await pool.query(
+    'SELECT * FROM password_resets WHERE user_id=$1 AND used_at IS NULL AND expires_at>NOW() ORDER BY created_at DESC LIMIT 1',
+    [account.id]
+  );
+  const reset = rr.rows[0];
+  const valid = reset ? await bcrypt.compare(otp, reset.otp_hash) : false;
   if (!valid) {
-    return res.status(400).json({ error: 'Invalid phone number or recovery code.' });
+    return res.status(401).json({ error: 'Invalid or expired code.' });
   }
 
   const passwordHash = await bcrypt.hash(password, 12);
   await pool.query(
     `UPDATE users
-     SET password_hash=$1,recovery_code_hash=NULL,recovery_code_created_at=NULL,
-         session_version=session_version+1
+     SET password_hash=$1,session_version=session_version+1
      WHERE id=$2`,
     [passwordHash, account.id]
   );
+  await pool.query('UPDATE password_resets SET used_at=NOW() WHERE id=$1', [reset.id]);
 
   res.json({ ok: true });
 }));
