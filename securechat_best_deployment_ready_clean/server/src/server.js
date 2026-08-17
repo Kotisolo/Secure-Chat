@@ -1391,11 +1391,11 @@ app.get('/api/status', auth, asyncRoute(async (req, res) => {
     `SELECT s.id,s.user_id,u.username,u.avatar_url,s.kind,s.created_at,s.expires_at,
       s.encrypted_payloads ->> $1::text payload,
       (SELECT COUNT(*)::int FROM status_views v WHERE v.status_id=s.id) view_count,
-      EXISTS(SELECT 1 FROM status_views v WHERE v.status_id=s.id AND v.viewer_id=$1) viewed,
-      EXISTS(SELECT 1 FROM status_mutes sm WHERE sm.user_id=$1 AND sm.muted_user_id=s.user_id) muted
+      EXISTS(SELECT 1 FROM status_views v WHERE v.status_id=s.id AND v.viewer_id=$1::uuid) viewed,
+      EXISTS(SELECT 1 FROM status_mutes sm WHERE sm.user_id=$1::uuid AND sm.muted_user_id=s.user_id) muted
      FROM status_updates s JOIN users u ON u.id=s.user_id
      WHERE s.deleted_at IS NULL AND s.expires_at>NOW()
-       AND (s.user_id=$1 OR s.encrypted_payloads ? $1::text)
+       AND (s.user_id=$1::uuid OR s.encrypted_payloads ? $1::text)
      ORDER BY s.created_at DESC`,
     [req.user.id]
   );

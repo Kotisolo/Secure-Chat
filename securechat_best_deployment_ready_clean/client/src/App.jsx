@@ -3578,9 +3578,9 @@ export default function App() {
           action: openSecurity
         },
         {
-          label: 'AI Assistant',
-          detail: 'Assistant settings and preferences',
-          icon: <Languages />,
+          label: 'Flicks',
+          detail: 'Short-video feed settings',
+          icon: <Video />,
           action: () => setMobileTab('ai')
         }
       ]
@@ -3801,15 +3801,12 @@ export default function App() {
           }}><Plus /> New Chat</button>
           <div className="railMenu">
             <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('all'); }}><MessageCircle /> Chats <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0) || ''}</span></button>
-            <button className={chatListFilter === 'groups' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('groups'); }}><Users /> Groups</button>
+            <button onClick={loadStatuses}><History /> Status</button>
             <button onClick={loadCallHistory}><Phone /> Calls</button>
             <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /> Flicks</button>
-            <button onClick={() => { setChatListFilter('all'); setMobileTab('chats'); }}><User /> Contacts</button>
-            <button onClick={() => alert('Saved messages will be connected in the saved-chats phase.')}><Star /> Saved Messages</button>
           </div>
           <div className="railFooter">
-            <button onClick={() => { setShowOpalMenu(false); setMobileTab('settings'); setActive(null); }}><Settings /> Settings</button>
-            <button onClick={requestNotifications}><Bell /> Notifications</button>
+            <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setShowOpalMenu(false); setMobileTab('settings'); setActive(null); }}><Settings /> Settings</button>
           </div>
           <div className="me">
             <Avatar user={me} className="avatarButton" onClick={() => setProfile(me)} title="Change profile photo" />
@@ -4108,9 +4105,9 @@ export default function App() {
         </div>}
         <nav className="bottomNav" aria-label="Primary navigation">
           <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Chats</span></button>
-          <button className={mobileTab === 'calls' ? 'active' : ''} onClick={() => { setMobileTab('calls'); loadCallHistory(); }}><Phone /><span>Calls</span></button>
+          <button onClick={loadStatuses}><History /><span>Status</span></button>
+          <button onClick={loadCallHistory}><Phone /><span>Calls</span></button>
           <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /><span>Flicks</span></button>
-          <button className={mobileTab === 'status' ? 'active' : ''} onClick={() => { setMobileTab('status'); loadStatuses(); }}><History /><span>Moments</span></button>
           <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setShowOpalMenu(false); setMobileTab('settings'); setActive(null); }}><Settings /><span>Settings</span></button>
         </nav>
         </div>
