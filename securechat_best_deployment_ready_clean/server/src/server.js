@@ -1044,7 +1044,13 @@ app.post('/api/auth/request-login-otp', authRateLimit, asyncRoute(async (req, re
 
   const r = await pool.query('SELECT id,email FROM users WHERE phone=$1', [phone]);
   const u = r.rows[0];
-  if (!u || !u.email) return res.json({ ok: true });
+  if (!u) return res.json({ ok: true });
+  if (!u.email) {
+    return res.status(400).json({
+      error: 'This account has no email on file, so we cannot send a login code. Please contact support to add one before you can log in.',
+      noEmail: true
+    });
+  }
 
   const otp = String(crypto.randomInt(100000, 1000000));
   const otpHash = await bcrypt.hash(otp, 10);
