@@ -365,7 +365,9 @@ export default function App() {
     resetPhone: '',
     resetOtp: '',
     resetPassword: '',
-    loginOtp: ''
+    loginOtp: '',
+    loginPassword: '',
+    loginNewEmail: ''
   });
   const [resetStep, setResetStep] = useState('phone');
   const [loginStep, setLoginStep] = useState('phone');
@@ -645,6 +647,37 @@ export default function App() {
       });
       setLoginStep('otp');
       setErr('If that phone is registered, a login code was emailed to you.');
+    } catch (x) {
+      if (x.noEmail) {
+        setLoginStep('add-email');
+        setErr('');
+      } else {
+        setErr(x.message);
+      }
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
+  async function addLoginEmail(e) {
+    e.preventDefault();
+    setErr('');
+    setAuthLoading(true);
+    try {
+      await api('/api/auth/add-login-email', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: form.phone,
+          password: form.loginPassword,
+          email: form.loginNewEmail
+        })
+      });
+      await api('/api/auth/request-login-otp', {
+        method: 'POST',
+        body: JSON.stringify({ phone: form.phone })
+      });
+      setLoginStep('otp');
+      setErr('Email added. A login code was emailed to you.');
     } catch (x) {
       setErr(x.message);
     } finally {
@@ -3588,6 +3621,23 @@ export default function App() {
                     </div>
                     <button className="primary opalPrimary" disabled={authLoading}>
                       {authLoading ? 'Signing in...' : 'Log In'}
+                    </button>
+                    <p className="authSwitch">Don't have an account? <button type="button" onClick={() => setAuthMode('register')}>Register</button></p>
+                  </form>
+                )}
+
+                {authMode === 'login' && loginStep === 'add-email' && (
+                  <form onSubmit={addLoginEmail} className="opalForm">
+                    <p style={{ margin: '0 0 4px', color: 'var(--muted)', fontSize: 13 }}>
+                      This account doesn't have an email on file yet. Verify your password and add one to receive login codes.
+                    </p>
+                    <label className="opalInput"><Lock /><input placeholder="Current password" type={showPassword ? 'text' : 'password'} value={form.loginPassword} onChange={e => f('loginPassword', e.target.value)} required /><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></label>
+                    <label className="opalInput"><Mail /><input placeholder="Email address" type="email" value={form.loginNewEmail} onChange={e => f('loginNewEmail', e.target.value)} required /></label>
+                    <div className="authOptions">
+                      <button type="button" className="link" onClick={() => setLoginStep('phone')}>Use a different phone</button>
+                    </div>
+                    <button className="primary opalPrimary" disabled={authLoading}>
+                      {authLoading ? 'Saving...' : 'Add Email & Send Code'}
                     </button>
                     <p className="authSwitch">Don't have an account? <button type="button" onClick={() => setAuthMode('register')}>Register</button></p>
                   </form>
