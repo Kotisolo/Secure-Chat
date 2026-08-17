@@ -1062,6 +1062,27 @@ app.post('/api/auth/request-login-otp', authRateLimit, asyncRoute(async (req, re
   res.json({ ok: true });
 }));
 
+app.post('/api/auth/add-login-email', authRateLimit, asyncRoute(async (req, res) => {
+  const phone = clean(req.body.phone);
+  const password = String(req.body.password || '');
+  const email = clean(req.body.email).toLowerCase();
+
+  if (phone.length < 6) return res.status(400).json({ error: 'Enter your registered phone number.' });
+  if (!isEmail(email)) return res.status(400).json({ error: 'Enter a valid email address.' });
+
+  const ur = await pool.query('SELECT id,password_hash FROM users WHERE phone=$1', [phone]);
+  const u = ur.rows[0];
+  if (!u || !(await bcrypt.compare(password, u.password_hash))) {
+    return res.status(401).json({ error: 'Incorrect password.' });
+  }
+
+  const existing = await pool.query('SELECT id FROM users WHERE email=$1 AND id<>$2', [email, u.id]);
+  if (existing.rows.length) return res.status(409).json({ error: 'That email is already used by another account.' });
+
+  await pool.query('UPDATE users SET email=$1 WHERE id=$2', [email, u.id]);
+  res.json({ ok: true });
+}));
+
 app.post('/api/auth/login-otp', authRateLimit, asyncRoute(async (req, res) => {
   const phone = clean(req.body.phone);
   const otp = clean(req.body.otp);
