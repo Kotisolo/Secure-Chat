@@ -5301,7 +5301,6 @@ export default function App() {
                   <button type="button" onClick={createTextStatus}><Pencil /> Text</button>
                   <label><Image /> Photo<input hidden type="file" accept="image/*" onChange={e => createMediaStatus(e, 'image')} /></label>
                   <label><Video /> Video<input hidden type="file" accept="video/*" onChange={e => createMediaStatus(e, 'video')} /></label>
-                  <label><Mic /> Voice<input hidden type="file" accept="audio/*" onChange={e => createMediaStatus(e, 'audio')} /></label>
                 </div>
                 <details className="statusPrivacy">
                   <summary>Who will see it · {contacts.length - statusExcluded.length} contacts</summary>
