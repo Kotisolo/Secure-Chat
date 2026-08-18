@@ -1302,12 +1302,15 @@ export default function App() {
     setSelectedGroup(group);
     try {
       const history = await api(`/api/groups/${group.id}/messages`);
+      // decodeGroupMessage never throws - a message that fails to decrypt is
+      // shown inline as "Unable to decrypt this message" instead of blocking
+      // the rest of the conversation from loading.
       const decrypted = await Promise.all(history.map(message => decodeGroupMessage(message, group.id)));
       setGroupMessages(current => ({ ...current, [group.id]: decrypted }));
       await api(`/api/groups/${group.id}/read`, { method: 'POST', body: '{}' });
       loadGroups();
     } catch (error) {
-      alert('Could not open encrypted group chat: ' + error.message);
+      alert('Could not load this group: ' + error.message);
     }
   }
 
@@ -1348,7 +1351,13 @@ export default function App() {
   }
 
   async function decodeGroupMessage(message, groupId) {
-    const plaintext = await decryptGroupMessage(message.senderId, groupId, message.payload);
+    let plaintext;
+    try {
+      plaintext = await decryptGroupMessage(message.senderId, groupId, message.payload);
+    } catch (error) {
+      console.error('Group message decrypt failed', message.id, error.message);
+      return { ...message, body: 'Unable to decrypt this message.', decryptionFailed: true };
+    }
     try {
       const content = JSON.parse(plaintext);
       if (!content.fileUrl) return { ...message, body: plaintext };
