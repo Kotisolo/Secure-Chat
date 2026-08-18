@@ -1160,8 +1160,16 @@ app.post('/api/auth/request-login-otp', authRateLimit, asyncRoute(async (req, re
     "INSERT INTO login_otps(user_id,otp_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '10 minutes')",
     [u.id, otpHash]
   );
-  await sendOtpEmail(u.email, otp);
-  res.json({ ok: true });
+  try {
+    await sendOtpEmail(u.email, otp);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('sendOtpEmail failed', error.message);
+    res.status(503).json({
+      error: 'Email delivery is temporarily unavailable. Please log in with your password instead.',
+      emailUnavailable: true
+    });
+  }
 }));
 
 app.post('/api/auth/add-login-email', authRateLimit, asyncRoute(async (req, res) => {
@@ -1241,8 +1249,16 @@ app.post('/api/auth/request-reset', authRateLimit, asyncRoute(async (req, res) =
     "INSERT INTO password_resets(user_id,otp_hash,expires_at) VALUES($1,$2,NOW()+INTERVAL '10 minutes')",
     [u.id, otpHash]
   );
-  await sendOtpEmail(u.email, otp);
-  res.json({ ok: true });
+  try {
+    await sendOtpEmail(u.email, otp);
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('sendOtpEmail failed', error.message);
+    res.status(503).json({
+      error: 'Email delivery is temporarily unavailable. Please try again later, or use your recovery code instead.',
+      emailUnavailable: true
+    });
+  }
 }));
 
 app.post('/api/auth/reset-password', authRateLimit, asyncRoute(async (req, res) => {

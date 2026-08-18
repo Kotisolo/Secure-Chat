@@ -682,12 +682,16 @@ export default function App() {
           email: form.loginNewEmail
         })
       });
-      await api('/api/auth/request-login-otp', {
-        method: 'POST',
-        body: JSON.stringify({ phone: form.phone })
-      });
-      setLoginStep('otp');
-      setErr('Email added. A login code was emailed to you.');
+      try {
+        await api('/api/auth/request-login-otp', {
+          method: 'POST',
+          body: JSON.stringify({ phone: form.phone })
+        });
+        setLoginStep('otp');
+        setErr('Email added. A login code was emailed to you.');
+      } catch (otpError) {
+        setErr(`Email saved to your account. ${otpError.message}`);
+      }
     } catch (x) {
       setErr(x.message);
     } finally {
