@@ -3614,10 +3614,22 @@ export default function App() {
           action: openSecurity
         },
         {
-          label: 'Flicks',
-          detail: 'Short-video feed settings',
+          label: 'Flicks audience',
+          detail: flickAudience === 'everyone' ? 'New Flicks visible to everyone' : 'New Flicks visible to your contacts',
           icon: <Video />,
-          action: () => setMobileTab('ai')
+          action: () => setOptionPicker({
+            title: 'Who sees your new Flicks?',
+            options: [
+              { label: 'My contacts', value: 'contacts' },
+              { label: 'Everyone on Naad', value: 'everyone' }
+            ],
+            onPick: audience => {
+              setFlickAudience(audience);
+              alert(audience === 'everyone'
+                ? 'New Flicks you share will be visible to everyone on Naad.'
+                : 'New Flicks you share will be visible only to your contacts.');
+            }
+          })
         }
       ]
     },
