@@ -5,7 +5,7 @@ import {
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
-  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward, MailOpen, Pin, PinOff
+  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward, MailOpen, Pin, PinOff, Bookmark
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, ensureFileToken, API_URL
@@ -1944,7 +1944,7 @@ export default function App() {
     setShowScheduler(false);
 
     try {
-      const encryptedPayload = E2EE_ENABLED && ['text', 'sticker'].includes(tmp.kind)
+      const encryptedPayload = E2EE_ENABLED && ['text', 'sticker'].includes(tmp.kind) && String(active.id) !== String(me.id)
         ? await encryptMessage(active.id, c, tmp.body)
         : {};
       const saved = await api('/api/messages', {
@@ -2969,7 +2969,7 @@ export default function App() {
     if (!editingMessage || !text.trim()) return;
     const c = cid(me.id, active.id);
     try {
-      const encryptedPayload = E2EE_ENABLED
+      const encryptedPayload = E2EE_ENABLED && String(active.id) !== String(me.id)
         ? await encryptMessage(active.id, c, text.trim())
         : {};
       const updated = await api(`/api/messages/${encodeURIComponent(editingMessage.id)}`, {
@@ -4204,6 +4204,7 @@ export default function App() {
           }}><Plus /> New Chat</button>
           <div className="railMenu">
             <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('all'); }}><MessageCircle /> Chats <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0) || ''}</span></button>
+            <button onClick={() => { setMobileTab('chats'); openChat(me); }}><Bookmark /> Saved Messages</button>
             <button onClick={loadStatuses}><History /> Echoes</button>
             <button onClick={loadCallHistory}><Phone /> Calls</button>
             <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /> Flicks</button>
@@ -4408,6 +4409,15 @@ export default function App() {
         )}
 
         {['all', 'unread'].includes(chatListFilter) && <div className="list">
+          {chatListFilter === 'all' && !showArchived && !visibleContacts.some(u => String(u.id) === String(me?.id)) && (
+            <button className="chatMain savedMessagesEntry" onClick={() => openChat(me)}>
+              <span className="avatar savedMessagesAvatar"><Bookmark /></span>
+              <div>
+                <b>Saved Messages</b>
+                <span>Only visible to you</span>
+              </div>
+            </button>
+          )}
           {contacts.length === 0 && <p className="empty">Search a user to start chatting.</p>}
           {contacts.length > 0 && visibleContacts.length === 0 && (
             <p className="empty">{showArchived ? 'No archived chats yet.' : 'No chats in this view.'}</p>
@@ -4445,8 +4455,8 @@ export default function App() {
                 >
                 <Avatar user={u} />
                 <div>
-                  <b>{u.chat?.pinned ? '📌 ' : ''}{u.username}</b>
-                  <span>{p.body || u.phone}</span>
+                  <b>{u.chat?.pinned ? '📌 ' : ''}{String(u.id) === String(me.id) ? 'Saved Messages' : u.username}</b>
+                  <span>{p.body || (String(u.id) === String(me.id) ? 'Only visible to you' : u.phone)}</span>
                 </div>
                 {p.createdAt && <time>{t(p.createdAt)}</time>}
                 {u.chat?.unreadCount > 0 && <strong className="unreadBadge">{u.chat.unreadCount}</strong>}
@@ -4495,18 +4505,24 @@ export default function App() {
               <Avatar user={active} />
 
               <div className="title">
-                <b>{active.username}</b>
+                <b>{String(active.id) === String(me.id) ? 'Saved Messages' : active.username}</b>
                 <small>
-                  {typing
-                    ? 'typing...'
-                    : E2EE_ENABLED
-                      ? encryptionReady ? 'End-to-end encrypted beta' : 'Preparing encryption...'
-                      : active.online ? 'Online' : 'Private conversation'}
+                  {String(active.id) === String(me.id)
+                    ? 'Only visible to you'
+                    : typing
+                      ? 'typing...'
+                      : E2EE_ENABLED
+                        ? encryptionReady ? 'End-to-end encrypted beta' : 'Preparing encryption...'
+                        : active.online ? 'Online' : 'Private conversation'}
                 </small>
               </div>
 
-              <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
-              <button className="icon" onClick={() => startCall('video')}><Video /></button>
+              {String(active.id) !== String(me.id) && (
+                <>
+                  <button className="icon" onClick={() => startCall('audio')}><Phone /></button>
+                  <button className="icon" onClick={() => startCall('video')}><Video /></button>
+                </>
+              )}
               <button className="icon" onClick={() => setChatHeaderMenu(value => value === 'main' ? null : 'main')}><MoreVertical /></button>
             </header>
 
@@ -4527,8 +4543,12 @@ export default function App() {
                     <>
                       <button onClick={exportActiveChat}><Archive /> Export chat</button>
                       <button onClick={clearActiveChat}><Trash2 /> Clear chat</button>
-                      <button onClick={reportActiveChat}><Flag /> Report</button>
-                      <button onClick={blockActiveChat}><Ban /> Block</button>
+                      {String(active.id) !== String(me.id) && (
+                        <>
+                          <button onClick={reportActiveChat}><Flag /> Report</button>
+                          <button onClick={blockActiveChat}><Ban /> Block</button>
+                        </>
+                      )}
                       <button className="menuMoreButton" onClick={() => setChatHeaderMenu('main')}>‹ Back</button>
                     </>
                   )}
