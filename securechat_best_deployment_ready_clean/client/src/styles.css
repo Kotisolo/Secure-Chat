@@ -7780,3 +7780,12 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 @media(max-width:900px){
   .groupInfoSheet{width:100%;max-width:none}
 }
+
+/* ---------- group screen: real window size on desktop ---------- */
+/* The card had a width but no height, so it collapsed to its content - a
+   small floating box in the middle of a dimmed app, with a sliver of
+   message area. Give it chat-window proportions so it reads like the 1:1
+   conversation panel rather than a popup. */
+@media(min-width:901px){
+  .groupCard{width:min(1040px,92vw)!important;height:min(86vh,880px)!important;max-height:86vh!important}
+}
