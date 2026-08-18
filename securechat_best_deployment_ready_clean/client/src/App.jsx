@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
-  Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle, Volume1,
+  Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
@@ -84,7 +84,6 @@ const defaultMeteredTurnUrls = [
 ];
 
 const NORMAL_CALL_VOLUME = 0.35;
-const LOUD_SPEAKER_VOLUME = 1;
 const configuredTurnUrls = String(import.meta.env.VITE_TURN_URLS || import.meta.env.VITE_TURN_URL || '')
   .split(',')
   .map(url => url.trim())
@@ -3531,7 +3530,6 @@ export default function App() {
   const callContactName = call.title.split(' with ').pop() || call.title;
   const callDurationText = `${String(Math.floor(call.seconds / 60)).padStart(2, '0')}:${String(call.seconds % 60).padStart(2, '0')}`;
   const callCanUseVideo = call.type === 'video' || call.videoCapable;
-  const speakerOn = !speakerMuted && speakerVolume >= 0.8;
   const visibleContacts = contacts.filter(user => {
     if (Boolean(user.chat?.archived) !== showArchived) return false;
     if (chatListFilter === 'unread') return Number(user.chat?.unreadCount || 0) > 0;
@@ -4727,18 +4725,6 @@ export default function App() {
                 <span>Flip</span>
               </button>
             )}
-
-            <button
-              className={speakerMuted ? 'off' : ''}
-              onClick={() => {
-                setSpeakerMuted(false);
-                setSpeakerVolume(value => value >= 0.8 ? NORMAL_CALL_VOLUME : LOUD_SPEAKER_VOLUME);
-              }}
-              title={speakerOn ? 'Switch to normal volume' : 'Switch to loudspeaker'}
-            >
-              {speakerMuted ? <VolumeX /> : speakerOn ? <Volume2 /> : <Volume1 />}
-              <span>Speaker</span>
-            </button>
 
             <button onClick={() => setCallOptionsOpen(value => value ? null : 'quick')} title="More options">
               <MoreVertical />
