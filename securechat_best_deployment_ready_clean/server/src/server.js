@@ -1710,7 +1710,9 @@ app.get('/api/groups', auth, asyncRoute(async (req, res) => {
   res.json(result.rows.map(row => ({
     id: String(row.id), name: row.name, description: row.description,
     avatarUrl: row.avatar_url, role: row.role, members: row.members || [],
-    createdAt: row.created_at, unreadCount: row.unread_count, mutedUntil: row.muted_until
+    createdAt: row.created_at, unreadCount: row.unread_count, mutedUntil: row.muted_until,
+    sendMessagesPolicy: row.send_messages_policy, editInfoPolicy: row.edit_info_policy,
+    addMembersPolicy: row.add_members_policy
   })));
 }));
 
@@ -1741,13 +1743,40 @@ app.post('/api/groups', auth, asyncRoute(async (req, res) => {
   }
 }));
 
+async function groupMemberRole(groupId, userId) {
+  const row = await pool.query('SELECT role FROM group_members WHERE group_id=$1 AND user_id=$2', [groupId, userId]);
+  return row.rows[0]?.role || null;
+}
+
+async function groupPermissionAllowed(groupId, userId, policyColumn) {
+  const role = await groupMemberRole(groupId, userId);
+  if (!role) return false;
+  if (role === 'admin') return true;
+  const row = await pool.query(`SELECT ${policyColumn} AS policy FROM chat_groups WHERE id=$1`, [groupId]);
+  return row.rows[0]?.policy === 'everyone';
+}
+
 app.patch('/api/groups/:groupId', auth, asyncRoute(async (req, res) => {
-  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
-  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can edit the group.' });
+  const allowed = await groupPermissionAllowed(req.params.groupId, req.user.id, 'edit_info_policy');
+  if (!allowed) return res.status(403).json({ error: 'You do not have permission to edit this group.' });
   const name = clean(req.body.name);
   if (name.length < 2) return res.status(400).json({ error: 'Group name must be at least 2 characters.' });
   await pool.query('UPDATE chat_groups SET name=$1,description=$2,updated_at=NOW() WHERE id=$3', [name.slice(0, 120), clean(req.body.description).slice(0, 500), req.params.groupId]);
   res.json({ ok: true });
+}));
+
+app.patch('/api/groups/:groupId/permissions', auth, asyncRoute(async (req, res) => {
+  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [req.params.groupId, req.user.id, 'admin']);
+  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can change group permissions.' });
+  const asPolicy = value => (value === 'everyone' ? 'everyone' : 'admins');
+  const sendMessagesPolicy = asPolicy(req.body.sendMessagesPolicy);
+  const editInfoPolicy = asPolicy(req.body.editInfoPolicy);
+  const addMembersPolicy = asPolicy(req.body.addMembersPolicy);
+  await pool.query(
+    'UPDATE chat_groups SET send_messages_policy=$1,edit_info_policy=$2,add_members_policy=$3,updated_at=NOW() WHERE id=$4',
+    [sendMessagesPolicy, editInfoPolicy, addMembersPolicy, req.params.groupId]
+  );
+  res.json({ sendMessagesPolicy, editInfoPolicy, addMembersPolicy });
 }));
 
 app.patch('/api/groups/:groupId/members/:userId/role', auth, asyncRoute(async (req, res) => {
@@ -1783,8 +1812,8 @@ app.post('/api/groups/join/:token', auth, asyncRoute(async (req, res) => {
 app.post('/api/groups/:groupId/members', auth, asyncRoute(async (req, res) => {
   const groupId = req.params.groupId;
   const userId = clean(req.body.userId);
-  const admin = await pool.query('SELECT 1 FROM group_members WHERE group_id=$1 AND user_id=$2 AND role=$3', [groupId, req.user.id, 'admin']);
-  if (!admin.rows.length) return res.status(403).json({ error: 'Only group admins can add members.' });
+  const allowed = await groupPermissionAllowed(groupId, req.user.id, 'add_members_policy');
+  if (!allowed) return res.status(403).json({ error: 'You do not have permission to add members to this group.' });
   if (!validUuid(userId)) return res.status(400).json({ error: 'Invalid user.' });
   await pool.query('INSERT INTO group_members(group_id,user_id) VALUES($1,$2) ON CONFLICT DO NOTHING', [groupId, userId]);
   res.json({ ok: true });
@@ -1853,9 +1882,16 @@ app.post('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
   if (!payloads || typeof payloads !== 'object' || Array.isArray(payloads)) {
     return res.status(400).json({ error: 'Encrypted member payloads are required.' });
   }
-  const members = await pool.query('SELECT user_id FROM group_members WHERE group_id=$1', [req.params.groupId]);
-  if (!members.rows.some(row => String(row.user_id) === String(req.user.id))) {
+  const members = await pool.query('SELECT user_id,role FROM group_members WHERE group_id=$1', [req.params.groupId]);
+  const sender = members.rows.find(row => String(row.user_id) === String(req.user.id));
+  if (!sender) {
     return res.status(403).json({ error: 'You are not a member of this group.' });
+  }
+  if (sender.role !== 'admin') {
+    const group = await pool.query('SELECT send_messages_policy FROM chat_groups WHERE id=$1', [req.params.groupId]);
+    if (group.rows[0]?.send_messages_policy === 'admins') {
+      return res.status(403).json({ error: 'Only group admins can send messages in this group.' });
+    }
   }
   for (const member of members.rows) {
     const payload = payloads[String(member.user_id)];

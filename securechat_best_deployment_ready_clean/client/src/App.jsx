@@ -1550,6 +1550,25 @@ export default function App() {
     loadGroups();
   }
 
+  async function updateGroupPermission(key, value) {
+    if (!selectedGroup || selectedGroup.role !== 'admin') return;
+    try {
+      const result = await api(`/api/groups/${selectedGroup.id}/permissions`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          sendMessagesPolicy: selectedGroup.sendMessagesPolicy,
+          editInfoPolicy: selectedGroup.editInfoPolicy,
+          addMembersPolicy: selectedGroup.addMembersPolicy,
+          [key]: value
+        })
+      });
+      setSelectedGroup(current => ({ ...current, ...result }));
+      loadGroups();
+    } catch (error) {
+      alert('Could not update group permissions: ' + error.message);
+    }
+  }
+
   async function sendGroupFile(event, kind) {
     const file = event.target.files?.[0];
     event.target.value = '';
@@ -5545,41 +5564,47 @@ export default function App() {
                   <label title="File"><Paperclip /> File<input hidden type="file" onChange={e => { sendGroupFile(e, 'file'); setGroupAttachOpen(false); }} /></label>
                 </div>
               )}
-              <div className="groupCompose">
-                <button
-                  className="groupComposeIcon"
-                  onClick={() => { setGroupAttachOpen(value => !value); setGroupStickersOpen(false); }}
-                  title="Attach"
-                >
-                  {groupAttachOpen ? <X /> : <Plus />}
-                </button>
-                <input
-                  value={groupText}
-                  onChange={e => {
-                    setGroupText(e.target.value);
-                    emitGroupTyping();
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter') sendGroupMessage();
-                  }}
-                  placeholder="Message"
-                />
-                <button
-                  className="groupComposeIcon"
-                  onClick={() => { setGroupStickersOpen(value => !value); setGroupAttachOpen(false); }}
-                  title="Emoji"
-                >
-                  <Smile />
-                </button>
-                <button
-                  className={groupRecording ? 'groupComposeIcon groupRecord active' : 'groupComposeIcon groupRecord'}
-                  onClick={groupRecording ? stopGroupVoiceRecording : startGroupVoiceRecording}
-                  title={groupRecording ? 'Stop and send voice message' : 'Record voice message'}
-                >
-                  {groupRecording ? <Square /> : <Mic />}
-                </button>
-                <button className="groupSend" onClick={sendGroupMessage} title="Send"><Send /></button>
-              </div>
+              {selectedGroup.role !== 'admin' && selectedGroup.sendMessagesPolicy === 'admins' ? (
+                <div className="groupComposeLocked">
+                  <Lock /> Only admins can send messages in this group.
+                </div>
+              ) : (
+                <div className="groupCompose">
+                  <button
+                    className="groupComposeIcon"
+                    onClick={() => { setGroupAttachOpen(value => !value); setGroupStickersOpen(false); }}
+                    title="Attach"
+                  >
+                    {groupAttachOpen ? <X /> : <Plus />}
+                  </button>
+                  <input
+                    value={groupText}
+                    onChange={e => {
+                      setGroupText(e.target.value);
+                      emitGroupTyping();
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') sendGroupMessage();
+                    }}
+                    placeholder="Message"
+                  />
+                  <button
+                    className="groupComposeIcon"
+                    onClick={() => { setGroupStickersOpen(value => !value); setGroupAttachOpen(false); }}
+                    title="Emoji"
+                  >
+                    <Smile />
+                  </button>
+                  <button
+                    className={groupRecording ? 'groupComposeIcon groupRecord active' : 'groupComposeIcon groupRecord'}
+                    onClick={groupRecording ? stopGroupVoiceRecording : startGroupVoiceRecording}
+                    title={groupRecording ? 'Stop and send voice message' : 'Record voice message'}
+                  >
+                    {groupRecording ? <Square /> : <Mic />}
+                  </button>
+                  <button className="groupSend" onClick={sendGroupMessage} title="Send"><Send /></button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -5599,8 +5624,26 @@ export default function App() {
                     <BellOff /> {selectedGroup.mutedUntil && new Date(selectedGroup.mutedUntil) > new Date() ? 'Unmute group' : 'Mute for 8 hours'}
                   </button>
                   {selectedGroup.role === 'admin' && <button onClick={createGroupInvite}><Copy /> Invite link</button>}
-                  {selectedGroup.role === 'admin' && <button onClick={editGroup}><Pencil /> Edit group</button>}
+                  {(selectedGroup.role === 'admin' || selectedGroup.editInfoPolicy === 'everyone') && <button onClick={editGroup}><Pencil /> Edit group</button>}
                 </div>
+
+                {selectedGroup.role === 'admin' && (
+                  <div className="groupInfoRows groupPermissions">
+                    <h4>Group permissions</h4>
+                    <button onClick={() => updateGroupPermission('sendMessagesPolicy', selectedGroup.sendMessagesPolicy === 'everyone' ? 'admins' : 'everyone')}>
+                      <MessageCircle /> Who can send messages
+                      <b>{selectedGroup.sendMessagesPolicy === 'admins' ? 'Only admins' : 'Everyone'}</b>
+                    </button>
+                    <button onClick={() => updateGroupPermission('editInfoPolicy', selectedGroup.editInfoPolicy === 'everyone' ? 'admins' : 'everyone')}>
+                      <Pencil /> Who can edit group info
+                      <b>{selectedGroup.editInfoPolicy === 'everyone' ? 'Everyone' : 'Only admins'}</b>
+                    </button>
+                    <button onClick={() => updateGroupPermission('addMembersPolicy', selectedGroup.addMembersPolicy === 'everyone' ? 'admins' : 'everyone')}>
+                      <UserPlus /> Who can add members
+                      <b>{selectedGroup.addMembersPolicy === 'everyone' ? 'Everyone' : 'Only admins'}</b>
+                    </button>
+                  </div>
+                )}
 
                 {groupInvite && (
                   <div className="inviteCard">
@@ -5613,7 +5656,7 @@ export default function App() {
 
                 <div className="groupInfoMembers">
                   <h4>Members</h4>
-                  {selectedGroup.role === 'admin' && (
+                  {(selectedGroup.role === 'admin' || selectedGroup.addMembersPolicy === 'everyone') && (
                     <button className="groupAddMember" onClick={addGroupMember}><UserPlus /> Add member</button>
                   )}
                   {selectedGroup.members.map(member => (

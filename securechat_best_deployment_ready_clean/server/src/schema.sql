@@ -122,6 +122,9 @@ CREATE TABLE IF NOT EXISTS channel_reactions(
 CREATE INDEX IF NOT EXISTS idx_channel_posts_feed ON channel_posts(channel_id,created_at DESC) WHERE deleted_at IS NULL;
 ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_token TEXT UNIQUE;
 ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS invite_enabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS send_messages_policy VARCHAR(10) NOT NULL DEFAULT 'everyone';
+ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS edit_info_policy VARCHAR(10) NOT NULL DEFAULT 'admins';
+ALTER TABLE chat_groups ADD COLUMN IF NOT EXISTS add_members_policy VARCHAR(10) NOT NULL DEFAULT 'admins';
 CREATE TABLE IF NOT EXISTS conversations(
  id TEXT PRIMARY KEY, user_a UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
  user_b UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW());
