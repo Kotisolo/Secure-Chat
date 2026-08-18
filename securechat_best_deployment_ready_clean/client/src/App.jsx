@@ -421,6 +421,7 @@ export default function App() {
   const [groupInfoOpen, setGroupInfoOpen] = useState(false);
   const [groupStickersOpen, setGroupStickersOpen] = useState(false);
   const [groupAttachOpen, setGroupAttachOpen] = useState(false);
+  const [groupAddMemberOpen, setGroupAddMemberOpen] = useState(false);
   const [groupMessages, setGroupMessages] = useState({});
   const [groupText, setGroupText] = useState('');
   const [flicks, setFlicks] = useState([]);
@@ -1339,15 +1340,24 @@ export default function App() {
     }
   }
 
-  async function addGroupMember() {
-    const userId = prompt('Enter the user ID to add:');
-    if (!userId || !selectedGroup) return;
-    await api(`/api/groups/${selectedGroup.id}/members`, {
-      method: 'POST',
-      body: JSON.stringify({ userId })
-    });
-    await loadGroups();
-    setSelectedGroup((await api('/api/groups')).find(group => group.id === selectedGroup.id));
+  function addGroupMember() {
+    if (!selectedGroup) return;
+    setGroupAddMemberOpen(true);
+  }
+
+  async function confirmAddGroupMember(userId) {
+    if (!selectedGroup) return;
+    setGroupAddMemberOpen(false);
+    try {
+      await api(`/api/groups/${selectedGroup.id}/members`, {
+        method: 'POST',
+        body: JSON.stringify({ userId })
+      });
+      await loadGroups();
+      setSelectedGroup((await api('/api/groups')).find(group => group.id === selectedGroup.id));
+    } catch (error) {
+      alert('Could not add that person: ' + error.message);
+    }
   }
 
   async function decodeGroupMessage(message, groupId) {
@@ -5174,6 +5184,29 @@ export default function App() {
                 <button className="groupLeaveRow" onClick={() => removeGroupMember(me.id)}>
                   <LogOut /> Leave group
                 </button>
+              </div>
+            </div>
+          )}
+
+          {groupAddMemberOpen && (
+            <div className="groupInfoBackdrop" onClick={e => { e.stopPropagation(); setGroupAddMemberOpen(false); }}>
+              <div className="groupAddMemberSheet" onClick={e => e.stopPropagation()}>
+                <div className="groupInfoHead">
+                  <b>Add member</b>
+                  <button className="groupInfoClose" onClick={() => setGroupAddMemberOpen(false)} title="Close"><X /></button>
+                </div>
+                <div className="groupAddMemberList">
+                  {contacts.filter(contact => !selectedGroup.members.some(member => String(member.id) === String(contact.id))).map(contact => (
+                    <button key={contact.id} className="groupMemberRow groupMemberPickable" onClick={() => confirmAddGroupMember(contact.id)}>
+                      <span className="groupMemberAvatar">{initials(contact.username)}</span>
+                      <span className="groupMemberName">{contact.username}</span>
+                      <UserPlus />
+                    </button>
+                  ))}
+                  {contacts.filter(contact => !selectedGroup.members.some(member => String(member.id) === String(contact.id))).length === 0 && (
+                    <p className="empty">All your contacts are already in this group.</p>
+                  )}
+                </div>
               </div>
             </div>
           )}
