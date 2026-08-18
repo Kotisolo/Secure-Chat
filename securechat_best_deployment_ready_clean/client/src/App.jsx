@@ -5,7 +5,7 @@ import {
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
-  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward, MailOpen, Pin, PinOff, Bookmark
+  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward, MailOpen, Pin, PinOff, Bookmark, Play
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, ensureFileToken, API_URL
@@ -396,6 +396,7 @@ export default function App() {
   const [stopLocationPrompt, setStopLocationPrompt] = useState(null);
   const [profile, setProfile] = useState(null);
   const [zoomedPhotoUser, setZoomedPhotoUser] = useState(null);
+  const [mediaViewer, setMediaViewer] = useState(null);
   const [profileMode, setProfileMode] = useState('quick');
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -1558,7 +1559,7 @@ export default function App() {
         const encrypted = await encryptAttachment(member.id, `group:${selectedGroup.id}`, file);
         const uploaded = await uploadFile(encrypted?.file || file);
         const content = JSON.stringify({
-          body: kind === 'image' ? 'Photo' : file.name,
+          body: kind === 'image' ? 'Photo' : kind === 'video' ? 'Video' : file.name,
           kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type,
           fileEncryption: encrypted?.fileEncryption, senderDeviceId: encrypted?.senderDeviceId
         });
@@ -2000,8 +2001,8 @@ export default function App() {
       const up = await uploadFile(encrypted?.file || fl);
 
       send({
-        body: kind === 'image' ? 'Photo' : fl.name,
-        kind: kind || (fl.type.startsWith('image/') ? 'image' : 'file'),
+        body: kind === 'image' ? 'Photo' : kind === 'video' ? 'Video' : fl.name,
+        kind: kind || (fl.type.startsWith('image/') ? 'image' : fl.type.startsWith('video/') ? 'video' : 'file'),
         fileUrl: up.url,
         fileName: fl.name,
         fileMime: fl.type,
@@ -4672,7 +4673,27 @@ export default function App() {
                     </div>
                   )}
                   {m.kind === 'image' && m.fileUrl ? (
-                    <img src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))} alt={m.fileName || 'Photo'} />
+                    <img
+                      src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))}
+                      alt={m.fileName || 'Photo'}
+                      onClick={e => {
+                        e.stopPropagation();
+                        const url = attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl));
+                        if (url) setMediaViewer({ url, kind: 'image', fileName: m.fileName });
+                      }}
+                    />
+                  ) : m.kind === 'video' && m.fileUrl ? (
+                    <div
+                      className="videoBubblePreview"
+                      onClick={e => {
+                        e.stopPropagation();
+                        const url = attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl));
+                        if (url) setMediaViewer({ url, kind: 'video', fileName: m.fileName });
+                      }}
+                    >
+                      <video src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))} preload="metadata" muted />
+                      <span className="videoBubblePlay"><Play /></span>
+                    </div>
                   ) : m.kind === 'file' && m.fileUrl ? (
                     <a
                       href={attachmentUrls[m.id] || (m.fileEncryption ? undefined : resolveFileUrl(m.fileUrl))}
@@ -4796,6 +4817,7 @@ export default function App() {
               <div className="composerTools">
                 <label className="toolCamera"><Camera /><span>Camera</span><input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} /></label>
                 <label className="toolGallery"><Image /><span>Gallery</span><input hidden type="file" accept="image/*" onChange={e => file(e, 'image')} /></label>
+                <label className="toolVideo"><Video /><span>Video</span><input hidden type="file" accept="video/*" onChange={e => file(e, 'video')} /></label>
                 <label className="toolFile"><Paperclip /><span>File</span><input hidden type="file" onChange={e => file(e)} /></label>
                 <button className="toolLocation" onClick={() => { setShowLocationShare(true); setShowComposerTools(false); }}><MapPin /><span>Location</span></button>
                 <button className="toolVoice" onClick={() => { setShowComposerTools(false); startVoiceRecording(); }}><Mic /><span>Voice Note</span></button>
@@ -5470,7 +5492,19 @@ export default function App() {
                   >
                     <b>{String(message.senderId) === String(me.id) ? 'You' : message.senderName}</b>
                     {message.kind === 'image' && message.mediaUrl ? (
-                      <img src={message.mediaUrl} alt={message.fileName || 'Group photo'} />
+                      <img
+                        src={message.mediaUrl}
+                        alt={message.fileName || 'Group photo'}
+                        onClick={e => { e.stopPropagation(); setMediaViewer({ url: message.mediaUrl, kind: 'image', fileName: message.fileName }); }}
+                      />
+                    ) : message.kind === 'video' && message.mediaUrl ? (
+                      <div
+                        className="videoBubblePreview"
+                        onClick={e => { e.stopPropagation(); setMediaViewer({ url: message.mediaUrl, kind: 'video', fileName: message.fileName }); }}
+                      >
+                        <video src={message.mediaUrl} preload="metadata" muted />
+                        <span className="videoBubblePlay"><Play /></span>
+                      </div>
                     ) : message.kind === 'file' && message.mediaUrl ? (
                       <a href={message.mediaUrl} download={message.fileName} onClick={e => e.stopPropagation()}>
                         📎 {message.fileName}
@@ -5507,6 +5541,7 @@ export default function App() {
               {groupAttachOpen && (
                 <div className="groupAttachRow">
                   <label title="Photo"><Image /> Photo<input hidden type="file" accept="image/*" onChange={e => { sendGroupFile(e, 'image'); setGroupAttachOpen(false); }} /></label>
+                  <label title="Video"><Video /> Video<input hidden type="file" accept="video/*" onChange={e => { sendGroupFile(e, 'video'); setGroupAttachOpen(false); }} /></label>
                   <label title="File"><Paperclip /> File<input hidden type="file" onChange={e => { sendGroupFile(e, 'file'); setGroupAttachOpen(false); }} /></label>
                 </div>
               )}
@@ -6007,6 +6042,28 @@ export default function App() {
         <div className="photoZoomOverlay" onClick={() => setZoomedPhotoUser(null)}>
           <button className="photoZoomClose" onClick={() => setZoomedPhotoUser(null)} title="Close"><X /></button>
           <img src={resolveFileUrl(zoomedPhotoUser.avatarUrl)} alt={`${zoomedPhotoUser.username}'s profile photo`} onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
+      {mediaViewer && (
+        <div className="photoZoomOverlay" onClick={() => setMediaViewer(null)}>
+          <button className="photoZoomClose" onClick={() => setMediaViewer(null)} title="Close"><X /></button>
+          {mediaViewer.kind === 'video' ? (
+            <video src={mediaViewer.url} controls autoPlay onClick={e => e.stopPropagation()} />
+          ) : (
+            <img src={mediaViewer.url} alt={mediaViewer.fileName || 'Photo'} onClick={e => e.stopPropagation()} />
+          )}
+          <a
+            className="photoZoomDownload"
+            href={mediaViewer.url}
+            download={mediaViewer.fileName || true}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={e => e.stopPropagation()}
+            title="Save"
+          >
+            <Archive /> Save
+          </a>
         </div>
       )}
 
