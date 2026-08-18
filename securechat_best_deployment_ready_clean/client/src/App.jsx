@@ -418,6 +418,10 @@ export default function App() {
   const [selectedCallLog, setSelectedCallLog] = useState(null);
   const [privacy, setPrivacy] = useState(null);
   const [security, setSecurity] = useState(null);
+  const [appLockEnabled, setAppLockEnabled] = useState(() => localStorage.getItem('naad_app_lock_enabled') === '1');
+  const [appLocked, setAppLocked] = useState(() => localStorage.getItem('naad_app_lock_enabled') === '1');
+  const [appLockPinInput, setAppLockPinInput] = useState('');
+  const [appLockError, setAppLockError] = useState('');
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [groupInfoOpen, setGroupInfoOpen] = useState(false);
@@ -532,6 +536,21 @@ export default function App() {
   useEffect(() => {
     if (profile) setProfileMode('quick');
   }, [profile?.id]);
+
+  useEffect(() => {
+    if (!appLockEnabled) return undefined;
+    let wasHidden = false;
+    function onVisibility() {
+      if (document.visibilityState === 'hidden') {
+        wasHidden = true;
+      } else if (document.visibilityState === 'visible' && wasHidden) {
+        wasHidden = false;
+        setAppLocked(true);
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [appLockEnabled]);
 
   useEffect(() => {
     if (!call.active) return undefined;
@@ -2359,6 +2378,54 @@ export default function App() {
     logout();
   }
 
+  async function hashAppLockPin(pin) {
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin));
+    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+
+  function openAppLockSetup() {
+    setTextFormValues({ pin: '', confirmPin: '' });
+    setTextFormPrompt({
+      title: 'Set an app lock PIN',
+      fields: [
+        { key: 'pin', label: 'PIN (4-8 digits)', placeholder: '••••', type: 'password', inputMode: 'numeric', maxLength: 8 },
+        { key: 'confirmPin', label: 'Confirm PIN', placeholder: '••••', type: 'password', inputMode: 'numeric', maxLength: 8 }
+      ],
+      submitLabel: 'Turn on',
+      onSubmit: async values => {
+        const pin = (values.pin || '').trim();
+        const confirmPin = (values.confirmPin || '').trim();
+        if (!/^\d{4,8}$/.test(pin)) return alert('PIN must be 4-8 digits.');
+        if (pin !== confirmPin) return alert('PINs did not match.');
+        const hash = await hashAppLockPin(pin);
+        localStorage.setItem('naad_app_lock_hash', hash);
+        localStorage.setItem('naad_app_lock_enabled', '1');
+        setAppLockEnabled(true);
+      }
+    });
+  }
+
+  function disableAppLock() {
+    if (!confirm('Turn off app lock?')) return;
+    localStorage.removeItem('naad_app_lock_hash');
+    localStorage.removeItem('naad_app_lock_enabled');
+    setAppLockEnabled(false);
+    setAppLocked(false);
+  }
+
+  async function attemptUnlock(pin) {
+    const hash = await hashAppLockPin(pin);
+    const stored = localStorage.getItem('naad_app_lock_hash');
+    if (stored && hash === stored) {
+      setAppLocked(false);
+      setAppLockPinInput('');
+      setAppLockError('');
+    } else {
+      setAppLockError('Incorrect PIN');
+      setAppLockPinInput('');
+    }
+  }
+
   async function savePrivacy(next) {
     setPrivacy(next);
     try {
@@ -4067,6 +4134,30 @@ export default function App() {
       </div>
     );
   }
+  if (appLocked) {
+    return (
+      <div className="appLockGate">
+        <div className="appLockCard">
+          <div className="brandMark"><Lock /></div>
+          <h2>Naad is locked</h2>
+          <p>Enter your PIN to continue</p>
+          <form onSubmit={e => { e.preventDefault(); attemptUnlock(appLockPinInput); }}>
+            <input
+              autoFocus
+              type="password"
+              inputMode="numeric"
+              maxLength={8}
+              value={appLockPinInput}
+              onChange={e => { setAppLockPinInput(e.target.value); setAppLockError(''); }}
+              placeholder="PIN"
+            />
+            {appLockError && <small className="appLockError">{appLockError}</small>}
+            <button type="submit" className="primary">Unlock</button>
+          </form>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="app">
       <aside className={`${active ? 'side hide' : 'side'} tab-${mobileTab}`}>
@@ -5265,6 +5356,9 @@ export default function App() {
             <button className="twoStepButton" onClick={toggleTwoStep}>
               <Lock /> Two-step verification: {security.twoStepEnabled ? 'On' : 'Off'}
             </button>
+            <button className="twoStepButton" onClick={() => appLockEnabled ? disableAppLock() : openAppLockSetup()}>
+              <Lock /> App lock (PIN): {appLockEnabled ? 'On' : 'Off'}
+            </button>
             <div className="accountActions">
               <button onClick={changePassword}>Change password</button>
               <button className="danger" onClick={deleteAccount}>Delete account</button>
@@ -5566,6 +5660,8 @@ export default function App() {
                 ) : (
                   <input
                     autoFocus={index === 0}
+                    type={field.type || 'text'}
+                    inputMode={field.inputMode}
                     value={textFormValues[field.key] || ''}
                     placeholder={field.placeholder}
                     maxLength={field.maxLength}

@@ -7867,3 +7867,15 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .starredUnstar{flex:none;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:transparent;color:#f5a623}
 .starredUnstar svg{fill:#f5a623}
 .textFormField textarea:focus{outline:none;border-color:var(--primary)}
+
+/* ---------- app lock gate ---------- */
+.appLockGate{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:var(--bg);}
+.appLockCard{width:320px;max-width:88vw;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;}
+.appLockCard .brandMark{width:56px;height:56px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:var(--panel2);color:var(--primary);margin-bottom:6px;}
+.appLockCard h2{margin:0;color:var(--text);}
+.appLockCard p{margin:0 0 10px;color:var(--muted);font-size:14px;}
+.appLockCard form{display:flex;flex-direction:column;gap:10px;width:100%;}
+.appLockCard input{height:46px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);border:1px solid var(--line);padding:0 14px;font-size:18px;text-align:center;letter-spacing:4px;}
+.appLockCard input:focus{outline:none;border-color:var(--primary);}
+.appLockCard button.primary{height:44px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-weight:600;}
+.appLockError{color:#e5484d;}
