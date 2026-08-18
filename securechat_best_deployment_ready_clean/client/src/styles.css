@@ -7590,3 +7590,16 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
   .welcomeMode .opalPhoneShell .opalCard>.opalSubtag,
   .welcomeMode .opalPhoneShell .opalCard>.opalFeatureGrid{display:none}
 }
+
+/* ---------- chat list row: stop native text drag/selection ---------- */
+/* The row uses a long-press (pointerdown+timer) to open its context menu.
+   Without this, pressing and dragging slightly over the name/preview text
+   lets the browser kick off its own native text-selection/drag-ghost
+   instead, which looks like the row "jumps" a tiny amount and gets stuck. */
+.chatMain{
+  -webkit-user-select:none;user-select:none;
+  -webkit-user-drag:none;
+  -webkit-touch-callout:none;
+  touch-action:manipulation;
+}
+.chatMain *{-webkit-user-drag:none;pointer-events:none}
