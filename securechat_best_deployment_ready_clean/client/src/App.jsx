@@ -481,8 +481,6 @@ export default function App() {
   const [showCallInvite, setShowCallInvite] = useState(false);
   const [noiseCancellation, setNoiseCancellation] = useState(true);
   const [cameraFacingMode, setCameraFacingMode] = useState('user');
-  const [videoEffectsOn, setVideoEffectsOn] = useState(false);
-  const [raisedHand, setRaisedHand] = useState(false);
 
   const pc = useRef(null);
   const liveKitRoom = useRef(null);
@@ -3393,10 +3391,7 @@ export default function App() {
   }
 
   async function shareScreenInCall() {
-    if (!navigator.mediaDevices?.getDisplayMedia) {
-      alert('Screen sharing is not supported by this mobile browser. If your phone supports it, try Chrome/Edge Android or use desktop.');
-      return;
-    }
+    if (!navigator.mediaDevices?.getDisplayMedia) return;
     try {
       const displayStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       const screenTrack = displayStream.getVideoTracks()[0];
@@ -3487,19 +3482,6 @@ export default function App() {
   function sendMessageDuringCall() {
     setCallOptionsOpen(null);
     setCall(current => ({ ...current, minimized: true }));
-  }
-
-  function showCallDetails() {
-    alert(`${call.title}\nStatus: ${call.status || 'Connected'}\nDuration: ${String(Math.floor(call.seconds / 60)).padStart(2, '0')}:${String(call.seconds % 60).padStart(2, '0')}\nEncryption: End-to-end encrypted`);
-  }
-
-  function openCallSettings() {
-    const value = prompt('Speaker volume 0-100', String(Math.round(speakerVolume * 100)));
-    if (value === null) return;
-    const next = Math.min(100, Math.max(0, Number(value)));
-    if (!Number.isFinite(next)) return;
-    setSpeakerVolume(next / 100);
-    setSpeakerMuted(next === 0);
   }
 
   function logout() {
@@ -4663,7 +4645,7 @@ export default function App() {
                 autoPlay
                 muted
                 playsInline
-                className={videoEffectsOn ? 'local localEffect' : 'local'}
+                className="local"
                 onPointerDown={startLocalVideoDrag}
                 onPointerMove={moveLocalVideoDrag}
                 onPointerUp={endLocalVideoDrag}
@@ -4679,19 +4661,19 @@ export default function App() {
             )}
             <h2>{call.title}</h2>
             <p>{call.status || 'Connected securely...'}</p>
-            {raisedHand && <small className="raisedHand"><Hand /> Hand raised</small>}
           </div>
 
           {callOptionsOpen && (
-            <div className={callOptionsOpen === 'full' ? 'callOptionsSheet full' : 'callOptionsSheet'}>
+            <div className="callOptionsSheet">
               <i />
-              {callOptionsOpen === 'full' && <h3>More options</h3>}
-              <button type="button" onClick={shareScreenInCall}>
-                <span><MonitorUp /></span>
-                <b>Share screen</b>
-                <small>Share your entire screen or an app</small>
-                <em>›</em>
-              </button>
+              {typeof navigator !== 'undefined' && navigator.mediaDevices?.getDisplayMedia && (
+                <button type="button" onClick={shareScreenInCall}>
+                  <span><MonitorUp /></span>
+                  <b>Share screen</b>
+                  <small>Share your entire screen or an app</small>
+                  <em>›</em>
+                </button>
+              )}
               <button type="button" onClick={sendMessageDuringCall}>
                 <span><MessageCircle /></span>
                 <b>Send message</b>
@@ -4704,54 +4686,7 @@ export default function App() {
                 <small>Reduce background noise</small>
                 <em className={noiseCancellation ? 'toggle on' : 'toggle'} />
               </button>
-              {callOptionsOpen === 'quick' ? (
-                <button type="button" onClick={() => setCallOptionsOpen('full')}>
-                  <span><MoreVertical /></span>
-                  <b>More options</b>
-                  <small>View additional settings</small>
-                  <em>›</em>
-                </button>
-              ) : (
-                <>
-                  <button type="button" onClick={flipCamera}>
-                    <span><Camera /></span>
-                    <b>Switch camera</b>
-                    <small>Flip between front and back</small>
-                    <em>›</em>
-                  </button>
-                  <button type="button" onClick={() => setVideoEffectsOn(value => !value)}>
-                    <span><Languages /></span>
-                    <b>Video effects</b>
-                    <small>{videoEffectsOn ? 'Effects enabled' : 'Blur background or apply effects'}</small>
-                    <em>›</em>
-                  </button>
-                  <button type="button" onClick={openCallSettings}>
-                    <span><Volume2 /></span>
-                    <b>Audio output</b>
-                    <small>Select speaker volume</small>
-                    <em>›</em>
-                  </button>
-                  <button type="button" onClick={() => setRaisedHand(value => !value)}>
-                    <span><Hand /></span>
-                    <b>Raise hand</b>
-                    <small>{raisedHand ? 'Lower your hand' : 'Let others know you want to speak'}</small>
-                    <em>›</em>
-                  </button>
-                  <button type="button" onClick={showCallDetails}>
-                    <span><Info /></span>
-                    <b>Call details</b>
-                    <small>View participants and encryption</small>
-                    <em>›</em>
-                  </button>
-                  <button type="button" onClick={openCallSettings}>
-                    <span><Settings /></span>
-                    <b>Call settings</b>
-                    <small>Manage your call preferences</small>
-                    <em>›</em>
-                  </button>
-                  <button type="button" className="callOptionsClose" onClick={() => setCallOptionsOpen(null)}>Close</button>
-                </>
-              )}
+              <button type="button" className="callOptionsClose" onClick={() => setCallOptionsOpen(null)}>Close</button>
             </div>
           )}
 
