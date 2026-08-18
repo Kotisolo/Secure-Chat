@@ -3615,32 +3615,14 @@ export default function App() {
           action: requestNotifications
         },
         {
-          label: 'Chats',
-          detail: 'Chat settings, themes and wallpaper',
-          icon: <MessageCircle />,
-          action: () => setMobileTab('chats')
-        },
-        {
-          label: 'Calls',
-          detail: 'Call settings and preferences',
-          icon: <Phone />,
-          action: loadCallHistory
-        },
-        {
-          label: 'Appearance',
-          detail: 'App theme, color and language',
+          label: 'Chat theme',
+          detail: 'Opal, Light, Sky, or Dark',
           icon: <Settings />,
           action: changeActiveChatTheme
         },
         {
-          label: 'Devices',
-          detail: 'Manage linked devices',
-          icon: <MonitorUp />,
-          action: openSecurity
-        },
-        {
           label: 'Security',
-          detail: 'Password, two-step verification',
+          detail: 'Password, two-step verification, linked devices',
           icon: <Shield />,
           action: openSecurity
         },
