@@ -7850,3 +7850,9 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .textFormActions{display:flex;gap:10px;margin-top:4px}
 .textFormActions .optionPickerCancel{flex:1;height:42px;border-radius:var(--radius-md);background:var(--panel2);color:var(--muted);font-weight:600}
 .textFormActions .primary{flex:1;height:42px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-weight:600}
+
+/* ---------- real profile editing ---------- */
+.profileSelfActions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px}
+.profileSelfActions .profilePhoto{margin-top:0}
+.textFormField textarea{border-radius:var(--radius-md);background:var(--panel2);color:var(--text);border:1px solid var(--line);padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical}
+.textFormField textarea:focus{outline:none;border-color:var(--primary)}
