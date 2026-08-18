@@ -726,6 +726,33 @@ export default function App() {
     }
   }
 
+  async function loginWithPassword(e) {
+    e.preventDefault();
+    setErr('');
+    setAuthLoading(true);
+
+    try {
+      const d = await api('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          phone: form.phone,
+          password: form.loginPassword,
+          twoStepPin: form.twoStepPin,
+          deviceName: navigator.userAgent
+        })
+      });
+
+      setSession(d.token, d.user);
+      setMe(d.user);
+      setScreen('app');
+      setTimeout(() => enterApp(), 0);
+    } catch (x) {
+      setErr(x.message);
+    } finally {
+      setAuthLoading(false);
+    }
+  }
+
   function socialLogin(provider) {
     setErr('');
     setAuthLoading(true);
@@ -3702,7 +3729,7 @@ export default function App() {
 
                 <div className="authHeading">
                   <h1>{authMode === 'register' ? 'Create Account' : authMode === 'reset' ? 'Reset Password' : 'Welcome Back'}</h1>
-                  <p>{authMode === 'register' ? "Let's get you started!" : authMode === 'reset' ? (resetStep === 'phone' ? "We'll email you a reset code." : 'Enter the code we emailed you.') : authMode === 'login' ? (loginStep === 'phone' ? "We'll email you a login code." : 'Enter the code we emailed you.') : 'Glad to see you again!'}</p>
+                  <p>{authMode === 'register' ? "Let's get you started!" : authMode === 'reset' ? (resetStep === 'phone' ? "We'll email you a reset code." : 'Enter the code we emailed you.') : authMode === 'login' ? (loginStep === 'phone' ? "We'll email you a login code." : loginStep === 'password' ? 'Enter your phone number and password.' : loginStep === 'add-email' ? 'Add an email to receive login codes.' : 'Enter the code we emailed you.') : 'Glad to see you again!'}</p>
                 </div>
 
                 {authMode !== 'reset' && (
@@ -3727,11 +3754,29 @@ export default function App() {
                     <button className="primary opalPrimary" disabled={authLoading}>
                       {authLoading ? 'Sending code...' : 'Send Login Code'}
                     </button>
+                    <p className="authSwitch"><button type="button" onClick={() => { setErr(''); setLoginStep('password'); }}>Use your password instead</button></p>
                     <div className="socialDivider"><span />or continue with<span /></div>
                     <div className="socialLoginRow">
                       <button type="button" onClick={() => socialLogin('google')} disabled={authLoading}><b>G</b> Google</button>
                       <button type="button" onClick={() => socialLogin('apple')} disabled={authLoading}><b>A</b> Apple</button>
                     </div>
+                    <p className="authSwitch">Don't have an account? <button type="button" onClick={() => setAuthMode('register')}>Register</button></p>
+                  </form>
+                )}
+
+                {authMode === 'login' && loginStep === 'password' && (
+                  <form onSubmit={loginWithPassword} className="opalForm">
+                    <label className="opalInput"><Phone /><input placeholder="Phone number" value={form.phone} onChange={e => f('phone', e.target.value)} required /></label>
+                    <label className="opalInput"><Lock /><input placeholder="Password" type={showPassword ? 'text' : 'password'} value={form.loginPassword} onChange={e => f('loginPassword', e.target.value)} required /><button type="button" onClick={() => setShowPassword(value => !value)}>{showPassword ? <EyeOff /> : <Eye />}</button></label>
+                    <label className="opalInput"><KeyRound /><input placeholder="6-digit PIN (if enabled)" inputMode="numeric" maxLength="6" value={form.twoStepPin} onChange={e => f('twoStepPin', e.target.value.replace(/\D/g, ''))} /></label>
+                    <div className="authOptions">
+                      <label><input type="checkbox" checked={rememberMe} onChange={e => setRememberMe(e.target.checked)} /> Remember me</label>
+                      <button type="button" className="link" onClick={() => { setErr(''); setLoginStep('phone'); }}>Use a login code instead</button>
+                    </div>
+                    <button className="primary opalPrimary" disabled={authLoading}>
+                      {authLoading ? 'Signing in...' : 'Log In'}
+                    </button>
+                    <p className="authSwitch">Forgot your password? <button type="button" onClick={() => { setErr(''); setAuthMode('reset'); setResetStep('phone'); }}>Reset it</button></p>
                     <p className="authSwitch">Don't have an account? <button type="button" onClick={() => setAuthMode('register')}>Register</button></p>
                   </form>
                 )}
