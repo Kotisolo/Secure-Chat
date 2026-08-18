@@ -7722,3 +7722,61 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .optionPickerCard button{height:44px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600;font-size:14px}
 .optionPickerCard button:hover{background:var(--panel3);color:var(--primary)}
 .optionPickerCard .optionPickerCancel{background:transparent;color:var(--muted);font-weight:500}
+
+/* ---------- group screen: header + conversation + info sheet ---------- */
+/* The group screen used to be one long page with the chat as a box in the
+   middle and member admin stacked under it. It's now shaped like a 1:1 chat:
+   fixed header, messages filling the space, one composer at the bottom, with
+   all management moved into a Group info sheet reached from the header. */
+.groupCard{display:flex;flex-direction:column;padding:0!important;overflow:hidden!important;text-align:left}
+.groupChatHeader{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--panel2);border-bottom:1px solid var(--line);flex-shrink:0}
+.groupChatHeader>button{width:38px;height:38px;border-radius:var(--radius-sm);background:transparent;color:var(--muted);display:grid;place-items:center;flex-shrink:0}
+.groupChatHeader>button:hover{background:var(--panel3);color:var(--text)}
+.groupHeaderIdentity{flex:1!important;min-width:0;width:auto!important;height:auto!important;display:flex!important;align-items:center;gap:10px;background:transparent;text-align:left;padding:2px 4px!important}
+.groupHeaderAvatar{width:36px;height:36px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;flex-shrink:0;border:2px solid var(--cyan)}
+.groupHeaderAvatar svg{width:18px;height:18px}
+.groupHeaderText{flex:1;min-width:0;display:block}
+.groupHeaderText b{display:block;color:var(--text);font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.groupHeaderText small{display:block;color:var(--muted);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.groupConversation{flex:1;min-height:0;display:flex;flex-direction:column}
+.groupMessageList{flex:1;min-height:0;overflow-y:auto;padding:14px}
+.groupCompose{display:flex;align-items:center;gap:6px;padding:10px 12px;background:var(--panel2);border-top:1px solid var(--line);flex-shrink:0}
+.groupCompose input{flex:1;min-width:0;height:40px;border-radius:20px;background:var(--panel3);color:var(--text);border:0;padding:0 14px;font-size:14px}
+.groupComposeIcon{width:38px;height:38px;border-radius:50%;background:transparent;color:var(--muted);display:grid;place-items:center;flex-shrink:0}
+.groupComposeIcon:hover{background:var(--panel3);color:var(--text)}
+.groupCompose .groupRecord.active{background:var(--red);color:#fff}
+.groupSend{width:40px;height:40px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;flex-shrink:0}
+.groupStickers{display:flex;gap:6px;padding:8px 12px;background:var(--panel2);border-top:1px solid var(--line);flex-wrap:wrap;flex-shrink:0}
+.groupStickers button{width:38px;height:38px;border-radius:var(--radius-sm);background:var(--panel3);font-size:20px}
+.groupAttachRow{display:flex;gap:8px;padding:10px 12px;background:var(--panel2);border-top:1px solid var(--line);flex-shrink:0}
+.groupAttachRow label{display:flex;align-items:center;gap:8px;height:38px;padding:0 14px;border-radius:var(--radius-md);background:var(--panel3);color:var(--text);font-size:13px;font-weight:600;cursor:pointer}
+.groupAttachRow label svg{width:18px;height:18px;color:var(--primary)}
+
+.groupInfoBackdrop{position:fixed;inset:0;z-index:70;background:rgba(8,10,20,.55);display:flex;justify-content:flex-end}
+.groupInfoSheet{width:360px;max-width:88vw;height:100%;background:var(--panel);border-left:1px solid var(--line);overflow-y:auto;box-shadow:var(--shadow-lg)}
+.groupInfoHead{position:relative;padding:24px 18px 18px;text-align:center;border-bottom:1px solid var(--line)}
+.groupInfoAvatar{width:64px;height:64px;margin:0 auto 10px;border-radius:50%;background:var(--primary);color:#fff;display:grid;place-items:center;border:2px solid var(--cyan)}
+.groupInfoAvatar svg{width:28px;height:28px}
+.groupInfoHead b{display:block;color:var(--text);font-size:16px}
+.groupInfoHead small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+.groupInfoHead p{margin:8px 0 0;color:var(--muted);font-size:13px}
+.groupInfoClose{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
+.groupInfoRows{padding:8px 0;border-bottom:1px solid var(--line)}
+.groupInfoRows button{width:100%;display:flex;align-items:center;gap:12px;padding:12px 18px;background:transparent;color:var(--text);font-size:14px;text-align:left}
+.groupInfoRows button:hover{background:var(--panel2)}
+.groupInfoRows button svg{width:18px;height:18px;color:var(--muted);flex-shrink:0}
+.groupInfoMembers{padding:12px 0}
+.groupInfoMembers h4{margin:0;padding:4px 18px 8px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.groupAddMember{width:100%;display:flex;align-items:center;gap:12px;padding:10px 18px;background:transparent;color:var(--cyan);font-size:14px;font-weight:600;text-align:left}
+.groupAddMember svg{width:18px;height:18px}
+.groupMemberRow{display:flex;align-items:center;gap:10px;padding:8px 18px;flex-wrap:wrap}
+.groupMemberAvatar{width:30px;height:30px;border-radius:50%;background:var(--panel3);color:var(--text);display:grid;place-items:center;font-size:11px;font-weight:600;flex-shrink:0}
+.groupMemberName{flex:1;min-width:0;color:var(--text);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.groupMemberRow em{font-style:normal;color:var(--muted);font-size:11px}
+.groupMemberActions{display:flex;gap:6px}
+.groupMemberActions button{height:28px;padding:0 10px;border-radius:14px;background:var(--panel2);color:var(--muted);font-size:11px;font-weight:600}
+.groupLeaveRow{width:100%;display:flex;align-items:center;gap:12px;padding:14px 18px;margin-top:4px;background:transparent;color:var(--red);font-size:14px;font-weight:600;text-align:left;border-top:1px solid var(--line)}
+.groupLeaveRow svg{width:18px;height:18px}
+@media(max-width:900px){
+  .groupInfoSheet{width:100%;max-width:none}
+}

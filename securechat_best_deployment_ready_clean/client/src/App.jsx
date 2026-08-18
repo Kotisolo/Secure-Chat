@@ -418,6 +418,9 @@ export default function App() {
   const [security, setSecurity] = useState(null);
   const [groups, setGroups] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupInfoOpen, setGroupInfoOpen] = useState(false);
+  const [groupStickersOpen, setGroupStickersOpen] = useState(false);
+  const [groupAttachOpen, setGroupAttachOpen] = useState(false);
   const [groupMessages, setGroupMessages] = useState({});
   const [groupText, setGroupText] = useState('');
   const [flicks, setFlicks] = useState([]);
@@ -2492,6 +2495,15 @@ export default function App() {
   const activeChatEntry = active ? (contacts.find(contact => String(contact.id) === String(active.id)) || active) : null;
   const activeChatMuted = Boolean(activeChatEntry?.chat?.mutedUntil && new Date(activeChatEntry.chat.mutedUntil) > new Date());
   const activeChatPinned = Boolean(activeChatEntry?.chat?.pinned);
+
+  // Header subtitle names who's in the room ("Bobby, Katam, Kiran +2") rather
+  // than printing a bare member count.
+  function groupMemberSummary(group) {
+    const names = (group.members || []).map(member => member.username).filter(Boolean);
+    if (!names.length) return 'No members yet';
+    const shown = names.slice(0, 3).join(', ');
+    return names.length > 3 ? `${shown} +${names.length - 3}` : shown;
+  }
 
   function toggleActivePin() {
     if (!activeChatEntry) return;
@@ -4998,33 +5010,21 @@ export default function App() {
       )}
 
       {selectedGroup && (
-        <div className="modal" onClick={() => setSelectedGroup(null)}>
+        <div className="modal" onClick={() => { setSelectedGroup(null); setGroupInfoOpen(false); setGroupStickersOpen(false); setGroupAttachOpen(false); }}>
           <div className="groupCard" onClick={e => e.stopPropagation()}>
-            <button className="historyClose" onClick={() => setSelectedGroup(null)}><X /></button>
-            <div className="avatar big"><Users /></div>
-            <h2>{selectedGroup.name}</h2>
-            <p>{selectedGroup.description}</p>
-            <div className="groupCallLaunch">
-              <button onClick={() => startGroupCall('audio')}><Phone /> Voice call</button>
-              <button onClick={() => startGroupCall('video')}><Video /> Video call</button>
+            <div className="groupChatHeader">
+              <button className="groupBack" onClick={() => setSelectedGroup(null)} title="Back"><ArrowLeft /></button>
+              <button className="groupHeaderIdentity" onClick={() => setGroupInfoOpen(true)} title="Group info">
+                <span className="groupHeaderAvatar"><Users /></span>
+                <span className="groupHeaderText">
+                  <b>{selectedGroup.name}</b>
+                  <small>{groupMemberSummary(selectedGroup)}</small>
+                </span>
+              </button>
+              <button onClick={() => startGroupCall('audio')} title="Voice call"><Phone /></button>
+              <button onClick={() => startGroupCall('video')} title="Video call"><Video /></button>
+              <button onClick={() => setGroupInfoOpen(true)} title="Group info"><MoreVertical /></button>
             </div>
-            <button className="groupMute" onClick={toggleGroupMute}>
-              <BellOff /> {selectedGroup.mutedUntil && new Date(selectedGroup.mutedUntil) > new Date() ? 'Unmute group' : 'Mute 8 hours'}
-            </button>
-            {selectedGroup.role === 'admin' && (
-              <div className="groupAdminActions">
-                <button onClick={editGroup}>Edit group</button>
-                <button onClick={createGroupInvite}>Invite link</button>
-              </div>
-            )}
-            {groupInvite && (
-              <div className="inviteCard">
-                <img src={groupInvite.qr} alt="Group invite QR code" />
-                <input readOnly value={groupInvite.url} />
-                <button onClick={() => navigator.clipboard.writeText(groupInvite.url)}>Copy link</button>
-                <button className="danger" onClick={revokeGroupInvite}>Revoke</button>
-              </div>
-            )}
             <div className="groupConversation">
               <div className="groupMessageList">
                 {(groupMessages[selectedGroup.id] || []).map(message => (
@@ -5062,16 +5062,27 @@ export default function App() {
                   <p className="empty">No group messages yet.</p>
                 )}
               </div>
+              {groupTyping[selectedGroup.id] && <div className="groupTyping">{groupTyping[selectedGroup.id]} is typing…</div>}
+              {groupStickersOpen && (
+                <div className="groupStickers">
+                  {['😂', '❤️', '👍', '🔥', '🎉', '😍', '🙏', '💯'].map(value => (
+                    <button key={value} onClick={() => { sendGroupMessage(value, 'sticker'); setGroupStickersOpen(false); }}>{value}</button>
+                  ))}
+                </div>
+              )}
+              {groupAttachOpen && (
+                <div className="groupAttachRow">
+                  <label title="Photo"><Image /> Photo<input hidden type="file" accept="image/*" onChange={e => { sendGroupFile(e, 'image'); setGroupAttachOpen(false); }} /></label>
+                  <label title="File"><Paperclip /> File<input hidden type="file" onChange={e => { sendGroupFile(e, 'file'); setGroupAttachOpen(false); }} /></label>
+                </div>
+              )}
               <div className="groupCompose">
-                <label title="Photo"><Image /><input hidden type="file" accept="image/*" onChange={e => sendGroupFile(e, 'image')} /></label>
-                <label title="GIF"><b>GIF</b><input hidden type="file" accept="image/gif" onChange={e => sendGroupFile(e, 'image')} /></label>
-                <label title="File"><Paperclip /><input hidden type="file" onChange={e => sendGroupFile(e, 'file')} /></label>
                 <button
-                  className={groupRecording ? 'groupRecord active' : 'groupRecord'}
-                  onClick={groupRecording ? stopGroupVoiceRecording : startGroupVoiceRecording}
-                  title={groupRecording ? 'Stop and send voice message' : 'Record voice message'}
+                  className="groupComposeIcon"
+                  onClick={() => { setGroupAttachOpen(value => !value); setGroupStickersOpen(false); }}
+                  title="Attach"
                 >
-                  {groupRecording ? <Square /> : <Mic />}
+                  {groupAttachOpen ? <X /> : <Plus />}
                 </button>
                 <input
                   value={groupText}
@@ -5082,33 +5093,81 @@ export default function App() {
                   onKeyDown={e => {
                     if (e.key === 'Enter') sendGroupMessage();
                   }}
-                  placeholder="Encrypted group message"
+                  placeholder="Message"
                 />
-                <button onClick={sendGroupMessage}><Send /></button>
-              </div>
-              {groupTyping[selectedGroup.id] && <div className="groupTyping">{groupTyping[selectedGroup.id]} is typing…</div>}
-              <div className="groupStickers">
-                {['😂', '❤️', '👍', '🔥', '🎉', '😍', '🙏', '💯'].map(value => (
-                  <button key={value} onClick={() => sendGroupMessage(value, 'sticker')}>{value}</button>
-                ))}
+                <button
+                  className="groupComposeIcon"
+                  onClick={() => { setGroupStickersOpen(value => !value); setGroupAttachOpen(false); }}
+                  title="Emoji"
+                >
+                  <Smile />
+                </button>
+                <button
+                  className={groupRecording ? 'groupComposeIcon groupRecord active' : 'groupComposeIcon groupRecord'}
+                  onClick={groupRecording ? stopGroupVoiceRecording : startGroupVoiceRecording}
+                  title={groupRecording ? 'Stop and send voice message' : 'Record voice message'}
+                >
+                  {groupRecording ? <Square /> : <Mic />}
+                </button>
+                <button className="groupSend" onClick={sendGroupMessage} title="Send"><Send /></button>
               </div>
             </div>
-            {selectedGroup.role === 'admin' && <button className="addMember" onClick={addGroupMember}><Plus /> Add member</button>}
-            <div className="memberList">
-              {selectedGroup.members.map(member => (
-                <div key={member.id}>
-                  <span>{member.username} · {member.role}</span>
-                  {selectedGroup.role === 'admin' && member.id !== me.id && (
-                    <div>
-                      <button onClick={() => changeGroupRole(member)}>{member.role === 'admin' ? 'Demote' : 'Promote'}</button>
-                      <button onClick={() => removeGroupMember(member.id)}>Remove</button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            <button className="danger leaveGroup" onClick={() => removeGroupMember(me.id)}>Leave group</button>
           </div>
+
+          {groupInfoOpen && (
+            <div className="groupInfoBackdrop" onClick={e => { e.stopPropagation(); setGroupInfoOpen(false); }}>
+              <div className="groupInfoSheet" onClick={e => e.stopPropagation()}>
+                <div className="groupInfoHead">
+                  <span className="groupInfoAvatar"><Users /></span>
+                  <b>{selectedGroup.name}</b>
+                  <small>{selectedGroup.members.length} {selectedGroup.members.length === 1 ? 'member' : 'members'}</small>
+                  {selectedGroup.description && <p>{selectedGroup.description}</p>}
+                  <button className="groupInfoClose" onClick={() => setGroupInfoOpen(false)} title="Close"><X /></button>
+                </div>
+
+                <div className="groupInfoRows">
+                  <button onClick={toggleGroupMute}>
+                    <BellOff /> {selectedGroup.mutedUntil && new Date(selectedGroup.mutedUntil) > new Date() ? 'Unmute group' : 'Mute for 8 hours'}
+                  </button>
+                  {selectedGroup.role === 'admin' && <button onClick={createGroupInvite}><Copy /> Invite link</button>}
+                  {selectedGroup.role === 'admin' && <button onClick={editGroup}><Pencil /> Edit group</button>}
+                </div>
+
+                {groupInvite && (
+                  <div className="inviteCard">
+                    <img src={groupInvite.qr} alt="Group invite QR code" />
+                    <input readOnly value={groupInvite.url} />
+                    <button onClick={() => navigator.clipboard.writeText(groupInvite.url)}>Copy link</button>
+                    <button className="danger" onClick={revokeGroupInvite}>Revoke</button>
+                  </div>
+                )}
+
+                <div className="groupInfoMembers">
+                  <h4>Members</h4>
+                  {selectedGroup.role === 'admin' && (
+                    <button className="groupAddMember" onClick={addGroupMember}><UserPlus /> Add member</button>
+                  )}
+                  {selectedGroup.members.map(member => (
+                    <div className="groupMemberRow" key={member.id}>
+                      <span className="groupMemberAvatar">{initials(member.username)}</span>
+                      <span className="groupMemberName">{member.username}</span>
+                      {member.role === 'admin' && <em>admin</em>}
+                      {selectedGroup.role === 'admin' && member.id !== me.id && (
+                        <span className="groupMemberActions">
+                          <button onClick={() => changeGroupRole(member)}>{member.role === 'admin' ? 'Demote' : 'Promote'}</button>
+                          <button onClick={() => removeGroupMember(member.id)}>Remove</button>
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                <button className="groupLeaveRow" onClick={() => removeGroupMember(me.id)}>
+                  <LogOut /> Leave group
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
