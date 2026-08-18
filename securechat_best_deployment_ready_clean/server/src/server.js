@@ -15,7 +15,7 @@ const { createAdapter } = require('@socket.io/redis-adapter');
 const Redis = require('ioredis');
 const { AccessToken } = require('livekit-server-sdk');
 const webpush = require('web-push');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, DeleteObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 
 const PORT = process.env.PORT || 8080;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
@@ -173,8 +173,12 @@ function safeUploadFilter(req, file, cb) {
   cb(null, true);
 }
 
+// When object storage is configured, uploads are buffered in memory and pushed
+// to the bucket - Render's free-tier local disk is wiped on every deploy, so
+// files written there are lost. Disk storage remains only as a local-dev
+// fallback when no bucket is configured.
 const upload = multer({
-  storage: multer.diskStorage({
+  storage: STORAGE_CONFIGURED ? multer.memoryStorage() : multer.diskStorage({
     destination: (r, f, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
     filename: (r, f, cb) => {
       const extension = path.extname(f.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
@@ -809,6 +813,23 @@ app.get('/uploads/:filename', asyncRoute(async (req, res) => {
   ]);
   if (!INLINE_SAFE_EXTENSIONS.has(path.extname(filename).toLowerCase())) {
     res.setHeader('Content-Disposition', 'attachment');
+  }
+
+  // Serving stays proxied through this route (rather than handing out bucket
+  // URLs) so the per-file authorization above keeps applying to every request.
+  if (STORAGE_CONFIGURED) {
+    try {
+      const object = await r2Client.send(new GetObjectCommand({
+        Bucket: STORAGE_BUCKET,
+        Key: 'chat-uploads/' + filename
+      }));
+      if (object.ContentType) res.setHeader('Content-Type', object.ContentType);
+      if (object.ContentLength) res.setHeader('Content-Length', object.ContentLength);
+      object.Body.pipe(res);
+      return;
+    } catch {
+      // Fall through to local disk for files uploaded before the bucket migration.
+    }
   }
 
   res.sendFile(path.join(UPLOADS_DIR, filename), error => {
@@ -2409,11 +2430,11 @@ app.post('/api/profile/avatar', auth, uploadRateLimit, upload.single('file'), as
     return res.status(400).json({ error: 'Choose a valid image.' });
   }
   if (req.file.size > 2 * 1024 * 1024) {
-    fs.unlink(req.file.path, () => {});
+    if (req.file.path) fs.unlink(req.file.path, () => {});
     return res.status(400).json({ error: 'Profile picture must be smaller than 2 MB.' });
   }
-  const avatarBuffer = await fs.promises.readFile(req.file.path);
-  fs.unlink(req.file.path, () => {});
+  const avatarBuffer = req.file.buffer || await fs.promises.readFile(req.file.path);
+  if (req.file.path) fs.unlink(req.file.path, () => {});
   const avatarUrl = `data:${req.file.mimetype};base64,${avatarBuffer.toString('base64')}`;
   const result = await pool.query(
     `WITH updated AS (
@@ -2444,13 +2465,20 @@ app.post('/api/profile/avatar', auth, uploadRateLimit, upload.single('file'), as
 app.post('/api/upload', auth, uploadRateLimit, upload.single('file'), asyncRoute(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'File required.' });
 
+  let filename = req.file.filename;
+  if (STORAGE_CONFIGURED) {
+    const extension = path.extname(req.file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
+    filename = crypto.randomUUID() + extension;
+    await uploadToR2(req.file.buffer, 'chat-uploads/' + filename, req.file.mimetype);
+  }
+
   await pool.query(
     'INSERT INTO uploaded_files(filename,uploader_id) VALUES($1,$2) ON CONFLICT DO NOTHING',
-    [req.file.filename, req.user.id]
+    [filename, req.user.id]
   );
 
   res.json({
-    url: '/uploads/' + req.file.filename,
+    url: '/uploads/' + filename,
     name: req.file.originalname,
     mime: req.file.mimetype,
     size: req.file.size

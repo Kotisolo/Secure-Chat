@@ -753,13 +753,6 @@ export default function App() {
     }
   }
 
-  function socialLogin(provider) {
-    setErr('');
-    setAuthLoading(true);
-    const deviceName = encodeURIComponent(navigator.userAgent || 'Naad browser');
-    window.location.href = `${API_URL}/api/auth/oauth/${provider}/start?deviceName=${deviceName}`;
-  }
-
   async function requestReset(e) {
     e.preventDefault();
     setErr('');
@@ -3603,12 +3596,6 @@ export default function App() {
           action: changeActiveChatTheme
         },
         {
-          label: 'Storage & Data',
-          detail: 'Manage storage, data usage',
-          icon: <BarChart3 />,
-          action: () => alert('Storage & Data settings will be connected without downloading files automatically.')
-        },
-        {
           label: 'Devices',
           detail: 'Manage linked devices',
           icon: <MonitorUp />,
@@ -3631,12 +3618,6 @@ export default function App() {
     {
       title: 'Support',
       rows: [
-        {
-          label: 'Help & Support',
-          detail: 'Get help and contact support',
-          icon: <Info />,
-          action: () => alert('Help & Support will be connected before go-live.')
-        },
         {
           label: 'About Naad',
           detail: 'App version 1.0.0',
@@ -3755,11 +3736,6 @@ export default function App() {
                       {authLoading ? 'Sending code...' : 'Send Login Code'}
                     </button>
                     <p className="authSwitch"><button type="button" onClick={() => { setErr(''); setLoginStep('password'); }}>Use your password instead</button></p>
-                    <div className="socialDivider"><span />or continue with<span /></div>
-                    <div className="socialLoginRow">
-                      <button type="button" onClick={() => socialLogin('google')} disabled={authLoading}><b>G</b> Google</button>
-                      <button type="button" onClick={() => socialLogin('apple')} disabled={authLoading}><b>A</b> Apple</button>
-                    </div>
                     <p className="authSwitch">Don't have an account? <button type="button" onClick={() => setAuthMode('register')}>Register</button></p>
                   </form>
                 )}
@@ -4426,12 +4402,9 @@ export default function App() {
                 <label className="toolCamera"><Camera /><span>Camera</span><input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} /></label>
                 <label className="toolGallery"><Image /><span>Gallery</span><input hidden type="file" accept="image/*" onChange={e => file(e, 'image')} /></label>
                 <label className="toolFile"><Paperclip /><span>File</span><input hidden type="file" onChange={e => file(e)} /></label>
-                <button className="toolContact" onClick={() => alert('Contact sharing will be connected in the contacts phase.')}><User /><span>Contact</span></button>
                 <button className="toolLocation" onClick={() => { setShowLocationShare(true); setShowComposerTools(false); }}><MapPin /><span>Location</span></button>
                 <button className="toolVoice" onClick={() => { setShowComposerTools(false); startVoiceRecording(); }}><Mic /><span>Voice Note</span></button>
-                <button className="toolPoll" onClick={() => alert('Polls will be connected in the groups/channels phase.')}><BarChart3 /><span>Poll</span></button>
                 <button className="toolSchedule" onClick={() => { setShowScheduler(value => !value); setShowComposerTools(false); }}><CalendarClock /><span>Schedule</span></button>
-                <button className="toolAi" onClick={() => alert('AI Assistant will be connected after go-live.')}><Languages /><span>AI Assistant</span></button>
                 <button className="toolCancel" onClick={() => setShowComposerTools(false)}>Cancel</button>
               </div>
             )}
