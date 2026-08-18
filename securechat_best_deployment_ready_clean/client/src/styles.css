@@ -7622,3 +7622,22 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
   .desktopNavRail{height:auto;flex:0 0 auto}
   .bottomNav{display:flex}
 }
+
+/* ---------- mobile full-screen sheets ---------- */
+/* The late design layer's unguarded .modal{padding:20px;place-items:center}
+   and .card.opalCard{border-radius/border/shadow} out-cascade the legacy
+   mobile rules, so on phones the Echoes/Calls/etc. panels rendered as a
+   100vw card shifted 20px right (close button cut off) and the login card
+   floated with gaps. On phones these are edge-to-edge sheets. */
+@media(max-width:900px){
+  .modal{padding:0;place-items:stretch}
+  .historyCard,.statusCard,.channelCard,.privacyCard,.securityCard,.groupCard{
+    width:100vw;max-width:none;height:100dvh;max-height:none;border:0;border-radius:0
+  }
+  .historyClose{position:fixed;top:14px;right:14px;z-index:6}
+}
+@media(max-width:700px){
+  .opalAuth{padding:0}
+  .opalPhoneShell{padding:0}
+  .card.opalCard{width:100%;min-height:100dvh;max-width:none;border:0;border-radius:0;box-shadow:none}
+}
