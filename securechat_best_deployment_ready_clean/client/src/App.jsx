@@ -438,6 +438,9 @@ export default function App() {
   const [statuses, setStatuses] = useState([]);
   const [showStatuses, setShowStatuses] = useState(false);
   const [echoComposerOpen, setEchoComposerOpen] = useState(false);
+  // Small in-app chooser used wherever the old code asked users to TYPE a
+  // choice into a browser prompt: { title, options: [{label, value}], onPick }.
+  const [optionPicker, setOptionPicker] = useState(null);
   const [statusExcluded, setStatusExcluded] = useState([]);
   const [channels, setChannels] = useState([]);
   const [selectedChannel, setSelectedChannel] = useState(null);
@@ -1170,7 +1173,7 @@ export default function App() {
   }
 
   async function createTextStatus() {
-    const body = prompt('Write a Status update:');
+    const body = prompt('Write an Echo:');
     if (!body) return;
     const id = crypto.randomUUID();
     const audience = statusAudience();
@@ -2460,23 +2463,20 @@ export default function App() {
     });
   }
 
-  async function setActiveDisappearingMessages() {
+  function setActiveDisappearingMessages() {
     if (!active) return;
     closeChatHeaderMenu();
-    const choice = prompt('Disappearing messages: enter 0 for off, 24h, 7d, or 90d.', '24h');
-    if (choice === null) return;
-    const normalized = choice.trim().toLowerCase();
-    const seconds = normalized === '0' || normalized === 'off' ? 0
-      : normalized === '24h' || normalized === '1d' ? 86400
-        : normalized === '7d' ? 604800
-          : normalized === '90d' ? 7776000
-            : Number(normalized);
-    if (!Number.isFinite(seconds) || seconds < 0) {
-      alert('Please enter 0, 24h, 7d, or 90d.');
-      return;
-    }
     const current = contacts.find(contact => String(contact.id) === String(active.id)) || active;
-    await updateChatPreference(current, { disappearingSeconds: seconds });
+    setOptionPicker({
+      title: 'Disappearing messages',
+      options: [
+        { label: 'Off', value: 0 },
+        { label: '24 hours', value: 86400 },
+        { label: '7 days', value: 604800 },
+        { label: '90 days', value: 7776000 }
+      ],
+      onPick: seconds => updateChatPreference(current, { disappearingSeconds: seconds })
+    });
   }
 
   function openActiveMediaPanel() {
@@ -2496,15 +2496,19 @@ export default function App() {
 
   function changeActiveChatTheme() {
     closeChatHeaderMenu();
-    const choice = prompt('Choose chat theme: opal, light, sky, or dark.', chatTheme);
-    if (!choice) return;
-    const normalized = choice.trim().toLowerCase();
-    if (!['opal', 'light', 'sky', 'dark'].includes(normalized)) {
-      alert('Please choose opal, light, sky, or dark.');
-      return;
-    }
-    localStorage.setItem('sc_chat_theme', normalized);
-    setChatTheme(normalized);
+    setOptionPicker({
+      title: 'Chat theme',
+      options: [
+        { label: 'Opal', value: 'opal' },
+        { label: 'Light', value: 'light' },
+        { label: 'Sky', value: 'sky' },
+        { label: 'Dark', value: 'dark' }
+      ],
+      onPick: theme => {
+        localStorage.setItem('sc_chat_theme', theme);
+        setChatTheme(theme);
+      }
+    });
   }
 
   async function startVoiceRecording() {
@@ -2632,33 +2636,41 @@ export default function App() {
     setSelectedMessage(null);
   }
 
-  async function translateSelectedMessage() {
+  function translateSelectedMessage() {
     if (!selectedMessage?.body) return;
     if (!globalThis.LanguageDetector || !globalThis.Translator) {
       alert('Private on-device translation is available in supported desktop Chrome versions. It is not available in this browser yet.');
       return;
     }
-    const targetLanguage = prompt(
-      'Translate to language code (for example: en, es, hi, te, fr):',
-      (navigator.language || 'en').split('-')[0]
-    );
-    if (!targetLanguage) return;
-    try {
-      const detector = await globalThis.LanguageDetector.create();
-      const detected = await detector.detect(selectedMessage.body);
-      const sourceLanguage = detected[0]?.detectedLanguage;
-      if (!sourceLanguage) throw new Error('Language could not be detected.');
-      if (sourceLanguage === targetLanguage) {
-        setTranslations(current => ({ ...current, [selectedMessage.id]: selectedMessage.body }));
-      } else {
-        const translator = await globalThis.Translator.create({ sourceLanguage, targetLanguage });
-        const translated = await translator.translate(selectedMessage.body);
-        setTranslations(current => ({ ...current, [selectedMessage.id]: translated }));
+    const message = selectedMessage;
+    setOptionPicker({
+      title: 'Translate to',
+      options: [
+        { label: 'English', value: 'en' },
+        { label: 'हिन्दी (Hindi)', value: 'hi' },
+        { label: 'తెలుగు (Telugu)', value: 'te' },
+        { label: 'Español (Spanish)', value: 'es' },
+        { label: 'Français (French)', value: 'fr' }
+      ],
+      onPick: async targetLanguage => {
+        try {
+          const detector = await globalThis.LanguageDetector.create();
+          const detected = await detector.detect(message.body);
+          const sourceLanguage = detected[0]?.detectedLanguage;
+          if (!sourceLanguage) throw new Error('Language could not be detected.');
+          if (sourceLanguage === targetLanguage) {
+            setTranslations(current => ({ ...current, [message.id]: message.body }));
+          } else {
+            const translator = await globalThis.Translator.create({ sourceLanguage, targetLanguage });
+            const translated = await translator.translate(message.body);
+            setTranslations(current => ({ ...current, [message.id]: translated }));
+          }
+          setSelectedMessage(null);
+        } catch (error) {
+          alert('Translation failed: ' + error.message);
+        }
       }
-      setSelectedMessage(null);
-    } catch (error) {
-      alert('Translation failed: ' + error.message);
-    }
+    });
   }
 
   async function saveEdit() {
@@ -5126,6 +5138,22 @@ export default function App() {
               </button>
             )}
             <button className="danger" onClick={leaveGroupCall}><PhoneOff /></button>
+          </div>
+        </div>
+      )}
+
+      {optionPicker && (
+        <div className="modal" onClick={() => setOptionPicker(null)}>
+          <div className="optionPickerCard" onClick={e => e.stopPropagation()}>
+            <h3>{optionPicker.title}</h3>
+            {optionPicker.options.map(option => (
+              <button key={String(option.value)} type="button" onClick={() => {
+                const pick = optionPicker.onPick;
+                setOptionPicker(null);
+                pick(option.value);
+              }}>{option.label}</button>
+            ))}
+            <button type="button" className="optionPickerCancel" onClick={() => setOptionPicker(null)}>Cancel</button>
           </div>
         </div>
       )}
