@@ -7551,3 +7551,42 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .callBtns button.danger{background:var(--red);box-shadow:0 8px 24px rgba(239,68,68,.35)}
 .mini{box-shadow:0 0 0 1px rgba(124,58,237,.25),var(--shadow-lg)}
 .softCancel{width:100%;height:42px;margin-top:8px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600}
+
+/* ---------- desktop login: split-screen brand pane ---------- */
+/* Mobile keeps the single centered card (unchanged). At desktop widths the
+   auth screen becomes a two-pane layout: a persistent brand/marketing pane on
+   the left and the active step (welcome buttons or a form) on the right -
+   deliberately a different page shape, not just a scaled-up mobile card. */
+.opalBrandPane{display:none}
+@media (min-width:960px){
+  .opalAuth{
+    display:grid;grid-template-columns:minmax(360px,1fr) minmax(420px,560px);
+    padding:0;min-height:100vh;
+  }
+  .opalBrandPane{
+    display:flex;flex-direction:column;justify-content:center;gap:16px;
+    padding:64px 72px;position:relative;overflow:hidden;color:#fff;
+    background:var(--opal-gradient);background-size:260% 260%;animation:opalShift 16s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion:reduce){.opalBrandPane{animation:none;background-position:30% 50%}}
+  .opalBrandMark{display:flex;align-items:center;gap:16px;margin-bottom:4px}
+  .opalBrandMark .opalLogo.badge{margin:0;animation:none;background:rgba(255,255,255,.18);box-shadow:none;flex-shrink:0}
+  .opalBrandMark h1{margin:0;font-size:36px;color:#fff}
+  .opalBrandMark h1 em{font-style:normal;background:none;-webkit-background-clip:unset;background-clip:unset;color:#fff}
+  .opalBrandPane>.opalTagline{color:#fff;font-size:18px}
+  .opalBrandPane>.opalSubtag{color:rgba(255,255,255,.82)}
+  .opalBrandPane .authFeatures{margin-top:18px;max-width:420px}
+  .opalBrandPane .authFeatures span{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.24);color:#fff}
+  .opalBrandPane .authFeatures span svg{color:#fff}
+  .opalBrandPane .authFeatures span small{color:rgba(255,255,255,.78)}
+
+  .opalPhoneShell{padding:48px;align-items:center}
+  .card.opalCard{width:100%;max-width:420px;box-shadow:none;border:0;background:transparent}
+  /* The right pane's own hero copy would duplicate the brand pane on desktop -
+     hide it there and keep only the Get Started/Log In actions. */
+  .welcomeMode .opalPhoneShell .opalCard>.opalLogo.badge,
+  .welcomeMode .opalPhoneShell .opalCard>h1,
+  .welcomeMode .opalPhoneShell .opalCard>.opalTagline,
+  .welcomeMode .opalPhoneShell .opalCard>.opalSubtag,
+  .welcomeMode .opalPhoneShell .opalCard>.opalFeatureGrid{display:none}
+}
