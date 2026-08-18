@@ -3950,7 +3950,7 @@ export default function App() {
                 </div>
                 <label className="flicksUpload">
                   {flickUploading ? 'Uploading...' : <><Plus /> New</>}
-                  <input hidden type="file" accept="video/mp4,video/webm,video/quicktime" capture="environment" disabled={flickUploading} onChange={uploadFlick} />
+                  <input hidden type="file" accept="video/mp4,video/webm,video/quicktime" disabled={flickUploading} onChange={uploadFlick} />
                 </label>
               </div>
               <div
