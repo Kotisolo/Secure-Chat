@@ -5,7 +5,7 @@ import {
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
-  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward
+  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward, MailOpen, Pin, PinOff
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, ensureFileToken, API_URL
@@ -964,6 +964,15 @@ export default function App() {
     });
 
     s.on('message:reaction', applyReaction);
+
+    s.on('message:pinned', d => {
+      setMessages(current => ({
+        ...current,
+        [d.conversationId]: (current[d.conversationId] || []).map(message => (
+          message.id === d.messageId ? { ...message, pinned: d.pinned } : message
+        ))
+      }));
+    });
 
     s.on('user:profile-updated', updatedUser => {
       setContacts(current => current.map(contact => (
@@ -2547,6 +2556,7 @@ export default function App() {
           archived: Boolean(current.archived),
           mutedUntil: current.mutedUntil || null,
           disappearingSeconds: current.disappearingSeconds || 0,
+          forceUnread: Boolean(current.forceUnread),
           ...changes
         })
       });
@@ -2864,6 +2874,26 @@ export default function App() {
       setSelectedMessage(null);
     } catch (error) {
       alert('Could not star message: ' + error.message);
+    }
+  }
+
+  async function toggleMessagePin() {
+    if (!selectedMessage || String(selectedMessage.id).startsWith('tmp')) return;
+    try {
+      const result = await api(`/api/messages/${encodeURIComponent(selectedMessage.id)}/pin`, {
+        method: 'POST',
+        body: '{}'
+      });
+      const c = cid(me.id, active.id);
+      setMessages(current => ({
+        ...current,
+        [c]: (current[c] || []).map(message => (
+          message.id === selectedMessage.id ? { ...message, pinned: result.pinned } : message
+        ))
+      }));
+      setSelectedMessage(null);
+    } catch (error) {
+      alert('Could not pin message: ' + error.message);
     }
   }
 
@@ -4423,6 +4453,9 @@ export default function App() {
                 </button>
                 {chatMenu?.id === u.id && (
                   <div className="chatMenu">
+                    <button onClick={() => { updateChatPreference(u, { forceUnread: true }); setChatMenu(null); }}>
+                      <MailOpen /> Mark as unread
+                    </button>
                     <button onClick={() => updateChatPreference(u, { archived: !u.chat?.archived })}>
                       <Archive /> {u.chat?.archived ? 'Unarchive' : 'Archive'}
                     </button>
@@ -4587,6 +4620,13 @@ export default function App() {
                     )}
                   </div>
                 </div>
+              </div>
+            )}
+
+            {activeConversationRows().filter(message => message.pinned).length > 0 && (
+              <div className="pinnedBanner" onClick={() => setSelectedMessage(activeConversationRows().filter(message => message.pinned).slice(-1)[0])}>
+                <Pin />
+                <span>{activeConversationRows().filter(message => message.pinned).slice(-1)[0]?.body || 'Pinned attachment'}</span>
               </div>
             )}
 
@@ -5192,6 +5232,7 @@ export default function App() {
               <button onClick={beginForward}><Forward /> Forward</button>
               <button onClick={copyMessage}><Copy /> Copy</button>
               <button onClick={toggleStar}><Star /> {selectedMessage.starred ? 'Unstar' : 'Star'}</button>
+              <button onClick={toggleMessagePin}>{selectedMessage.pinned ? <PinOff /> : <Pin />} {selectedMessage.pinned ? 'Unpin' : 'Pin'}</button>
               {selectedMessage.kind === 'text' && (
                 <button onClick={translateSelectedMessage}><Languages /> Translate</button>
               )}
