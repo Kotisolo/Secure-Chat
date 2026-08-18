@@ -5,7 +5,7 @@ import {
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
-  MonitorUp, Hand, Info, Mail
+  MonitorUp, Hand, Info, Mail, Clapperboard
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, ensureFileToken, API_URL
@@ -3651,7 +3651,7 @@ export default function App() {
           <p className="opalTagline">Communicate without barriers.</p>
           <small className="opalSubtag">Talk to anyone, in any language.</small>
           <div className="authFeatures opalFeatureGrid">
-            <span><Languages /> <b>AI Translation</b><small>Real-time translation in any language.</small></span>
+            <span><Clapperboard /> <b>Flicks</b><small>Share and watch short videos with your contacts.</small></span>
             <span><Shield /> <b>Secure Messaging</b><small>Private chats with strong protection.</small></span>
             <span><Video /> <b>Voice & Video Calls</b><small>High quality calls with anyone.</small></span>
             <span><Settings /> <b>Smart Features</b><small>AI assistant, weather, and more.</small></span>
@@ -3668,7 +3668,7 @@ export default function App() {
                 <small className="opalSubtag">Talk to anyone, in any language.</small>
 
                 <div className="authFeatures opalFeatureGrid">
-                  <span><Languages /> <b>AI Translation</b><small>Real-time translation in any language.</small></span>
+                  <span><Clapperboard /> <b>Flicks</b><small>Share and watch short videos with your contacts.</small></span>
                   <span><Shield /> <b>Secure Messaging</b><small>Private chats with strong protection.</small></span>
                   <span><Video /> <b>Voice & Video Calls</b><small>High quality calls with anyone.</small></span>
                   <span><Settings /> <b>Smart Features</b><small>AI assistant, weather, and more.</small></span>
