@@ -7821,3 +7821,32 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .photoZoomOverlay{position:fixed;inset:0;z-index:90;background:rgba(5,6,12,.92);display:flex;align-items:center;justify-content:center;padding:24px}
 .photoZoomOverlay img{max-width:min(90vw,520px);max-height:80vh;border-radius:16px;object-fit:contain;box-shadow:var(--shadow-lg)}
 .photoZoomClose{position:fixed;top:18px;right:18px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;z-index:1}
+
+/* ---------- privacy screen: replace native select/checkbox controls ---------- */
+/* The visibility selects rendered as native OS dropdowns (forced light
+   color-scheme against a dark page = mismatched gray pills) and the
+   checkboxes were bare browser checkboxes - both looked out of place next
+   to the rest of the app's custom-styled rows and toggles. Visibility rows
+   now open the same option-picker sheet used elsewhere; the checkboxes are
+   visually hidden and paired with the toggle switch already built for the
+   call-options sheet, generalized here so it isn't scoped to just that menu. */
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.privacyRowButton{width:100%;background:transparent;border:0;border-radius:0;text-align:left;cursor:pointer}
+.privacyRowButton:hover{background:var(--panel2)}
+.privacyRowButton em{display:flex;align-items:center;gap:4px;font-style:normal;color:var(--muted);font-size:13px}
+.privacyRowButton em svg{width:14px;height:14px}
+.toggle{width:44px;height:26px;border-radius:999px;background:var(--panel3);position:relative;display:inline-block;flex-shrink:0;transition:background .18s ease}
+.toggle::after{content:'';position:absolute;width:20px;height:20px;left:3px;top:3px;border-radius:50%;background:#fff;transition:transform .18s ease}
+.toggle.on{background:var(--primary)}
+.toggle.on::after{transform:translateX(18px)}
+
+/* ---------- create/edit form (replaces prompt() dialogs) ---------- */
+.textFormCard{margin:auto;width:340px;max-width:88vw;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:20px;display:flex;flex-direction:column;gap:14px}
+.textFormCard h3{margin:0;color:var(--text);font-size:16px;text-align:center}
+.textFormField{display:flex;flex-direction:column;gap:6px}
+.textFormField span{color:var(--muted);font-size:12px;font-weight:600}
+.textFormField input{height:42px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);border:1px solid var(--line);padding:0 12px;font-size:14px}
+.textFormField input:focus{outline:none;border-color:var(--primary)}
+.textFormActions{display:flex;gap:10px;margin-top:4px}
+.textFormActions .optionPickerCancel{flex:1;height:42px;border-radius:var(--radius-md);background:var(--panel2);color:var(--muted);font-weight:600}
+.textFormActions .primary{flex:1;height:42px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-weight:600}
