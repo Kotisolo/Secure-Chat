@@ -3643,6 +3643,20 @@ export default function App() {
   if (screen !== 'app') {
     return (
       <div className={`auth opalAuth ${screen === 'welcome' ? 'welcomeMode' : 'formMode'}`}>
+        <div className="opalBrandPane" aria-hidden="true">
+          <div className="opalBrandMark">
+            <div className="opalLogo badge"><MessageCircle /></div>
+            <h1><span>Chat</span> <em>Opal</em></h1>
+          </div>
+          <p className="opalTagline">Communicate without barriers.</p>
+          <small className="opalSubtag">Talk to anyone, in any language.</small>
+          <div className="authFeatures opalFeatureGrid">
+            <span><Languages /> <b>AI Translation</b><small>Real-time translation in any language.</small></span>
+            <span><Shield /> <b>Secure Messaging</b><small>Private chats with strong protection.</small></span>
+            <span><Video /> <b>Voice & Video Calls</b><small>High quality calls with anyone.</small></span>
+            <span><Settings /> <b>Smart Features</b><small>AI assistant, weather, and more.</small></span>
+          </div>
+        </div>
         <div className="opalPhoneShell">
           <div className="card opalCard">
             <div className="opalLogo badge"><MessageCircle /></div>
