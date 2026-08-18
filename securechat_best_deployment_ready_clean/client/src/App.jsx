@@ -2475,7 +2475,12 @@ export default function App() {
         { label: '7 days', value: 604800 },
         { label: '90 days', value: 7776000 }
       ],
-      onPick: seconds => updateChatPreference(current, { disappearingSeconds: seconds })
+      onPick: async seconds => {
+        await updateChatPreference(current, { disappearingSeconds: seconds });
+        alert(seconds === 0
+          ? 'Disappearing messages turned off.'
+          : `New messages in this chat will disappear after ${seconds === 86400 ? '24 hours' : seconds === 604800 ? '7 days' : '90 days'}.`);
+      }
     });
   }
 
@@ -2507,6 +2512,7 @@ export default function App() {
       onPick: theme => {
         localStorage.setItem('sc_chat_theme', theme);
         setChatTheme(theme);
+        alert(`Theme "${theme.charAt(0).toUpperCase()}${theme.slice(1)}" applied. Open any chat to see the new background.`);
       }
     });
   }
