@@ -27,7 +27,7 @@
   .bubble img{max-width:100%}
 }
 
-/* ===== SecureChat design refresh ===== */
+/* ===== Naad design refresh ===== */
 :root{
   --bg:#f8f9fb;
   --panel:#ffffff;
@@ -3906,7 +3906,7 @@ body{background:var(--bg);color:var(--text)}
   }
 }
 
-/* Reference auth redesign based on the supplied Chat Opal mockup */
+/* Reference auth redesign based on the supplied Naad mockup */
 .opalAuth{
   min-height:100vh;
   padding:24px;
@@ -4305,7 +4305,7 @@ body{background:var(--bg);color:var(--text)}
   }
 }
 
-/* Desktop main chat page refresh based on the supplied Chat Opal reference */
+/* Desktop main chat page refresh based on the supplied Naad reference */
 @media(min-width:901px){
   .app{
     padding:18px;
@@ -5820,7 +5820,7 @@ body{background:var(--bg);color:var(--text)}
   }
 }
 
-/* Mobile inbox refresh from supplied reference, using SecureChat purple/white colors */
+/* Mobile inbox refresh from supplied reference, using Naad purple/white colors */
 @media(max-width:900px){
   body{
     background:#f7f4ff;
@@ -6066,7 +6066,7 @@ body{background:var(--bg);color:var(--text)}
   .videoCall .videoStage .local{width:128px!important;height:96px!important;right:14px!important;bottom:112px!important}
 }
 
-/* Settings screen refreshed from the supplied reference, using the existing purple SecureChat theme */
+/* Settings screen refreshed from the supplied reference, using the existing purple Naad theme */
 .side.tab-settings{
   background:#fbfaff!important;
 }

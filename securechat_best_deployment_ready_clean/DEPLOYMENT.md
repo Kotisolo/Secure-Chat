@@ -1,4 +1,4 @@
-# SecureChat deployment
+# Naad deployment
 
 Production services:
 

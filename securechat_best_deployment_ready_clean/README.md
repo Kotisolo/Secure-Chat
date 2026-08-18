@@ -1,6 +1,6 @@
-# SecureChat React + Node
+# Naad React + Node
 
-SecureChat is a WhatsApp-style starter app using React, Node.js, Express, Socket.IO, and PostgreSQL.
+Naad is a private messaging app using React, Node.js, Express, Socket.IO, and PostgreSQL.
 
 ## Features
 
@@ -48,7 +48,7 @@ Experimental encryption work is documented in `E2EE.md`. It is disabled in produ
 
 ## Password recovery
 
-SecureChat uses free one-time recovery codes instead of insecure phone-only resets:
+Naad uses free one-time recovery codes instead of insecure phone-only resets:
 
 - New users receive a recovery code after registration.
 - Existing users create one from the key button after logging in.

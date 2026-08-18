@@ -1,7 +1,7 @@
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE IF NOT EXISTS users(
  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), username VARCHAR(80) NOT NULL, phone VARCHAR(40) UNIQUE NOT NULL,
- password_hash TEXT NOT NULL, about TEXT DEFAULT 'Hey there! I am using SecureChat.', avatar_url TEXT,
+ password_hash TEXT NOT NULL, about TEXT DEFAULT 'Hey there! I am using Naad.', avatar_url TEXT,
  created_at TIMESTAMPTZ DEFAULT NOW(), last_seen TIMESTAMPTZ DEFAULT NOW());
 ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_hash TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_code_created_at TIMESTAMPTZ;
@@ -244,3 +244,4 @@ CREATE TABLE IF NOT EXISTS flick_likes(
 CREATE INDEX IF NOT EXISTS idx_flicks_feed ON flicks(created_at DESC) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_flicks_author ON flicks(author_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_flick_likes_flick ON flick_likes(flick_id);
+ALTER TABLE users ALTER COLUMN about SET DEFAULT 'Hey there! I am using Naad.';

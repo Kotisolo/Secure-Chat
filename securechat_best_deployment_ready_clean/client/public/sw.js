@@ -18,7 +18,7 @@ self.addEventListener('push', event => {
   try {
     data = event.data ? event.data.json() : {};
   } catch {
-    data = { title: 'SecureChat', body: event.data ? event.data.text() : '' };
+    data = { title: 'Naad', body: event.data ? event.data.text() : '' };
   }
 
   if (data.type === 'incoming-call') {
@@ -35,7 +35,7 @@ self.addEventListener('push', event => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'SecureChat', {
+    self.registration.showNotification(data.title || 'Naad', {
       body: data.body || '',
       tag: data.tag || undefined,
       data
