@@ -8,7 +8,7 @@ import {
   MonitorUp, Hand, Info, Mail
 } from 'lucide-react';
 import {
-  api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, API_URL
+  api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, ensureFileToken, API_URL
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import { Room, RoomEvent, Track, createLocalAudioTrack, createLocalVideoTrack } from 'livekit-client';
@@ -504,6 +504,7 @@ export default function App() {
   const typingTimer = useRef(null);
   const turnCredentialCache = useRef({ iceServers: null, expiresAt: 0 });
   const socketReady = useRef(false);
+  const fileTokenRefresh = useRef(null);
   const activeRef = useRef(null);
   const pendingIce = useRef([]);
   const mediaRecorder = useRef(null);
@@ -819,6 +820,11 @@ export default function App() {
   async function enterApp() {
     if (socketReady.current) return;
     socketReady.current = true;
+
+    ensureFileToken();
+    if (!fileTokenRefresh.current) {
+      fileTokenRefresh.current = setInterval(() => ensureFileToken(), 10 * 60 * 1000);
+    }
 
     subscribeToPush();
 
@@ -1175,11 +1181,11 @@ export default function App() {
     try {
       const entries = await Promise.all(audience.map(async user => {
         const encrypted = await encryptAttachment(user.id, `status:${id}`, file);
-        const uploaded = await uploadFile(encrypted.file);
+        const uploaded = await uploadFile(encrypted?.file || file);
         const content = JSON.stringify({
           body: kind === 'image' ? 'Photo Status' : kind === 'video' ? 'Video Status' : 'Voice Status',
           kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type,
-          fileEncryption: encrypted.fileEncryption, senderDeviceId: encrypted.senderDeviceId
+          fileEncryption: encrypted?.fileEncryption, senderDeviceId: encrypted?.senderDeviceId
         });
         return [user.id, await encryptGroupMessage(user.id, `status:${id}`, content)];
       }));
@@ -1214,7 +1220,7 @@ export default function App() {
       method: 'POST',
       body: JSON.stringify({
         recipientId: status.userId,
-        body: '[Encrypted message]',
+        body: encrypted.ciphertext ? '[Encrypted message]' : body,
         kind: 'text',
         ...encrypted
       })
@@ -1443,11 +1449,11 @@ export default function App() {
     try {
       const entries = await Promise.all(selectedGroup.members.map(async member => {
         const encrypted = await encryptAttachment(member.id, `group:${selectedGroup.id}`, file);
-        const uploaded = await uploadFile(encrypted.file);
+        const uploaded = await uploadFile(encrypted?.file || file);
         const content = JSON.stringify({
           body: kind === 'image' ? 'Photo' : file.name,
           kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type,
-          fileEncryption: encrypted.fileEncryption, senderDeviceId: encrypted.senderDeviceId
+          fileEncryption: encrypted?.fileEncryption, senderDeviceId: encrypted?.senderDeviceId
         });
         return [member.id, await encryptGroupMessage(member.id, selectedGroup.id, content)];
       }));
@@ -1479,11 +1485,11 @@ export default function App() {
         try {
           const entries = await Promise.all(selectedGroup.members.map(async member => {
             const encrypted = await encryptAttachment(member.id, `group:${selectedGroup.id}`, voice);
-            const uploaded = await uploadFile(encrypted.file);
+            const uploaded = await uploadFile(encrypted?.file || voice);
             const content = JSON.stringify({
               body: 'Voice message', kind: 'audio', fileUrl: uploaded.url,
               fileName: voice.name, fileMime: voice.type,
-              fileEncryption: encrypted.fileEncryption, senderDeviceId: encrypted.senderDeviceId
+              fileEncryption: encrypted?.fileEncryption, senderDeviceId: encrypted?.senderDeviceId
             });
             return [member.id, await encryptGroupMessage(member.id, selectedGroup.id, content)];
           }));
@@ -3469,6 +3475,10 @@ export default function App() {
     endCall(true);
     disconnectSocket();
     socketReady.current = false;
+    if (fileTokenRefresh.current) {
+      clearInterval(fileTokenRefresh.current);
+      fileTokenRefresh.current = null;
+    }
     clearSession();
     setMe(null);
     setActive(null);

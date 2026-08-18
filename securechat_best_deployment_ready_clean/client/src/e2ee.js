@@ -1,6 +1,9 @@
 import { api, getStoredUser, resolveFileUrl } from './api';
 
-export const E2EE_ENABLED = import.meta.env.VITE_E2EE_ENABLED === 'true';
+// Defaults on. I don't have write access to the Vercel dashboard's env vars from
+// here, so the default has to flip in code rather than by setting a var there -
+// set VITE_E2EE_ENABLED=false explicitly to opt back out.
+export const E2EE_ENABLED = import.meta.env.VITE_E2EE_ENABLED !== 'false';
 
 const DB_NAME = 'securechat-crypto';
 const STORE_NAME = 'identity';
@@ -105,14 +108,31 @@ function rememberPeerKey(userId, device) {
   if (!known) localStorage.setItem(storageKey, device.fingerprint);
 }
 
+const NO_DEVICE_MESSAGE = 'This contact has not enabled encrypted messaging on a device.';
+
 async function getPeerDevice(userId, deviceId) {
   const devices = await api(`/api/e2ee/users/${encodeURIComponent(userId)}/devices`);
   const device = deviceId
     ? devices.find(item => item.deviceId === deviceId)
     : devices[0];
-  if (!device) throw new Error('This contact has not enabled encrypted messaging on a device.');
+  if (!device) throw new Error(NO_DEVICE_MESSAGE);
   rememberPeerKey(userId, device);
   return device;
+}
+
+// Not every contact/member has necessarily opened a build with encryption enabled
+// yet (rollout lag, or E2EE simply turned off). That's an adoption gap, not a
+// security event, so callers fall back to sending in plaintext rather than
+// blocking the message outright. A key that actually *changes* after being seen
+// once (rememberPeerKey above) is a different, real security signal and is left
+// to propagate as an error.
+async function getPeerDeviceOrNull(userId, deviceId) {
+  try {
+    return await getPeerDevice(userId, deviceId);
+  } catch (error) {
+    if (error.message === NO_DEVICE_MESSAGE) return null;
+    throw error;
+  }
 }
 
 async function deriveMessageKey(identity, peerDevice, conversationId) {
@@ -145,7 +165,9 @@ async function deriveMessageKey(identity, peerDevice, conversationId) {
 
 export async function encryptMessage(recipientId, conversationId, plaintext) {
   const identity = await ensureE2EEIdentity();
-  const peerDevice = await getPeerDevice(recipientId);
+  if (!identity) return {};
+  const peerDevice = await getPeerDeviceOrNull(recipientId);
+  if (!peerDevice) return {};
   const key = await deriveMessageKey(identity, peerDevice, conversationId);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ciphertext = await crypto.subtle.encrypt(
@@ -184,7 +206,9 @@ export async function decryptMessage(message, conversationId) {
 
 export async function encryptAttachment(recipientId, conversationId, file) {
   const identity = await ensureE2EEIdentity();
-  const peerDevice = await getPeerDevice(recipientId);
+  if (!identity) return null;
+  const peerDevice = await getPeerDeviceOrNull(recipientId);
+  if (!peerDevice) return null;
   const key = await deriveMessageKey(identity, peerDevice, conversationId);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt(
@@ -222,9 +246,15 @@ export async function decryptAttachment(message, conversationId) {
   return URL.createObjectURL(new Blob([decrypted], { type: message.fileMime || 'application/octet-stream' }));
 }
 
+// group/status payloads are stored as JSONB NOT NULL, so unlike direct messages
+// there's no "absent ciphertext" state to fall back to - the plaintext envelope
+// below is that fallback, explicitly marked so decryptGroupMessage can recognize
+// it instead of trying (and failing) to run AES-GCM over it.
 export async function encryptGroupMessage(memberId, groupId, plaintext) {
   const identity = await ensureE2EEIdentity();
-  const memberDevice = await getPeerDevice(memberId);
+  if (!identity) return JSON.stringify({ plaintext: true, data: plaintext });
+  const memberDevice = await getPeerDeviceOrNull(memberId);
+  if (!memberDevice) return JSON.stringify({ plaintext: true, data: plaintext });
   const key = await deriveMessageKey(identity, memberDevice, `group:${groupId}`);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt(
@@ -240,8 +270,10 @@ export async function encryptGroupMessage(memberId, groupId, plaintext) {
 }
 
 export async function decryptGroupMessage(senderId, groupId, payload) {
-  const identity = await ensureE2EEIdentity();
   const envelope = typeof payload === 'string' ? JSON.parse(payload) : payload;
+  if (envelope.plaintext) return envelope.data;
+  const identity = await ensureE2EEIdentity();
+  if (!identity) throw new Error('Encryption is not enabled on this device.');
   const senderDevice = await getPeerDevice(senderId, envelope.senderDeviceId);
   const key = await deriveMessageKey(identity, senderDevice, `group:${groupId}`);
   const plaintext = await crypto.subtle.decrypt(
