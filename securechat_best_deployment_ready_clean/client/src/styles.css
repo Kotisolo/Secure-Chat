@@ -7661,3 +7661,13 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
     right:14px!important;bottom:150px!important;
   }
 }
+
+/* ---------- call screen: fit the visible viewport on phones ---------- */
+/* .call is fixed inset:0, which sizes to the layout viewport - on phones the
+   browser's own bottom toolbar overlays the last ~80px, cutting the call
+   buttons in half. 100dvh tracks the actual visible area, and the extra
+   safe-area padding keeps End/Mute fully tappable above any browser chrome. */
+@media(max-width:900px){
+  .call{height:100dvh;bottom:auto;overflow:hidden}
+  .callBtns{padding-bottom:max(34px,env(safe-area-inset-bottom))!important}
+}
