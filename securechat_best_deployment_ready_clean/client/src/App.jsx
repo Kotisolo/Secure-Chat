@@ -3108,15 +3108,21 @@ export default function App() {
     };
   }
 
-  function localVideoStyle() {
-    if (!localVideoPosition) return undefined;
-    return {
-      left: localVideoPosition.x,
-      top: localVideoPosition.y,
-      right: 'auto',
-      bottom: 'auto'
-    };
-  }
+  // The stylesheet positions .local with !important (several legacy layers do),
+  // which beats plain inline styles - so the drag position must be applied as
+  // inline !important via setProperty, not through React's style prop.
+  useEffect(() => {
+    const el = localVideo.current;
+    if (!el) return;
+    if (!localVideoPosition) {
+      ['left', 'top', 'right', 'bottom'].forEach(p => el.style.removeProperty(p));
+      return;
+    }
+    el.style.setProperty('left', localVideoPosition.x + 'px', 'important');
+    el.style.setProperty('top', localVideoPosition.y + 'px', 'important');
+    el.style.setProperty('right', 'auto', 'important');
+    el.style.setProperty('bottom', 'auto', 'important');
+  }, [localVideoPosition, call.active, call.type, call.minimized]);
 
   function startLocalVideoDrag(event) {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -3204,6 +3210,7 @@ export default function App() {
     callPeer.current = null;
     setMicOn(true);
     setCamOn(true);
+    setLocalVideoPosition(null);
 
     setCall({
       active: false,
@@ -4657,7 +4664,6 @@ export default function App() {
                 muted
                 playsInline
                 className={videoEffectsOn ? 'local localEffect' : 'local'}
-                style={localVideoStyle()}
                 onPointerDown={startLocalVideoDrag}
                 onPointerMove={moveLocalVideoDrag}
                 onPointerUp={endLocalVideoDrag}
