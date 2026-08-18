@@ -7603,3 +7603,12 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
   touch-action:manipulation;
 }
 .chatMain *{-webkit-user-drag:none;pointer-events:none}
+
+/* ---------- sidebar declutter ---------- */
+/* Legacy .side.tab-chats rules force .mobileBrand visible even on desktop,
+   so the wordmark rendered twice ("Naad" over "Naad"). On desktop only the
+   desktop brand row (icon + name) should show. */
+@media(min-width:901px){
+  .desktopNavRail .mobileBrand{display:none!important}
+  .desktopNavRail .desktopBrand{display:block!important}
+}

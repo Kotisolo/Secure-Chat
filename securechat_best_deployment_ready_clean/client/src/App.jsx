@@ -3990,24 +3990,6 @@ export default function App() {
             loadChannels('', false);
           }}>Circles</button>
         </div>
-        {['all', 'unread'].includes(chatListFilter) && <>
-          <div className="storiesHeader">
-            <b>Stories</b>
-            <button type="button" onClick={() => setProfile(me)} title="Add story"><Plus /></button>
-          </div>
-          <div className="contactStories">
-            <button onClick={() => setProfile(me)}>
-              <span className="storyAvatar"><Avatar user={me} /><Plus /></span>
-              <small>Your story</small>
-            </button>
-            {contacts.slice(0, 6).map(contact => (
-              <button key={`story-${contact.id}`} onClick={() => openChat(contact)}>
-                <span className="storyAvatar"><Avatar user={contact} /></span>
-                <small>{contact.username}</small>
-              </button>
-            ))}
-          </div>
-        </>}
         <div className="flicksPanel">
           {!flicksConfigured ? (
             <div className="flicksEmpty">
@@ -4083,7 +4065,7 @@ export default function App() {
             </>
           )}
         </div>
-        {['all', 'unread'].includes(chatListFilter) && <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
+        {['all', 'unread'].includes(chatListFilter) && (showArchived || contacts.some(user => user.chat?.archived)) && <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> <span>{showArchived ? 'Back to chats' : 'Archived chats'}</span> {!showArchived && <b>{contacts.filter(user => user.chat?.archived).length} chats</b>}
         </button>}
         {['all', 'unread'].includes(chatListFilter) && <div className="statusHeader">
