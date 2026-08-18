@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone, Video, VideoOff, Send, Search, LogOut, User, Paperclip, Image,
-  Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle,
+  Smile, Mic, MicOff, PhoneOff, Minimize2, ArrowLeft, X, Lock, MessageCircle, Volume1,
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
@@ -3352,13 +3352,15 @@ export default function App() {
       const constraints = { ...videoConstraintsForNetwork(), facingMode: { ideal: nextFacing } };
 
       if (liveKitRoom.current) {
+        // Stop the current camera BEFORE opening the other one - many Android
+        // devices refuse to open a second camera while the first is still live.
         const oldTrack = liveKitLocalTracks.current.find(track => track.kind === Track.Kind.Video);
-        const nextTrack = await createLocalVideoTrack(constraints);
         if (oldTrack) {
           liveKitRoom.current.localParticipant.unpublishTrack?.(oldTrack.mediaStreamTrack);
           oldTrack.stop?.();
           liveKitLocalTracks.current = liveKitLocalTracks.current.filter(track => track !== oldTrack);
         }
+        const nextTrack = await createLocalVideoTrack(constraints);
         liveKitLocalTracks.current.push(nextTrack);
         await liveKitRoom.current.localParticipant.publishTrack(nextTrack);
         setCameraFacingMode(nextFacing);
@@ -3369,12 +3371,14 @@ export default function App() {
       }
 
       if (!pc.current || !localStream.current) return;
+      // Same ordering rule as above: release the current camera first, or the
+      // getUserMedia call for the other camera fails on many Android devices.
+      localStream.current.getVideoTracks().forEach(track => track.stop());
       const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: constraints });
       const nextTrack = stream.getVideoTracks()[0];
       const sender = pc.current.getSenders?.().find(item => item.track?.kind === 'video');
       if (sender) await sender.replaceTrack(nextTrack);
       else pc.current.addTrack(nextTrack, localStream.current);
-      localStream.current.getVideoTracks().forEach(track => track.stop());
       localStream.current = new MediaStream([
         ...localStream.current.getAudioTracks(),
         nextTrack
@@ -4666,12 +4670,18 @@ export default function App() {
           {callOptionsOpen && (
             <div className="callOptionsSheet">
               <i />
-              {typeof navigator !== 'undefined' && navigator.mediaDevices?.getDisplayMedia && (
+              {navigator.mediaDevices?.getDisplayMedia ? (
                 <button type="button" onClick={shareScreenInCall}>
                   <span><MonitorUp /></span>
                   <b>Share screen</b>
                   <small>Share your entire screen or an app</small>
                   <em>›</em>
+                </button>
+              ) : (
+                <button type="button" disabled style={{ opacity: 0.55 }}>
+                  <span><MonitorUp /></span>
+                  <b>Share screen</b>
+                  <small>This browser can't share the screen - open Naad in Chrome to use it</small>
                 </button>
               )}
               <button type="button" onClick={sendMessageDuringCall}>
@@ -4750,14 +4760,14 @@ export default function App() {
             )}
 
             <button
-              className={speakerOn ? '' : 'off'}
+              className={speakerMuted ? 'off' : ''}
               onClick={() => {
                 setSpeakerMuted(false);
                 setSpeakerVolume(value => value >= 0.8 ? NORMAL_CALL_VOLUME : LOUD_SPEAKER_VOLUME);
               }}
-              title={speakerOn ? 'Turn speaker off' : 'Turn speaker on'}
+              title={speakerOn ? 'Switch to normal volume' : 'Switch to loudspeaker'}
             >
-              {speakerOn ? <Volume2 /> : <VolumeX />}
+              {speakerMuted ? <VolumeX /> : speakerOn ? <Volume2 /> : <Volume1 />}
               <span>Speaker</span>
             </button>
 
