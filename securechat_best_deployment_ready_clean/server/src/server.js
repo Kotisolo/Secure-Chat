@@ -888,6 +888,7 @@ function msg(m) {
     sentAt: m.sent_at || null,
     expiresAt: m.expires_at || null,
     starred: Boolean(m.starred),
+    pinned: Boolean(m.pinned),
     reactions: Array.isArray(m.reactions) ? m.reactions : [],
     deliveredAt: m.delivered_at,
     readAt: m.read_at,
@@ -1941,6 +1942,7 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
       COALESCE(cp.archived,FALSE) archived,
       cp.muted_until,
       COALESCE(cp.disappearing_seconds,0) disappearing_seconds,
+      COALESCE(cp.force_unread,FALSE) force_unread,
       (SELECT COUNT(*)::int FROM messages unread
        WHERE unread.conversation_id=m.conversation_id
          AND unread.recipient_id=$1 AND unread.read_at IS NULL
@@ -1980,7 +1982,8 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
         archived: x.archived,
         mutedUntil: x.muted_until,
         disappearingSeconds: x.disappearing_seconds,
-        unreadCount: x.unread_count
+        forceUnread: x.force_unread,
+        unreadCount: x.force_unread ? Math.max(x.unread_count, 1) : x.unread_count
       }))
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) ||
         new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt))
@@ -2061,23 +2064,26 @@ app.patch('/api/chats/:conversationId/preferences', auth, asyncRoute(async (req,
   const disappearingSeconds = [0, 86400, 604800, 7776000].includes(Number(req.body.disappearingSeconds))
     ? Number(req.body.disappearingSeconds)
     : 0;
+  const forceUnread = Boolean(req.body.forceUnread);
   if (mutedUntil && Number.isNaN(mutedUntil.getTime())) {
     return res.status(400).json({ error: 'Invalid mute time.' });
   }
   const result = await pool.query(
-    `INSERT INTO chat_preferences(user_id,conversation_id,pinned,archived,muted_until,disappearing_seconds)
-     VALUES($1,$2,$3,$4,$5,$6)
+    `INSERT INTO chat_preferences(user_id,conversation_id,pinned,archived,muted_until,disappearing_seconds,force_unread)
+     VALUES($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT(user_id,conversation_id) DO UPDATE
      SET pinned=EXCLUDED.pinned,archived=EXCLUDED.archived,
-         muted_until=EXCLUDED.muted_until,disappearing_seconds=EXCLUDED.disappearing_seconds,updated_at=NOW()
-     RETURNING pinned,archived,muted_until,disappearing_seconds`,
-    [req.user.id, c, pinned, archived, mutedUntil, disappearingSeconds]
+         muted_until=EXCLUDED.muted_until,disappearing_seconds=EXCLUDED.disappearing_seconds,
+         force_unread=EXCLUDED.force_unread,updated_at=NOW()
+     RETURNING pinned,archived,muted_until,disappearing_seconds,force_unread`,
+    [req.user.id, c, pinned, archived, mutedUntil, disappearingSeconds, forceUnread]
   );
   res.json({
     pinned: result.rows[0].pinned,
     archived: result.rows[0].archived,
     mutedUntil: result.rows[0].muted_until,
-    disappearingSeconds: result.rows[0].disappearing_seconds
+    disappearingSeconds: result.rows[0].disappearing_seconds,
+    forceUnread: result.rows[0].force_unread
   });
 }));
 
@@ -2325,6 +2331,11 @@ app.post('/api/messages/:conversationId/read', auth, async (req, res) => {
       [c, req.user.id]
     );
 
+    await pool.query(
+      'UPDATE chat_preferences SET force_unread=FALSE,updated_at=NOW() WHERE user_id=$1 AND conversation_id=$2 AND force_unread=TRUE',
+      [req.user.id, c]
+    );
+
     const senders = [...new Set(updated.rows.map(x => String(x.sender_id)))];
     senders.forEach(senderId => {
       io.to(userRoom(senderId)).emit('message:read', {
@@ -2448,6 +2459,27 @@ app.post('/api/messages/:messageId/star', auth, asyncRoute(async (req, res) => {
     );
   }
   res.json({ starred });
+}));
+
+app.post('/api/messages/:messageId/pin', auth, asyncRoute(async (req, res) => {
+  const messageId = req.params.messageId;
+  const found = await pool.query(
+    'SELECT id,conversation_id,recipient_id,sender_id,pinned FROM messages WHERE id=$1 AND (sender_id=$2 OR recipient_id=$2)',
+    [messageId, req.user.id]
+  );
+  if (!found.rows.length) return res.status(404).json({ error: 'Message not found.' });
+  const pinned = !found.rows[0].pinned;
+  await pool.query(
+    'UPDATE messages SET pinned=$1, pinned_at=CASE WHEN $1 THEN NOW() ELSE NULL END WHERE id=$2',
+    [pinned, messageId]
+  );
+  const other = String(found.rows[0].sender_id) === String(req.user.id)
+    ? String(found.rows[0].recipient_id)
+    : String(found.rows[0].sender_id);
+  const event = { conversationId: found.rows[0].conversation_id, messageId, pinned };
+  io.to(userRoom(req.user.id)).emit('message:pinned', event);
+  io.to(userRoom(other)).emit('message:pinned', event);
+  res.json({ pinned });
 }));
 
 app.post('/api/messages/:messageId/reaction', auth, asyncRoute(async (req, res) => {

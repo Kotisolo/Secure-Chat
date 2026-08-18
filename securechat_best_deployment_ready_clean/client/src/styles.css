@@ -7879,3 +7879,8 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .appLockCard input:focus{outline:none;border-color:var(--primary);}
 .appLockCard button.primary{height:44px;border-radius:var(--radius-md);background:var(--primary);color:#fff;font-weight:600;}
 .appLockError{color:#e5484d;}
+
+/* ---------- pinned message banner + chat list "mark unread" ---------- */
+.pinnedBanner{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--panel2);color:var(--text);cursor:pointer;font-size:13px;border-bottom:1px solid var(--line);}
+.pinnedBanner svg{flex:none;width:16px;height:16px;color:var(--primary);}
+.pinnedBanner span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
