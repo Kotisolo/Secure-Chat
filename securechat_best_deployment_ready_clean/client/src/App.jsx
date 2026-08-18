@@ -3830,9 +3830,6 @@ export default function App() {
           <div className="appTitle">
             <div className="brandMark"><MessageCircle /></div>
             <div><b className="desktopBrand"><em>Naad</em></b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
-            <div className="mobileTitleActions">
-              <button onClick={() => { setMobileTab('settings'); setActive(null); }} title="Settings"><MoreVertical /></button>
-            </div>
           </div>
           <button className="newChatButton" onClick={() => {
             setMobileTab('chats');
