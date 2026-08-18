@@ -145,29 +145,44 @@ const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
 // (e.g. .html/.svg) to get script-capable content stored and later served back
 // with a browser-executable Content-Type. Both the declared mimetype AND the
 // filename's extension must appear together in this map.
+// Each mimetype maps to a single canonical extension used for the stored
+// filename. The client-supplied filename's extension is never trusted or
+// checked against this map (phone camera/gallery pickers routinely produce
+// filenames with no extension, a mismatched one, or nonstandard mimetype
+// spellings like "image/jpg") - only the validated mimetype decides what
+// gets stored on disk/in the bucket, closing the "safe mimetype + dangerous
+// extension" spoofing risk from the other direction.
 const UPLOAD_EXT_BY_MIME = {
-  'image/jpeg': ['.jpg', '.jpeg'],
-  'image/png': ['.png'],
-  'image/gif': ['.gif'],
-  'image/webp': ['.webp'],
-  'audio/webm': ['.webm'],
-  'audio/ogg': ['.ogg'],
-  'audio/mpeg': ['.mp3', '.mpga'],
-  'audio/mp4': ['.m4a'],
-  'audio/wav': ['.wav'],
-  'video/mp4': ['.mp4'],
-  'video/webm': ['.webm'],
-  'video/quicktime': ['.mov'],
-  'application/pdf': ['.pdf'],
-  'text/plain': ['.txt'],
-  'application/msword': ['.doc'],
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/png': '.png',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/heic': '.heic',
+  'image/heif': '.heif',
+  'audio/webm': '.webm',
+  'audio/ogg': '.ogg',
+  'audio/mpeg': '.mp3',
+  'audio/mp4': '.m4a',
+  'audio/x-m4a': '.m4a',
+  'audio/wav': '.wav',
+  'video/mp4': '.mp4',
+  'video/webm': '.webm',
+  'video/quicktime': '.mov',
+  'video/3gpp': '.3gp',
+  'application/pdf': '.pdf',
+  'text/plain': '.txt',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
 };
 
+function extensionForUpload(mimetype) {
+  const extension = UPLOAD_EXT_BY_MIME[mimetype];
+  return Array.isArray(extension) ? extension[0] : extension || null;
+}
+
 function safeUploadFilter(req, file, cb) {
-  const extension = path.extname(file.originalname).toLowerCase();
-  const allowedExtensions = UPLOAD_EXT_BY_MIME[file.mimetype];
-  if (!allowedExtensions || !allowedExtensions.includes(extension)) {
+  if (!extensionForUpload(file.mimetype)) {
     return cb(new Error('Unsupported file type.'), false);
   }
   cb(null, true);
@@ -181,8 +196,7 @@ const upload = multer({
   storage: STORAGE_CONFIGURED ? multer.memoryStorage() : multer.diskStorage({
     destination: (r, f, cb) => cb(null, path.join(__dirname, '..', 'uploads')),
     filename: (r, f, cb) => {
-      const extension = path.extname(f.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
-      cb(null, crypto.randomUUID() + extension);
+      cb(null, crypto.randomUUID() + (extensionForUpload(f.mimetype) || ''));
     }
   }),
   limits: { fileSize: 25 * 1024 * 1024 },
@@ -193,10 +207,8 @@ const flickUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = { 'video/mp4': ['.mp4'], 'video/webm': ['.webm'], 'video/quicktime': ['.mov'] };
-    const extension = path.extname(file.originalname).toLowerCase();
-    const ok = Boolean(allowed[file.mimetype] && allowed[file.mimetype].includes(extension));
-    cb(ok ? null : new Error('Only MP4, WebM, or MOV videos are allowed.'), ok);
+    const ok = ['video/mp4', 'video/webm', 'video/quicktime', 'video/3gpp'].includes(file.mimetype);
+    cb(ok ? null : new Error('Only MP4, WebM, MOV, or 3GP videos are allowed.'), ok);
   }
 });
 
@@ -2589,8 +2601,7 @@ app.post('/api/upload', auth, uploadRateLimit, upload.single('file'), asyncRoute
 
   let filename = req.file.filename;
   if (STORAGE_CONFIGURED) {
-    const extension = path.extname(req.file.originalname).toLowerCase().replace(/[^a-z0-9.]/g, '');
-    filename = crypto.randomUUID() + extension;
+    filename = crypto.randomUUID() + (extensionForUpload(req.file.mimetype) || '');
     await uploadToR2(req.file.buffer, 'chat-uploads/' + filename, req.file.mimetype);
   }
 
@@ -2617,7 +2628,10 @@ app.post('/api/flicks', auth, flickUpload.single('video'), asyncRoute(async (req
 
   const caption = clean(req.body.caption || '').slice(0, 500);
   const audience = req.body.audience === 'everyone' ? 'everyone' : 'contacts';
-  const extension = req.file.mimetype === 'video/webm' ? 'webm' : req.file.mimetype === 'video/quicktime' ? 'mov' : 'mp4';
+  const extension = req.file.mimetype === 'video/webm' ? 'webm'
+    : req.file.mimetype === 'video/quicktime' ? 'mov'
+    : req.file.mimetype === 'video/3gpp' ? '3gp'
+    : 'mp4';
   const key = `flicks/${crypto.randomUUID()}.${extension}`;
   const videoUrl = await uploadToR2(req.file.buffer, key, req.file.mimetype);
 
