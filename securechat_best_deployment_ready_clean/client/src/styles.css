@@ -7650,3 +7650,14 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
    the container; any tall form scrolls inside the shell instead. */
 .opalAuth{overflow:hidden}
 .opalPhoneShell{max-height:100dvh;overflow-y:auto}
+
+/* ---------- video call: keep self-preview clear of the top bar (mobile) ---------- */
+/* A legacy mobile rule pinned the local self-video to the top-right, where it
+   sat on top of the call top bar's buttons - taps landed on the video instead
+   of the controls. Standard placement: bottom-right, above the call buttons. */
+@media(max-width:900px){
+  .videoCall .videoStage .local{
+    top:auto!important;left:auto!important;
+    right:14px!important;bottom:150px!important;
+  }
+}
