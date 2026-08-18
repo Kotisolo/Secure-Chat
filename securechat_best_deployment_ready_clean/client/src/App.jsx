@@ -5,7 +5,7 @@ import {
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
-  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown
+  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, ensureFileToken, API_URL
@@ -423,6 +423,7 @@ export default function App() {
   const [groupStickersOpen, setGroupStickersOpen] = useState(false);
   const [groupAttachOpen, setGroupAttachOpen] = useState(false);
   const [groupAddMemberOpen, setGroupAddMemberOpen] = useState(false);
+  const [forwardingMessage, setForwardingMessage] = useState(null);
   const [groupMessages, setGroupMessages] = useState({});
   const [groupText, setGroupText] = useState('');
   const [flicks, setFlicks] = useState([]);
@@ -2690,6 +2691,65 @@ export default function App() {
   function beginReply() {
     setReplyTo(selectedMessage);
     setSelectedMessage(null);
+  }
+
+  function beginForward() {
+    setForwardingMessage(selectedMessage);
+    setSelectedMessage(null);
+  }
+
+  async function confirmForward(contact) {
+    const message = forwardingMessage;
+    setForwardingMessage(null);
+    if (!message || !contact || !me) return;
+
+    const conversationId = cid(me.id, contact.id);
+    try {
+      let fileUrl = message.fileUrl;
+      let fileName = message.fileName;
+      let fileMime = message.fileMime;
+      let fileEncryption;
+      let senderDeviceId;
+
+      if (fileUrl && ['image', 'file', 'audio'].includes(message.kind)) {
+        // Re-upload rather than reuse the original URL: the original's
+        // /uploads authorization is scoped to the sender/recipient of the
+        // message it was first attached to, which the forward's new
+        // recipient isn't part of.
+        const sourceUrl = attachmentUrls[message.id] || resolveFileUrl(message.fileUrl);
+        const response = await fetch(sourceUrl);
+        if (!response.ok) throw new Error('Could not read the original attachment.');
+        const blob = await response.blob();
+        const file = new File([blob], fileName || 'forwarded', { type: fileMime || blob.type });
+        const encrypted = E2EE_ENABLED ? await encryptAttachment(contact.id, conversationId, file) : null;
+        const uploaded = await uploadFile(encrypted?.file || file);
+        fileUrl = uploaded.url;
+        fileName = fileName || uploaded.name;
+        fileMime = fileMime || uploaded.mime;
+        fileEncryption = encrypted?.fileEncryption;
+        senderDeviceId = encrypted?.senderDeviceId;
+      }
+
+      const encryptedPayload = E2EE_ENABLED && ['text', 'sticker'].includes(message.kind)
+        ? await encryptMessage(contact.id, conversationId, message.body)
+        : {};
+
+      await api('/api/messages', {
+        method: 'POST',
+        body: JSON.stringify({
+          recipientId: contact.id,
+          body: encryptedPayload.ciphertext ? '[Encrypted message]' : message.body,
+          kind: message.kind,
+          fileUrl, fileName, fileMime,
+          fileEncryption: fileEncryption ?? message.fileEncryption,
+          senderDeviceId: encryptedPayload.senderDeviceId || senderDeviceId,
+          ...encryptedPayload
+        })
+      });
+      alert(`Forwarded to ${contact.username}.`);
+    } catch (error) {
+      alert('Could not forward: ' + error.message);
+    }
   }
 
   async function copyMessage() {
@@ -4972,6 +5032,7 @@ export default function App() {
             </div>
             <div className="messageActionGrid">
               <button onClick={beginReply}><Reply /> Reply</button>
+              <button onClick={beginForward}><Forward /> Forward</button>
               <button onClick={copyMessage}><Copy /> Copy</button>
               <button onClick={toggleStar}><Star /> {selectedMessage.starred ? 'Unstar' : 'Star'}</button>
               {selectedMessage.kind === 'text' && (
@@ -4986,6 +5047,27 @@ export default function App() {
               )}
             </div>
             <button className="menuCancel" onClick={() => setSelectedMessage(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {forwardingMessage && (
+        <div className="groupInfoBackdrop" onClick={() => setForwardingMessage(null)}>
+          <div className="groupAddMemberSheet" onClick={e => e.stopPropagation()}>
+            <div className="groupInfoHead">
+              <b>Forward to</b>
+              <button className="groupInfoClose" onClick={() => setForwardingMessage(null)} title="Close"><X /></button>
+            </div>
+            <div className="groupAddMemberList">
+              {contacts.map(contact => (
+                <button key={contact.id} className="groupMemberRow groupMemberPickable" onClick={() => confirmForward(contact)}>
+                  <span className="groupMemberAvatar">{initials(contact.username)}</span>
+                  <span className="groupMemberName">{contact.username}</span>
+                  <Forward />
+                </button>
+              ))}
+              {contacts.length === 0 && <p className="empty">No contacts to forward to yet.</p>}
+            </div>
           </div>
         </div>
       )}
