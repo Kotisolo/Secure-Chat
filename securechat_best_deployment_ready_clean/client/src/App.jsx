@@ -5,7 +5,7 @@ import {
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
-  MonitorUp, Hand, Info, Mail, Clapperboard
+  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, ensureFileToken, API_URL
@@ -446,6 +446,11 @@ export default function App() {
   // Small in-app chooser used wherever the old code asked users to TYPE a
   // choice into a browser prompt: { title, options: [{label, value}], onPick }.
   const [optionPicker, setOptionPicker] = useState(null);
+  // Small in-app form used wherever the old code chained browser prompt()
+  // calls to collect a name + description: { title, fields: [{key,label,
+  // placeholder,defaultValue}], submitLabel, onSubmit(values) }.
+  const [textFormPrompt, setTextFormPrompt] = useState(null);
+  const [textFormValues, setTextFormValues] = useState({});
   const [statusExcluded, setStatusExcluded] = useState([]);
   const [channels, setChannels] = useState([]);
   const [selectedChannel, setSelectedChannel] = useState(null);
@@ -1086,10 +1091,21 @@ export default function App() {
     }
   }
 
-  async function createChannel() {
-    const name = prompt('Circle name:');
+  function createChannel() {
+    setTextFormValues({ name: '', description: '' });
+    setTextFormPrompt({
+      title: 'Create a Circle',
+      fields: [
+        { key: 'name', label: 'Circle name', placeholder: 'e.g. Weekend hikers' },
+        { key: 'description', label: 'Description (optional)', placeholder: 'What is this Circle about?' }
+      ],
+      submitLabel: 'Create',
+      onSubmit: values => submitCreateChannel(values.name.trim(), values.description.trim())
+    });
+  }
+
+  async function submitCreateChannel(name, description) {
     if (!name) return;
-    const description = prompt('Circle description (optional):') || '';
     await api('/api/channels', {
       method: 'POST', body: JSON.stringify({ name, description })
     });
@@ -1267,10 +1283,21 @@ export default function App() {
     setStatuses(current => current.map(item => item.userId === status.userId ? { ...item, muted } : item));
   }
 
-  async function createGroup() {
-    const name = prompt('Group name:');
+  function createGroup() {
+    setTextFormValues({ name: '', description: '' });
+    setTextFormPrompt({
+      title: 'Create a group',
+      fields: [
+        { key: 'name', label: 'Group name', placeholder: 'e.g. 308 Lenox st' },
+        { key: 'description', label: 'Description (optional)', placeholder: 'What is this group for?' }
+      ],
+      submitLabel: 'Create',
+      onSubmit: values => submitCreateGroup(values.name.trim(), values.description.trim())
+    });
+  }
+
+  async function submitCreateGroup(name, description) {
     if (!name) return;
-    const description = prompt('Group description (optional):') || '';
     await api('/api/groups', {
       method: 'POST',
       body: JSON.stringify({ name, description, memberIds: [] })
@@ -1659,10 +1686,21 @@ export default function App() {
     setSelectedGroupMessage(null);
   }
 
-  async function editGroup() {
-    const name = prompt('Group name:', selectedGroup.name);
+  function editGroup() {
+    setTextFormValues({ name: selectedGroup.name, description: selectedGroup.description || '' });
+    setTextFormPrompt({
+      title: 'Edit group',
+      fields: [
+        { key: 'name', label: 'Group name', placeholder: 'Group name' },
+        { key: 'description', label: 'Description', placeholder: 'What is this group for?' }
+      ],
+      submitLabel: 'Save',
+      onSubmit: values => submitEditGroup(values.name.trim(), values.description.trim())
+    });
+  }
+
+  async function submitEditGroup(name, description) {
     if (!name) return;
-    const description = prompt('Group description:', selectedGroup.description || '') || '';
     await api(`/api/groups/${selectedGroup.id}`, {
       method: 'PATCH',
       body: JSON.stringify({ name, description })
@@ -4944,26 +4982,37 @@ export default function App() {
               <button onClick={() => setProfile(me)}>Edit profile</button>
             </div>
             <h3>Privacy</h3>
-            {[ 
+            {[
               ['Last seen and online', 'lastSeenVisibility'],
               ['Profile photo', 'profileVisibility'],
               ['About', 'aboutVisibility']
             ].map(([label, key]) => (
-              <label className="privacyRow" key={key}>
+              <button
+                type="button"
+                className="privacyRow privacyRowButton"
+                key={key}
+                onClick={() => setOptionPicker({
+                  title: label,
+                  options: [
+                    { label: 'Everyone', value: 'everyone' },
+                    { label: 'Nobody', value: 'nobody' }
+                  ],
+                  onPick: value => savePrivacy({ ...privacy, [key]: value })
+                })}
+              >
                 <span>{label}</span>
-                <select value={privacy[key]} onChange={e => savePrivacy({ ...privacy, [key]: e.target.value })}>
-                  <option value="everyone">Everyone</option>
-                  <option value="nobody">Nobody</option>
-                </select>
-              </label>
+                <em>{privacy[key] === 'nobody' ? 'Nobody' : 'Everyone'} <ChevronDown /></em>
+              </button>
             ))}
             <label className="privacyRow">
               <span>Read receipts</span>
-              <input type="checkbox" checked={privacy.readReceipts} onChange={e => savePrivacy({ ...privacy, readReceipts: e.target.checked })} />
+              <input type="checkbox" className="sr-only" checked={privacy.readReceipts} onChange={e => savePrivacy({ ...privacy, readReceipts: e.target.checked })} />
+              <em className={privacy.readReceipts ? 'toggle on' : 'toggle'} />
             </label>
             <label className="privacyRow">
               <span>Silence unknown calls</span>
-              <input type="checkbox" checked={privacy.silenceUnknownCalls} onChange={e => savePrivacy({ ...privacy, silenceUnknownCalls: e.target.checked })} />
+              <input type="checkbox" className="sr-only" checked={privacy.silenceUnknownCalls} onChange={e => savePrivacy({ ...privacy, silenceUnknownCalls: e.target.checked })} />
+              <em className={privacy.silenceUnknownCalls ? 'toggle on' : 'toggle'} />
             </label>
             {(privacy.blockedUsers || []).length > 0 && (
               <div className="blockedList">
@@ -5257,6 +5306,39 @@ export default function App() {
             ))}
             <button type="button" className="optionPickerCancel" onClick={() => setOptionPicker(null)}>Cancel</button>
           </div>
+        </div>
+      )}
+
+      {textFormPrompt && (
+        <div className="modal" onClick={() => setTextFormPrompt(null)}>
+          <form
+            className="textFormCard"
+            onClick={e => e.stopPropagation()}
+            onSubmit={e => {
+              e.preventDefault();
+              const submit = textFormPrompt.onSubmit;
+              setTextFormPrompt(null);
+              submit(textFormValues);
+            }}
+          >
+            <h3>{textFormPrompt.title}</h3>
+            {textFormPrompt.fields.map((field, index) => (
+              <label className="textFormField" key={field.key}>
+                <span>{field.label}</span>
+                <input
+                  autoFocus={index === 0}
+                  value={textFormValues[field.key] || ''}
+                  placeholder={field.placeholder}
+                  onChange={e => setTextFormValues(current => ({ ...current, [field.key]: e.target.value }))}
+                  required={index === 0}
+                />
+              </label>
+            ))}
+            <div className="textFormActions">
+              <button type="button" className="optionPickerCancel" onClick={() => setTextFormPrompt(null)}>Cancel</button>
+              <button type="submit" className="primary">{textFormPrompt.submitLabel || 'Save'}</button>
+            </div>
+          </form>
         </div>
       )}
 
