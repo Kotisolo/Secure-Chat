@@ -111,11 +111,26 @@ const corsOptions = {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+  // rejectUnauthorized:true validates the server's TLS certificate against trusted
+  // CAs, preventing MITM on the DB connection. Neon (and most managed Postgres
+  // providers) present a valid publicly-trusted cert, so this doesn't need a
+  // custom CA bundle. Set DATABASE_SSL_INSECURE=true only for a local/self-signed
+  // Postgres instance in development.
+  ssl: process.env.DATABASE_URL
+    ? { rejectUnauthorized: process.env.DATABASE_SSL_INSECURE === 'true' ? false : true }
+    : false
 });
 
 app.use(helmet({
-  contentSecurityPolicy: false,
+  // This server only returns JSON and files, never renders HTML, so a strict
+  // default-src 'none' CSP is safe defense-in-depth with no legitimate feature
+  // to break.
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"]
+    }
+  },
   crossOriginEmbedderPolicy: false,
   crossOriginResourcePolicy: { policy: 'cross-origin' }
 }));
@@ -124,6 +139,39 @@ app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: false }));
 
 const UPLOADS_DIR = path.join(__dirname, '..', 'uploads');
+
+// Extensions are keyed to specific mimetypes so a client can't pair a "safe"
+// declared mimetype (e.g. application/octet-stream) with a dangerous extension
+// (e.g. .html/.svg) to get script-capable content stored and later served back
+// with a browser-executable Content-Type. Both the declared mimetype AND the
+// filename's extension must appear together in this map.
+const UPLOAD_EXT_BY_MIME = {
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/png': ['.png'],
+  'image/gif': ['.gif'],
+  'image/webp': ['.webp'],
+  'audio/webm': ['.webm'],
+  'audio/ogg': ['.ogg'],
+  'audio/mpeg': ['.mp3', '.mpga'],
+  'audio/mp4': ['.m4a'],
+  'audio/wav': ['.wav'],
+  'video/mp4': ['.mp4'],
+  'video/webm': ['.webm'],
+  'video/quicktime': ['.mov'],
+  'application/pdf': ['.pdf'],
+  'text/plain': ['.txt'],
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx']
+};
+
+function safeUploadFilter(req, file, cb) {
+  const extension = path.extname(file.originalname).toLowerCase();
+  const allowedExtensions = UPLOAD_EXT_BY_MIME[file.mimetype];
+  if (!allowedExtensions || !allowedExtensions.includes(extension)) {
+    return cb(new Error('Unsupported file type.'), false);
+  }
+  cb(null, true);
+}
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -134,26 +182,17 @@ const upload = multer({
     }
   }),
   limits: { fileSize: 25 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = new Set([
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
-      'audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp4', 'audio/wav',
-      'video/mp4', 'video/webm', 'video/quicktime',
-      'application/octet-stream',
-      'application/pdf', 'text/plain',
-      'application/msword',
-      'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    ]);
-    cb(allowed.has(file.mimetype) ? null : new Error('Unsupported file type.'), allowed.has(file.mimetype));
-  }
+  fileFilter: safeUploadFilter
 });
 
 const flickUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
-    cb(allowed.has(file.mimetype) ? null : new Error('Only MP4, WebM, or MOV videos are allowed.'), allowed.has(file.mimetype));
+    const allowed = { 'video/mp4': ['.mp4'], 'video/webm': ['.webm'], 'video/quicktime': ['.mov'] };
+    const extension = path.extname(file.originalname).toLowerCase();
+    const ok = Boolean(allowed[file.mimetype] && allowed[file.mimetype].includes(extension));
+    cb(ok ? null : new Error('Only MP4, WebM, or MOV videos are allowed.'), ok);
   }
 });
 
@@ -679,6 +718,21 @@ async function completeOAuthLogin(req, res, provider, profile) {
   }));
 }
 
+function signFileToken(userId) {
+  return jwt.sign({ id: String(userId), purpose: 'file' }, JWT_SECRET, { expiresIn: '15m' });
+}
+
+// File links (img/video/audio src) can't carry an Authorization header, so a token
+// has to travel in the URL. This is a separate, narrowly-scoped, short-lived token
+// (not the 30-day session JWT) so a URL leaking via history/proxy logs/Referer only
+// exposes 15 minutes of file access, not the whole session.
+async function verifyFileToken(token) {
+  const decoded = jwt.verify(token, JWT_SECRET);
+  if (decoded.purpose !== 'file') throw new Error('Not a file access token.');
+  decoded.id = String(decoded.id);
+  return decoded;
+}
+
 async function verifyAuthToken(token) {
   const decoded = jwt.verify(token, JWT_SECRET);
   const result = await pool.query('SELECT session_version FROM users WHERE id=$1', [decoded.id]);
@@ -711,13 +765,17 @@ async function auth(req, res, next) {
   }
 }
 
+app.post('/api/files/token', auth, (req, res) => {
+  res.json({ token: signFileToken(req.user.id), expiresIn: 15 * 60 });
+});
+
 app.get('/uploads/:filename', asyncRoute(async (req, res) => {
   const filename = req.params.filename;
   if (!/^[a-zA-Z0-9_-]+\.[a-z0-9]+$/.test(filename)) return res.status(400).end();
 
   let requester;
   try {
-    requester = await verifyAuthToken(String(req.query.token || ''));
+    requester = await verifyFileToken(String(req.query.token || ''));
   } catch {
     return res.status(401).end();
   }
@@ -743,6 +801,14 @@ app.get('/uploads/:filename', asyncRoute(async (req, res) => {
       [requester.id, '/uploads/' + filename, uploaderId]
     );
     if (!authorized.rows.length) return res.status(403).end();
+  }
+
+  const INLINE_SAFE_EXTENSIONS = new Set([
+    '.jpg', '.jpeg', '.png', '.gif', '.webp',
+    '.webm', '.ogg', '.mp3', '.mpga', '.m4a', '.wav', '.mp4', '.mov'
+  ]);
+  if (!INLINE_SAFE_EXTENSIONS.has(path.extname(filename).toLowerCase())) {
+    res.setHeader('Content-Disposition', 'attachment');
   }
 
   res.sendFile(path.join(UPLOADS_DIR, filename), error => {
