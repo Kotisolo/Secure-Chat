@@ -437,6 +437,7 @@ export default function App() {
   const [groupRemoteStreams, setGroupRemoteStreams] = useState({});
   const [statuses, setStatuses] = useState([]);
   const [showStatuses, setShowStatuses] = useState(false);
+  const [echoComposerOpen, setEchoComposerOpen] = useState(false);
   const [statusExcluded, setStatusExcluded] = useState([]);
   const [channels, setChannels] = useState([]);
   const [selectedChannel, setSelectedChannel] = useState(null);
@@ -3220,8 +3221,6 @@ export default function App() {
     setLocalVideoPosition(null);
     setCallOptionsOpen(null);
     setShowCallInvite(false);
-    setRaisedHand(false);
-    setVideoEffectsOn(false);
     setSpeakerMuted(false);
     setSpeakerVolume(NORMAL_CALL_VOLUME);
   }
@@ -5142,29 +5141,8 @@ export default function App() {
                 <p>Pass along a passing thought. It fades in 24 hours.</p>
               </div>
             </div>
-            <button className="createStatus" onClick={createTextStatus}><Plus /> Share an Echo</button>
-            <div className="statusMediaButtons">
-              <label><Image /> Photo<input hidden type="file" accept="image/*" capture="environment" onChange={e => createMediaStatus(e, 'image')} /></label>
-              <label><Video /> Video<input hidden type="file" accept="video/*" capture="environment" onChange={e => createMediaStatus(e, 'video')} /></label>
-              <label><Mic /> Voice<input hidden type="file" accept="audio/*" capture onChange={e => createMediaStatus(e, 'audio')} /></label>
-            </div>
-            <details className="statusPrivacy">
-              <summary>Who hears this Echo · {contacts.length - statusExcluded.length} contacts</summary>
-              {contacts.map(contact => (
-                <label key={contact.id}>
-                  <input
-                    type="checkbox"
-                    checked={!statusExcluded.includes(contact.id)}
-                    onChange={e => setStatusExcluded(current => e.target.checked
-                      ? current.filter(id => id !== contact.id)
-                      : [...current, contact.id])}
-                  />
-                  {contact.username}
-                </label>
-              ))}
-            </details>
             <div className="statusList">
-              {statuses.length === 0 && <p className="empty">No Echoes right now.</p>}
+              {statuses.length === 0 && <p className="empty">When your contacts share Echoes, they'll appear here.</p>}
               {statuses.map(status => (
                 <div className={(status.viewed ? 'statusItem viewed' : 'statusItem') + (status.muted ? ' muted' : '')} key={status.id} onClick={() => viewStatus(status)}>
                   <Avatar user={{ username: status.username, avatarUrl: status.avatarUrl }} />
@@ -5208,6 +5186,35 @@ export default function App() {
                 </div>
               ))}
             </div>
+
+            <button className="createStatus" onClick={() => setEchoComposerOpen(value => !value)}>
+              <Plus /> {echoComposerOpen ? 'Close' : 'Share an Echo'}
+            </button>
+            {echoComposerOpen && (
+              <div className="echoComposer">
+                <div className="statusMediaButtons">
+                  <button type="button" onClick={createTextStatus}><Pencil /> Text</button>
+                  <label><Image /> Photo<input hidden type="file" accept="image/*" onChange={e => createMediaStatus(e, 'image')} /></label>
+                  <label><Video /> Video<input hidden type="file" accept="video/*" onChange={e => createMediaStatus(e, 'video')} /></label>
+                  <label><Mic /> Voice<input hidden type="file" accept="audio/*" onChange={e => createMediaStatus(e, 'audio')} /></label>
+                </div>
+                <details className="statusPrivacy">
+                  <summary>Who will see it · {contacts.length - statusExcluded.length} contacts</summary>
+                  {contacts.map(contact => (
+                    <label key={contact.id}>
+                      <input
+                        type="checkbox"
+                        checked={!statusExcluded.includes(contact.id)}
+                        onChange={e => setStatusExcluded(current => e.target.checked
+                          ? current.filter(id => id !== contact.id)
+                          : [...current, contact.id])}
+                      />
+                      {contact.username}
+                    </label>
+                  ))}
+                </details>
+              </div>
+            )}
           </div>
         </div>
       )}

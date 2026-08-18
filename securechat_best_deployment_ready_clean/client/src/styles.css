@@ -7699,3 +7699,19 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
   .tab-chats .channelHeader{display:flex}
   .tab-chats .channelMiniList{display:block}
 }
+
+/* ---------- settings page must scroll ---------- */
+/* .chatListPane computes overflow-y:hidden, so once the settings sections
+   moved into the Settings page the content below the fold - including Log
+   Out - was unreachable. Let the page scroll itself, with clearance for
+   the mobile bottom nav. */
+.settingsPage{flex:1;min-height:0;overflow-y:auto}
+@media(max-width:900px){
+  .settingsPage{padding-bottom:120px}
+}
+
+/* ---------- echo composer ---------- */
+/* The Text button sits alongside the Photo/Video/Voice labels in the
+   composer's media row and should look identical to them. */
+.statusMediaButtons button{flex:1;height:40px;border-radius:11px;background:var(--panel2);color:var(--text);display:flex;align-items:center;justify-content:center;gap:6px;font-weight:600;font-size:13px}
+.echoComposer{margin-top:10px}
