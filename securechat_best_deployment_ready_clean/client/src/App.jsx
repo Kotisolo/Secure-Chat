@@ -2484,16 +2484,14 @@ export default function App() {
     setShowChatMedia(true);
   }
 
-  function addActiveShortcut() {
-    closeChatHeaderMenu();
-    alert('Shortcut ready: use your browser menu and choose “Add to Home screen” for this chat.');
-  }
+  const activeChatEntry = active ? (contacts.find(contact => String(contact.id) === String(active.id)) || active) : null;
+  const activeChatMuted = Boolean(activeChatEntry?.chat?.mutedUntil && new Date(activeChatEntry.chat.mutedUntil) > new Date());
+  const activeChatPinned = Boolean(activeChatEntry?.chat?.pinned);
 
-  function addActiveToList() {
-    if (!active) return;
+  function toggleActivePin() {
+    if (!activeChatEntry) return;
     closeChatHeaderMenu();
-    const current = contacts.find(contact => String(contact.id) === String(active.id)) || active;
-    updateChatPreference(current, { pinned: true });
+    updateChatPreference(activeChatEntry, { pinned: !activeChatPinned });
   }
 
   function changeActiveChatTheme() {
@@ -4180,23 +4178,20 @@ export default function App() {
                 <div className="chatHeaderMenu" onClick={e => e.stopPropagation()}>
                   {chatHeaderMenu === 'main' ? (
                     <>
-                      <button onClick={() => { closeChatHeaderMenu(); setProfile(active); }}><User /> Add to contacts</button>
+                      <button onClick={() => { closeChatHeaderMenu(); setProfile(active); }}><User /> View profile</button>
                       <button onClick={() => { closeChatHeaderMenu(); setSearchingMessages(true); }}><Search /> Search</button>
-                      <button onClick={() => { closeChatHeaderMenu(); createGroup(); }}><Users /> New group</button>
                       <button onClick={openActiveMediaPanel}><Image /> Media, links, and docs</button>
-                      <button onClick={toggleActiveMute}><BellOff /> Mute notifications</button>
+                      <button onClick={toggleActiveMute}><BellOff /> {activeChatMuted ? 'Unmute notifications' : 'Mute notifications'}</button>
+                      <button onClick={toggleActivePin}><Star /> {activeChatPinned ? 'Unpin chat' : 'Pin chat'}</button>
                       <button onClick={setActiveDisappearingMessages}><History /> Disappearing messages</button>
-                      <button onClick={changeActiveChatTheme}><Settings /> Chat theme</button>
                       <button className="menuMoreButton" onClick={() => setChatHeaderMenu('more')}>More <span>›</span></button>
                     </>
                   ) : (
                     <>
+                      <button onClick={exportActiveChat}><Archive /> Export chat</button>
+                      <button onClick={clearActiveChat}><Trash2 /> Clear chat</button>
                       <button onClick={reportActiveChat}><Flag /> Report</button>
                       <button onClick={blockActiveChat}><Ban /> Block</button>
-                      <button onClick={clearActiveChat}><Trash2 /> Clear chat</button>
-                      <button onClick={exportActiveChat}><Archive /> Export chat</button>
-                      <button onClick={addActiveShortcut}><Star /> Add shortcut</button>
-                      <button onClick={addActiveToList}><Users /> Add to list</button>
                       <button className="menuMoreButton" onClick={() => setChatHeaderMenu('main')}>‹ Back</button>
                     </>
                   )}
