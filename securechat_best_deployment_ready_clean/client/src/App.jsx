@@ -494,6 +494,8 @@ export default function App() {
   const [noiseCancellation, setNoiseCancellation] = useState(true);
   const [cameraFacingMode, setCameraFacingMode] = useState('user');
 
+  const ringtoneCtx = useRef(null);
+  const ringtoneTimer = useRef(null);
   const pc = useRef(null);
   const liveKitRoom = useRef(null);
   const liveKitLocalTracks = useRef([]);
@@ -3317,6 +3319,50 @@ export default function App() {
     }
     setCall(c => ({ ...c, minimized: false }));
   }
+
+  // Synthesized rather than an audio file: no external asset to license or
+  // download, and it plays instantly with zero network dependency.
+  function startRingtone() {
+    if (ringtoneTimer.current) return;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      if (!ringtoneCtx.current) ringtoneCtx.current = new Ctx();
+      const ctx = ringtoneCtx.current;
+      if (ctx.state === 'suspended') ctx.resume().catch(() => {});
+
+      const playChime = () => {
+        const now = ctx.currentTime;
+        [0, 0.2].forEach((offset, i) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = i === 0 ? 587.33 : 880;
+          gain.gain.setValueAtTime(0, now + offset);
+          gain.gain.linearRampToValueAtTime(0.2, now + offset + 0.02);
+          gain.gain.linearRampToValueAtTime(0, now + offset + 0.34);
+          osc.connect(gain).connect(ctx.destination);
+          osc.start(now + offset);
+          osc.stop(now + offset + 0.36);
+        });
+      };
+      playChime();
+      ringtoneTimer.current = setInterval(playChime, 1900);
+    } catch {}
+  }
+
+  function stopRingtone() {
+    if (ringtoneTimer.current) {
+      clearInterval(ringtoneTimer.current);
+      ringtoneTimer.current = null;
+    }
+  }
+
+  useEffect(() => {
+    if (incoming) startRingtone();
+    else stopRingtone();
+    return stopRingtone;
+  }, [incoming]);
 
   function endCall(skip = false) {
     if (!skip && callPeer.current) {
