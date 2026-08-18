@@ -405,6 +405,20 @@ async function isUserOnline(userId) {
   return count > 0;
 }
 
+// Deliberately generic - never the message text itself. Push payloads transit
+// third-party push services (FCM/APNs/Mozilla), so this keeps content private
+// even when the message itself isn't end-to-end encrypted.
+function messagePushPreview(kind) {
+  switch (kind) {
+    case 'image': return 'Sent a photo';
+    case 'audio': return 'Sent a voice message';
+    case 'file': return 'Sent a file';
+    case 'location': return 'Shared a location';
+    case 'sticker': return 'Sent a sticker';
+    default: return 'Sent you a message';
+  }
+}
+
 async function sendPushToUser(userId, payload) {
   if (!PUSH_CONFIGURED) return;
   const subs = await pool.query(
@@ -1853,6 +1867,31 @@ app.post('/api/groups/:groupId/messages', auth, asyncRoute(async (req, res) => {
       payload: cleanPayloads[String(member.user_id)]
     });
   });
+
+  const offlineMembers = members.rows.filter(member => String(member.user_id) !== String(req.user.id) && !isOnline(member.user_id));
+  if (offlineMembers.length) {
+    const [group, mutes] = await Promise.all([
+      pool.query('SELECT name FROM chat_groups WHERE id=$1', [req.params.groupId]),
+      pool.query(
+        'SELECT user_id, muted_until FROM group_read_states WHERE group_id=$1 AND user_id=ANY($2)',
+        [req.params.groupId, offlineMembers.map(member => member.user_id)]
+      ).catch(() => ({ rows: [] }))
+    ]);
+    const mutedIds = new Set(
+      mutes.rows.filter(row => row.muted_until && new Date(row.muted_until) > new Date()).map(row => String(row.user_id))
+    );
+    const groupName = group.rows[0]?.name || 'your group';
+    offlineMembers
+      .filter(member => !mutedIds.has(String(member.user_id)))
+      .forEach(member => {
+        sendPushToUser(member.user_id, {
+          title: groupName,
+          body: `${req.user.username} ${messagePushPreview(clean(req.body.kind || 'text')).toLowerCase()}`,
+          tag: 'group-' + req.params.groupId
+        }).catch(error => console.error('push group message notify', error.message));
+      });
+  }
+
   res.status(201).json({ ...event, payload: cleanPayloads[String(req.user.id)] });
 }));
 
@@ -2233,7 +2272,22 @@ app.post('/api/messages', auth, async (req, res) => {
     );
 
     const m = msg(r.rows[0]);
-    if (!scheduledAt && isOnline(recipientId)) io.to(userRoom(recipientId)).emit('message:new', m);
+    if (!scheduledAt && isOnline(recipientId)) {
+      io.to(userRoom(recipientId)).emit('message:new', m);
+    } else if (!scheduledAt) {
+      const recipientPref = await pool.query(
+        'SELECT muted_until FROM chat_preferences WHERE user_id=$1 AND conversation_id=$2',
+        [recipientId, c]
+      ).catch(() => ({ rows: [] }));
+      const muted = recipientPref.rows[0]?.muted_until && new Date(recipientPref.rows[0].muted_until) > new Date();
+      if (!muted) {
+        sendPushToUser(recipientId, {
+          title: req.user.username,
+          body: messagePushPreview(kind),
+          tag: 'message-' + c
+        }).catch(error => console.error('push message notify', error.message));
+      }
+    }
 
     res.status(201).json(m);
   } catch (e) {
