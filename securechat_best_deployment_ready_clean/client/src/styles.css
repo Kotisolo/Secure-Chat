@@ -7641,3 +7641,12 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
   .opalPhoneShell{padding:0}
   .card.opalCard{width:100%;min-height:100dvh;max-width:none;border:0;border-radius:0;box-shadow:none}
 }
+
+/* ---------- lock the auth screen (no panning) ---------- */
+/* A late layer set .opalAuth{overflow:auto}, undoing the overflow:hidden
+   that clipped the decorative glow circles (which intentionally extend
+   180px past the right edge and 120px past the bottom). The screen became
+   pannable in every direction just to "reach" those decorations. Clip at
+   the container; any tall form scrolls inside the shell instead. */
+.opalAuth{overflow:hidden}
+.opalPhoneShell{max-height:100dvh;overflow-y:auto}
