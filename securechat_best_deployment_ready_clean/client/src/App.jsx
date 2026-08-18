@@ -2186,6 +2186,40 @@ export default function App() {
     }
   }
 
+  function editMyProfile() {
+    setTextFormValues({
+      username: me?.username || '',
+      about: me?.about || '',
+      languages: me?.languages || ''
+    });
+    setTextFormPrompt({
+      title: 'Edit profile',
+      fields: [
+        { key: 'username', label: 'Username', placeholder: 'Your name', maxLength: 80 },
+        { key: 'about', label: 'About', placeholder: 'Hey there! I am using Naad.', maxLength: 200, multiline: true },
+        { key: 'languages', label: 'Languages', placeholder: 'e.g. English, Hindi', maxLength: 200 }
+      ],
+      submitLabel: 'Save',
+      onSubmit: async values => {
+        try {
+          const updated = await api('/api/profile', {
+            method: 'PATCH',
+            body: JSON.stringify({
+              username: values.username.trim(),
+              about: values.about.trim(),
+              languages: values.languages.trim()
+            })
+          });
+          setMe(updated);
+          setProfile(updated);
+          setSession(getToken(), updated);
+        } catch (error) {
+          alert('Could not save profile: ' + error.message);
+        }
+      }
+    });
+  }
+
   async function deleteMessage(scope = 'me') {
     if (!selectedMessage || !active || !me) return;
     const conversationId = cid(me.id, active.id);
@@ -4979,7 +5013,7 @@ export default function App() {
             <div className="settingsProfile">
               <Avatar user={me} />
               <div><h2>{me?.username}</h2><small>{me?.phone}</small></div>
-              <button onClick={() => setProfile(me)}>Edit profile</button>
+              <button onClick={editMyProfile}>Edit profile</button>
             </div>
             <h3>Privacy</h3>
             {[
@@ -5325,13 +5359,26 @@ export default function App() {
             {textFormPrompt.fields.map((field, index) => (
               <label className="textFormField" key={field.key}>
                 <span>{field.label}</span>
-                <input
-                  autoFocus={index === 0}
-                  value={textFormValues[field.key] || ''}
-                  placeholder={field.placeholder}
-                  onChange={e => setTextFormValues(current => ({ ...current, [field.key]: e.target.value }))}
-                  required={index === 0}
-                />
+                {field.multiline ? (
+                  <textarea
+                    autoFocus={index === 0}
+                    value={textFormValues[field.key] || ''}
+                    placeholder={field.placeholder}
+                    maxLength={field.maxLength}
+                    rows={3}
+                    onChange={e => setTextFormValues(current => ({ ...current, [field.key]: e.target.value }))}
+                    required={index === 0}
+                  />
+                ) : (
+                  <input
+                    autoFocus={index === 0}
+                    value={textFormValues[field.key] || ''}
+                    placeholder={field.placeholder}
+                    maxLength={field.maxLength}
+                    onChange={e => setTextFormValues(current => ({ ...current, [field.key]: e.target.value }))}
+                    required={index === 0}
+                  />
+                )}
               </label>
             ))}
             <div className="textFormActions">
@@ -5543,7 +5590,7 @@ export default function App() {
               <small><span className={profile.online ? 'dot online' : 'dot'} /> {profileOnlineText} • {profileLastSeenText}</small>
               <div className="profileInfoList">
                 <div><span><MessageCircle /></span><b>About</b><p>{profile.about || 'Hey there! I am using Naad.'}</p></div>
-                <div><span><Languages /></span><b>Languages</b><p>{profile.languages || 'English, Hindi'}</p></div>
+                <div><span><Languages /></span><b>Languages</b><p>{profile.languages || 'English'}</p></div>
                 <div><span><CalendarClock /></span><b>Member Since</b><p>{profileMemberSince}</p></div>
               </div>
               <div className="profileRows">
@@ -5576,11 +5623,17 @@ export default function App() {
               )}
 
               {profileIsMe && (
-                <label className="profilePhoto profilePhotoModern">
-                  <Camera />
-                  Change profile photo
-                  <input hidden type="file" accept="image/*" onChange={uploadAvatar} />
-                </label>
+                <div className="profileSelfActions">
+                  <label className="profilePhoto profilePhotoModern">
+                    <Camera />
+                    Change profile photo
+                    <input hidden type="file" accept="image/*" onChange={uploadAvatar} />
+                  </label>
+                  <button type="button" className="profilePhoto profilePhotoModern" onClick={editMyProfile}>
+                    <Pencil />
+                    Edit profile
+                  </button>
+                </div>
               )}
 
               <div className="profileRows">

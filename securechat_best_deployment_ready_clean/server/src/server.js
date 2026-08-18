@@ -846,6 +846,7 @@ function user(u) {
     username: u.username,
     phone: u.phone,
     about: hideAbout ? '' : (u.about || ''),
+    languages: u.languages || 'English',
     avatarUrl: hideProfile ? null : (u.avatar_url || null),
     online: hidePresence ? false : isOnline(u.id),
     lastSeen: hidePresence ? null : u.last_seen
@@ -2439,11 +2440,43 @@ app.post('/api/profile/avatar', auth, uploadRateLimit, upload.single('file'), as
   const result = await pool.query(
     `WITH updated AS (
        UPDATE users SET avatar_url=$1 WHERE id=$2
-       RETURNING id,username,phone,about,avatar_url,last_seen
+       RETURNING id,username,phone,about,languages,avatar_url,last_seen
      )
      SELECT updated.*, p.profile_visibility, p.about_visibility, p.last_seen_visibility
      FROM updated LEFT JOIN user_privacy p ON p.user_id=updated.id`,
     [avatarUrl, req.user.id]
+  );
+  const updatedUser = user(result.rows[0]);
+  const contactIds = await pool.query(
+    `SELECT DISTINCT CASE WHEN sender_id=$1 THEN recipient_id ELSE sender_id END contact_id
+     FROM messages WHERE sender_id=$1 OR recipient_id=$1
+     UNION
+     SELECT DISTINCT gm2.user_id FROM group_members gm1
+     JOIN group_members gm2 ON gm2.group_id=gm1.group_id AND gm2.user_id<>gm1.user_id
+     WHERE gm1.user_id=$1`,
+    [req.user.id]
+  );
+  const { phone, ...broadcastUser } = updatedUser;
+  contactIds.rows.forEach(row => {
+    io.to(userRoom(row.contact_id)).emit('user:profile-updated', broadcastUser);
+  });
+  res.json(updatedUser);
+}));
+
+app.patch('/api/profile', auth, asyncRoute(async (req, res) => {
+  const username = clean(req.body.username).slice(0, 80);
+  const about = clean(req.body.about).slice(0, 200);
+  const languages = clean(req.body.languages).slice(0, 200);
+  if (!username) return res.status(400).json({ error: 'Username cannot be empty.' });
+
+  const result = await pool.query(
+    `WITH updated AS (
+       UPDATE users SET username=$1, about=$2, languages=$3 WHERE id=$4
+       RETURNING id,username,phone,about,languages,avatar_url,last_seen
+     )
+     SELECT updated.*, p.profile_visibility, p.about_visibility, p.last_seen_visibility
+     FROM updated LEFT JOIN user_privacy p ON p.user_id=updated.id`,
+    [username, about, languages, req.user.id]
   );
   const updatedUser = user(result.rows[0]);
   const contactIds = await pool.query(
