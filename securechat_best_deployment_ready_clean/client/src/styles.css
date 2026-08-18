@@ -7612,3 +7612,13 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
   .desktopNavRail .mobileBrand{display:none!important}
   .desktopNavRail .desktopBrand{display:block!important}
 }
+
+/* ---------- mobile layout restore ---------- */
+/* The desktop design layer sets .desktopNavRail{height:100%} and
+   .bottomNav{display:none} without media guards. On phones that made the
+   header container fill the whole screen (pushing search/filters to the
+   bottom and the chat list below the fold) and removed the bottom nav. */
+@media(max-width:900px){
+  .desktopNavRail{height:auto;flex:0 0 auto}
+  .bottomNav{display:flex}
+}
