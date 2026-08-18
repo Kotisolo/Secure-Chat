@@ -2217,7 +2217,7 @@ app.post('/api/messages', auth, async (req, res) => {
 
   if (!recipientId) return res.status(400).json({ error: 'Recipient required.' });
   if (!validUuid(recipientId)) return res.status(400).json({ error: 'Invalid recipient.' });
-  if (recipientId === String(req.user.id)) return res.status(400).json({ error: 'You cannot message yourself.' });
+  const isSelfChat = recipientId === String(req.user.id);
   if (!body.trim() && !fileUrl) return res.status(400).json({ error: 'Message cannot be empty.' });
   if (body.length > 10000) return res.status(400).json({ error: 'Message is too long.' });
   if (!['text', 'image', 'file', 'audio', 'sticker', 'location'].includes(kind)) return res.status(400).json({ error: 'Invalid message type.' });
@@ -2240,7 +2240,7 @@ app.post('/api/messages', auth, async (req, res) => {
   const c = cid(req.user.id, recipientId);
 
   try {
-    if (await usersBlocked(req.user.id, recipientId)) {
+    if (!isSelfChat && await usersBlocked(req.user.id, recipientId)) {
       return res.status(403).json({ error: 'Messaging is unavailable for this user.' });
     }
     await pool.query(
@@ -2253,7 +2253,8 @@ app.post('/api/messages', auth, async (req, res) => {
 
     const scheduledAt = requestedSchedule || null;
     const sentAt = scheduledAt ? null : new Date();
-    const delivered = !scheduledAt && isOnline(recipientId) ? new Date() : null;
+    const delivered = !scheduledAt && (isSelfChat || isOnline(recipientId)) ? new Date() : null;
+    const readAt = !scheduledAt && isSelfChat ? new Date() : null;
     const preference = await pool.query(
       'SELECT disappearing_seconds FROM chat_preferences WHERE user_id=$1 AND conversation_id=$2',
       [req.user.id, c]
@@ -2268,17 +2269,19 @@ app.post('/api/messages', auth, async (req, res) => {
     const r = await pool.query(
       `INSERT INTO messages(
         conversation_id,sender_id,recipient_id,body,kind,file_url,file_name,file_mime,delivered_at,
-        ciphertext,encryption_version,sender_device_id,reply_to_id,scheduled_at,sent_at,expires_at,file_encryption
-       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
+        ciphertext,encryption_version,sender_device_id,reply_to_id,scheduled_at,sent_at,expires_at,file_encryption,read_at
+       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
       [
         c, req.user.id, recipientId, ciphertext ? '[Encrypted message]' : (body || fileName || kind),
         kind, fileUrl, fileName, fileMime, delivered, ciphertext, encryptionVersion,
-        senderDeviceId || null, replyToId || null, scheduledAt, sentAt, expiresAt, fileEncryption
+        senderDeviceId || null, replyToId || null, scheduledAt, sentAt, expiresAt, fileEncryption, readAt
       ]
     );
 
     const m = msg(r.rows[0]);
-    if (!scheduledAt && isOnline(recipientId)) {
+    if (!scheduledAt && isSelfChat) {
+      // Saved Messages: no push, the sender's own client already has the message from the response.
+    } else if (!scheduledAt && isOnline(recipientId)) {
       io.to(userRoom(recipientId)).emit('message:new', m);
     } else if (!scheduledAt) {
       const recipientPref = await pool.query(
