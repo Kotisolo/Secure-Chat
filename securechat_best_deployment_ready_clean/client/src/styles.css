@@ -7635,6 +7635,20 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
     width:100vw;max-width:none;height:100dvh;max-height:none;border:0;border-radius:0
   }
   .historyClose{position:fixed;top:14px;right:14px;z-index:6}
+  /* .profile was missed in this pass: .profileCompact/.profileFull carry a
+     min-width (360-380px) meant for desktop that doesn't fit a phone's
+     actual viewport, so the card floated with gaps or overflowed sideways
+     instead of matching the real screen size. */
+  .profile,.profileCompact,.profileFull{
+    width:100vw!important;min-width:0!important;max-width:none!important;
+    height:100dvh;max-height:none;border:0;border-radius:0
+  }
+  .profileClose,.profileFullTop{position:sticky;top:0;z-index:6}
+  /* A separate legacy rule permanently shrinks .profileCompact/.profileFull
+     to 88% via transform:scale (not a layout width - getComputedStyle().width
+     still read the full-size box, which is why this was easy to miss) so the
+     card visually floated with gaps instead of filling the real screen. */
+  .profileCompact,.profileFull{transform:none!important}
 }
 @media(max-width:700px){
   .opalAuth{padding:0}
