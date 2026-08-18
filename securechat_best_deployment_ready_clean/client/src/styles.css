@@ -7855,4 +7855,15 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .profileSelfActions{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:10px}
 .profileSelfActions .profilePhoto{margin-top:0}
 .textFormField textarea{border-radius:var(--radius-md);background:var(--panel2);color:var(--text);border:1px solid var(--line);padding:10px 12px;font-size:14px;font-family:inherit;resize:vertical}
+
+/* ---------- starred messages panel ---------- */
+.starredRow{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:18px;background:#f7f5fb}
+.starredRow a{flex:1;color:#171326;text-decoration:none;min-width:0}
+.starredRow a b,.starredRow a span{display:block}
+.starredRow a span{margin-top:4px;color:#7f7892;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.starredText{flex:1;display:flex;flex-direction:column;gap:4px;min-width:0}
+.starredText span{color:#171326;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.starredText small{color:#7f7892}
+.starredUnstar{flex:none;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:transparent;color:#f5a623}
+.starredUnstar svg{fill:#f5a623}
 .textFormField textarea:focus{outline:none;border-color:var(--primary)}

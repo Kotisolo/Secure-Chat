@@ -403,6 +403,7 @@ export default function App() {
   const [chatMenu, setChatMenu] = useState(null);
   const [chatHeaderMenu, setChatHeaderMenu] = useState(null);
   const [showChatMedia, setShowChatMedia] = useState(false);
+  const [showStarredMessages, setShowStarredMessages] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingMessages, setSearchingMessages] = useState(false);
@@ -2416,6 +2417,28 @@ export default function App() {
     setMobileTab('chats');
     setProfile(null);
     setShowChatMedia(true);
+  }
+
+  function openProfileStarred() {
+    if (!profile) return;
+    setActive(profile);
+    setMobileTab('chats');
+    setProfile(null);
+    setShowStarredMessages(true);
+  }
+
+  async function unstarMessageDirect(messageId) {
+    if (!active || !me) return;
+    try {
+      const result = await api(`/api/messages/${encodeURIComponent(messageId)}/star`, { method: 'POST', body: '{}' });
+      const c = cid(me.id, active.id);
+      setMessages(current => ({
+        ...current,
+        [c]: (current[c] || []).map(message => (message.id === messageId ? { ...message, starred: result.starred } : message))
+      }));
+    } catch (error) {
+      alert('Could not update star: ' + error.message);
+    }
   }
 
   function enableProfileTranslation() {
@@ -4433,6 +4456,49 @@ export default function App() {
               </div>
             )}
 
+            {showStarredMessages && (
+              <div className="modal" onClick={() => setShowStarredMessages(false)}>
+                <div className="chatMediaPanel" onClick={e => e.stopPropagation()}>
+                  <button className="historyClose" onClick={() => setShowStarredMessages(false)}><X /></button>
+                  <h2>Starred messages</h2>
+                  <p>{active?.username}</p>
+                  <div className="chatMediaList">
+                    {activeConversationRows()
+                      .filter(message => message.starred)
+                      .map(message => {
+                        const url = attachmentUrls[message.id] || (message.fileUrl ? resolveFileUrl(message.fileUrl) : '');
+                        const isMedia = ['image', 'file', 'audio', 'location'].includes(message.kind);
+                        return (
+                          <div key={message.id} className="starredRow">
+                            {isMedia ? (
+                              <a
+                                href={message.kind === 'location' && parseLocationMessage(message)
+                                  ? locationMapUrl(parseLocationMessage(message))
+                                  : url || '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <b>{message.kind === 'image' ? 'Photo' : message.kind === 'audio' ? 'Voice message' : message.kind === 'location' ? 'Location' : 'Document'}</b>
+                                <span>{message.fileName || new Date(message.createdAt).toLocaleString()}</span>
+                              </a>
+                            ) : (
+                              <div className="starredText">
+                                <span>{message.body}</span>
+                                <small>{new Date(message.createdAt).toLocaleString()}</small>
+                              </div>
+                            )}
+                            <button className="starredUnstar" title="Unstar" onClick={() => unstarMessageDirect(message.id)}><Star /></button>
+                          </div>
+                        );
+                      })}
+                    {activeConversationRows().filter(message => message.starred).length === 0 && (
+                      <small>No starred messages yet.</small>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <section className={`msgs chatTheme-${chatTheme}`}>
               <div className="dayChip">Today</div>
               {displayRows.map(m => {
@@ -5723,7 +5789,7 @@ export default function App() {
               </div>
               <div className="profileRows">
                 <button onClick={openProfileMedia}><span><Image /></span> Media, Links & Docs <b>{profileMediaCount}</b></button>
-                <button onClick={() => alert(`${profileStarredCount} starred message${profileStarredCount === 1 ? '' : 's'} in this chat.`)}><span><Star /></span> Starred Messages <b>{profileStarredCount}</b></button>
+                <button onClick={openProfileStarred}><span><Star /></span> Starred Messages <b>{profileStarredCount}</b></button>
               </div>
             </div>
           ) : (
