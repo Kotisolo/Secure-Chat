@@ -395,6 +395,7 @@ export default function App() {
   const [activeLocationView, setActiveLocationView] = useState(null);
   const [stopLocationPrompt, setStopLocationPrompt] = useState(null);
   const [profile, setProfile] = useState(null);
+  const [zoomedPhotoUser, setZoomedPhotoUser] = useState(null);
   const [profileMode, setProfileMode] = useState('quick');
   const [selectedMessage, setSelectedMessage] = useState(null);
   const [replyTo, setReplyTo] = useState(null);
@@ -5447,7 +5448,11 @@ export default function App() {
                 <button onClick={() => setProfile(null)}><MoreVertical /></button>
               </div>
               <div className="profileCover" />
-              <div className="profileAvatarWrap full">
+              <div
+                className={profile.avatarUrl ? 'profileAvatarWrap full zoomable' : 'profileAvatarWrap full'}
+                onClick={() => profile.avatarUrl && setZoomedPhotoUser(profile)}
+                title={profile.avatarUrl ? 'View photo' : undefined}
+              >
                 <Avatar user={profile} big />
                 <span className={profile.online ? 'profilePresence online' : 'profilePresence'} />
               </div>
@@ -5467,7 +5472,11 @@ export default function App() {
           ) : (
             <div className="profile profileCompact">
               <button className="profileClose" onClick={() => setProfile(null)}><X /></button>
-              <div className="profileAvatarWrap">
+              <div
+                className={profile.avatarUrl ? 'profileAvatarWrap zoomable' : 'profileAvatarWrap'}
+                onClick={() => profile.avatarUrl && setZoomedPhotoUser(profile)}
+                title={profile.avatarUrl ? 'View photo' : undefined}
+              >
                 <Avatar user={profile} big />
                 <span className={profile.online ? 'profilePresence online' : 'profilePresence'} />
               </div>
@@ -5505,6 +5514,13 @@ export default function App() {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {zoomedPhotoUser && (
+        <div className="photoZoomOverlay" onClick={() => setZoomedPhotoUser(null)}>
+          <button className="photoZoomClose" onClick={() => setZoomedPhotoUser(null)} title="Close"><X /></button>
+          <img src={resolveFileUrl(zoomedPhotoUser.avatarUrl)} alt={`${zoomedPhotoUser.username}'s profile photo`} onClick={e => e.stopPropagation()} />
         </div>
       )}
 
