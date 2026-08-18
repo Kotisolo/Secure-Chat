@@ -383,7 +383,6 @@ export default function App() {
   const [active, setActive] = useState(null);
   const [mobileTab, setMobileTab] = useState('chats');
   const [chatListFilter, setChatListFilter] = useState('all');
-  const [showOpalMenu, setShowOpalMenu] = useState(false);
   const [text, setText] = useState('');
   const [typing, setTyping] = useState(false);
   const [emoji, setEmoji] = useState(false);
@@ -503,6 +502,7 @@ export default function App() {
   const turnCredentialCache = useRef({ iceServers: null, expiresAt: 0 });
   const socketReady = useRef(false);
   const fileTokenRefresh = useRef(null);
+  const searchInputRef = useRef(null);
   const activeRef = useRef(null);
   const pendingIce = useRef([]);
   const mediaRecorder = useRef(null);
@@ -3833,13 +3833,14 @@ export default function App() {
             <div className="brandMark"><MessageCircle /></div>
             <div><b className="desktopBrand"><em>Naad</em></b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
             <div className="mobileTitleActions">
-              <button onClick={() => setShowOpalMenu(value => !value)} title="Menu"><MoreVertical /></button>
+              <button onClick={() => { setMobileTab('settings'); setActive(null); }} title="Settings"><MoreVertical /></button>
             </div>
           </div>
           <button className="newChatButton" onClick={() => {
             setMobileTab('chats');
             setChatListFilter('all');
             setActive(null);
+            searchInputRef.current?.focus();
           }}><Plus /> New Chat</button>
           <div className="railMenu">
             <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('all'); }}><MessageCircle /> Chats <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0) || ''}</span></button>
@@ -3848,7 +3849,7 @@ export default function App() {
             <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /> Flicks</button>
           </div>
           <div className="railFooter">
-            <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setShowOpalMenu(false); setMobileTab('settings'); setActive(null); }}><Settings /> Settings</button>
+            <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); setActive(null); }}><Settings /> Settings</button>
           </div>
           <div className="me">
             <Avatar user={me} className="avatarButton" onClick={() => setProfile(me)} title="Change profile photo" />
@@ -3865,10 +3866,7 @@ export default function App() {
         {mobileTab === 'settings' && (
           <div className="settingsPage profileSettingsPage">
             <div className="settingsHero">
-              <h1>Profile</h1>
-              <button type="button" onClick={() => setProfile(me)} title="Full profile">
-                <User />
-              </button>
+              <h1>Settings</h1>
             </div>
 
             <div className="settingsProfileHero">
@@ -3891,55 +3889,35 @@ export default function App() {
                 <User /> View full profile <strong>›</strong>
               </button>
             </div>
-          </div>
-        )}
 
-        {showOpalMenu && (
-          <div className="opalSettingsMenuBackdrop" onClick={() => setShowOpalMenu(false)}>
-            <div className="opalSettingsMenu" onClick={e => e.stopPropagation()}>
-              <div className="opalSettingsMenuHead">
+            {settingsSections.map(section => (
+              <section className="opalMenuSection" key={section.title}>
+                <h3>{section.title}</h3>
                 <div>
-                  <b>Settings</b>
-                  <small>Account, privacy, calls and app tools</small>
+                  {section.rows.map(row => (
+                    <button className="settingsRow" type="button" key={row.label} onClick={row.action}>
+                      <i>{row.icon}</i>
+                      <span>
+                        <b>{row.label}</b>
+                        <small>{row.detail}</small>
+                      </span>
+                      <strong>›</strong>
+                    </button>
+                  ))}
                 </div>
-                <button type="button" onClick={() => setShowOpalMenu(false)} title="Close"><X /></button>
-              </div>
-              {settingsSections.map(section => (
-                <section className="opalMenuSection" key={section.title}>
-                  <h3>{section.title}</h3>
-                  <div>
-                    {section.rows.map(row => (
-                      <button className="settingsRow" type="button" key={row.label} onClick={() => {
-                        setShowOpalMenu(false);
-                        row.action();
-                      }}>
-                        <i>{row.icon}</i>
-                        <span>
-                          <b>{row.label}</b>
-                          <small>{row.detail}</small>
-                        </span>
-                        <strong>›</strong>
-                      </button>
-                    ))}
-                  </div>
-                </section>
-              ))}
-              <button className="settingsLogout opalMenuLogout" type="button" onClick={() => {
-                setShowOpalMenu(false);
-                logout();
-              }}>
-                <i><LogOut /></i>
-                <span>Log Out</span>
-                <strong>›</strong>
-              </button>
-            </div>
+              </section>
+            ))}
+            <button className="settingsLogout opalMenuLogout" type="button" onClick={logout}>
+              <i><LogOut /></i>
+              <span>Log Out</span>
+              <strong>›</strong>
+            </button>
           </div>
         )}
 
         <div className="search">
           <Search />
-          <input placeholder="Search name or phone" onChange={e => search(e.target.value)} />
-          <button className="searchTune" type="button" onClick={() => setChatListFilter('unread')} title="Show unread chats"><Settings /></button>
+          <input ref={searchInputRef} placeholder="Search name or phone" onChange={e => search(e.target.value)} />
         </div>
         <div className="chatFilterChips">
           <button className={chatListFilter === 'all' ? 'active' : ''} onClick={() => setChatListFilter('all')}>
@@ -4035,10 +4013,6 @@ export default function App() {
         {['all', 'unread'].includes(chatListFilter) && (showArchived || contacts.some(user => user.chat?.archived)) && <button className="archiveToggle" onClick={() => setShowArchived(value => !value)}>
           <Archive /> <span>{showArchived ? 'Back to chats' : 'Archived chats'}</span> {!showArchived && <b>{contacts.filter(user => user.chat?.archived).length} chats</b>}
         </button>}
-        {['all', 'unread'].includes(chatListFilter) && <div className="statusHeader">
-          <button onClick={loadStatuses}><div className="statusRing"><Avatar user={me} /></div> Echoes</button>
-          <button onClick={createTextStatus} title="Share an Echo"><Plus /></button>
-        </div>}
         {chatListFilter === 'channels' && <div className="channelHeader">
           <button onClick={() => loadChannels()}><MessageCircle /> Circles</button>
           <button onClick={createChannel}><Plus /></button>
@@ -4136,7 +4110,7 @@ export default function App() {
           <button onClick={loadStatuses}><History /><span>Echoes</span></button>
           <button onClick={loadCallHistory}><Phone /><span>Calls</span></button>
           <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /><span>Flicks</span></button>
-          <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setShowOpalMenu(false); setMobileTab('settings'); setActive(null); }}><Settings /><span>Settings</span></button>
+          <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); setActive(null); }}><Settings /><span>Settings</span></button>
         </nav>
         </div>
       </aside>
