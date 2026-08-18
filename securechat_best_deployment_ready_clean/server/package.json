@@ -1,5 +1,5 @@
 {
-  "name": "securechat-server",
+  "name": "naad-server",
   "version": "1.0.0",
   "main": "src/server.js",
   "engines": {

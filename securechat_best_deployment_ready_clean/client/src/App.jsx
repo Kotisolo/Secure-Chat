@@ -725,7 +725,7 @@ export default function App() {
   function socialLogin(provider) {
     setErr('');
     setAuthLoading(true);
-    const deviceName = encodeURIComponent(navigator.userAgent || 'SecureChat browser');
+    const deviceName = encodeURIComponent(navigator.userAgent || 'Naad browser');
     window.location.href = `${API_URL}/api/auth/oauth/${provider}/start?deviceName=${deviceName}`;
   }
 
@@ -869,7 +869,7 @@ export default function App() {
         return { ...p, [c]: [...current, displayMessage] };
       });
       if (document.hidden || String(activeRef.current?.id) !== String(other)) {
-        showNotification('New SecureChat message', displayMessage.kind === 'text' ? displayMessage.body : `New ${displayMessage.kind}`);
+        showNotification('New Naad message', displayMessage.kind === 'text' ? displayMessage.body : `New ${displayMessage.kind}`);
       }
 
       loadChats();
@@ -947,7 +947,7 @@ export default function App() {
     });
 
     s.on('security:new-login', d => {
-      showNotification('New SecureChat login', d.deviceName);
+      showNotification('New Naad login', d.deviceName);
       alert(`New login detected: ${d.deviceName}`);
     });
 
@@ -1692,7 +1692,7 @@ export default function App() {
   }
 
   async function joinGroup() {
-    const value = prompt('Paste a SecureChat group invite link or token:');
+    const value = prompt('Paste a Naad group invite link or token:');
     if (!value) return;
     const token = value.includes('groupInvite=')
       ? new URL(value).searchParams.get('groupInvite')
@@ -3524,12 +3524,12 @@ export default function App() {
     return true;
   });
   const mobileTitle = {
-    chats: 'Opal',
+    chats: 'Naad',
     calls: 'Calls',
-    ai: 'Opal',
-    status: 'Moments',
+    ai: 'Naad',
+    status: 'Echoes',
     settings: 'Settings'
-  }[mobileTab] || 'Opal';
+  }[mobileTab] || 'Naad';
   const settingsHandle = `@${String(me?.username || 'user').trim().toLowerCase().replace(/[^a-z0-9]+/g, '') || 'user'}`;
   const settingsSections = [
     {
@@ -3607,10 +3607,10 @@ export default function App() {
           action: () => alert('Help & Support will be connected before go-live.')
         },
         {
-          label: 'About SecureChat',
+          label: 'About Naad',
           detail: 'App version 1.0.0',
           icon: <Info />,
-          action: () => alert('SecureChat version 1.0.0')
+          action: () => alert('Naad version 1.0.0')
         }
       ]
     }
@@ -3646,7 +3646,7 @@ export default function App() {
         <div className="opalBrandPane" aria-hidden="true">
           <div className="opalBrandMark">
             <div className="opalLogo badge"><MessageCircle /></div>
-            <h1><span>Chat</span> <em>Opal</em></h1>
+            <h1><em>Naad</em></h1>
           </div>
           <p className="opalTagline">Communicate without barriers.</p>
           <small className="opalSubtag">Talk to anyone, in any language.</small>
@@ -3663,7 +3663,7 @@ export default function App() {
 
             {screen === 'welcome' ? (
               <>
-                <h1><span>Chat</span> <em>Opal</em></h1>
+                <h1><em>Naad</em></h1>
                 <p className="opalTagline">Communicate without barriers.</p>
                 <small className="opalSubtag">Talk to anyone, in any language.</small>
 
@@ -3815,7 +3815,7 @@ export default function App() {
         <div className="desktopNavRail">
           <div className="appTitle">
             <div className="brandMark"><MessageCircle /></div>
-            <div><b className="desktopBrand">Chat <em>Opal</em></b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
+            <div><b className="desktopBrand"><em>Naad</em></b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
             <div className="mobileTitleActions">
               <button onClick={() => setShowOpalMenu(value => !value)} title="Menu"><MoreVertical /></button>
             </div>
@@ -3862,7 +3862,7 @@ export default function App() {
               </div>
               <h2>{me?.username || 'User'}</h2>
               <p>{settingsHandle}</p>
-              <small><span className={ready ? 'dot online' : 'dot'} /> {ready ? 'Online' : 'Offline'} • SecureChat profile</small>
+              <small><span className={ready ? 'dot online' : 'dot'} /> {ready ? 'Online' : 'Offline'} • Naad profile</small>
               <label className="profilePhoto profilePhotoModern">
                 <Camera />
                 Change profile photo
@@ -5487,7 +5487,7 @@ export default function App() {
               <p>{profile.phone}</p>
               <small><span className={profile.online ? 'dot online' : 'dot'} /> {profileOnlineText} • {profileLastSeenText}</small>
               <div className="profileInfoList">
-                <div><span><MessageCircle /></span><b>About</b><p>{profile.about || 'Hey there! I am using SecureChat.'}</p></div>
+                <div><span><MessageCircle /></span><b>About</b><p>{profile.about || 'Hey there! I am using Naad.'}</p></div>
                 <div><span><Languages /></span><b>Languages</b><p>{profile.languages || 'English, Hindi'}</p></div>
                 <div><span><CalendarClock /></span><b>Member Since</b><p>{profileMemberSince}</p></div>
               </div>

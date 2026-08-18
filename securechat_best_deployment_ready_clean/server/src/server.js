@@ -297,11 +297,11 @@ function isEmail(v) {
 }
 
 const RESEND_API_KEY = (process.env.RESEND_API_KEY || '').trim();
-const RESEND_FROM = process.env.RESEND_FROM || 'SecureChat <onboarding@resend.dev>';
+const RESEND_FROM = process.env.RESEND_FROM || 'Naad <onboarding@resend.dev>';
 
 async function sendOtpEmail(to, otp) {
-  const subject = 'SecureChat password reset code';
-  const text = `Your SecureChat password reset code is ${otp}. It expires in 10 minutes. If you did not request this, ignore this email.`;
+  const subject = 'Naad password reset code';
+  const text = `Your Naad password reset code is ${otp}. It expires in 10 minutes. If you did not request this, ignore this email.`;
   if (RESEND_API_KEY) {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -581,7 +581,7 @@ async function createLiveKitToken({ userId, username, peerId, callRoomId }) {
   const room = validUuid(callRoomId) ? callSessionRoomName(callRoomId) : callRoomName(userId, peerId);
   const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_API_SECRET, {
     identity: String(userId),
-    name: username || 'SecureChat user',
+    name: username || 'Naad user',
     ttl: '2h'
   });
 
@@ -2889,7 +2889,7 @@ init()
   }))
   .then(() => {
     server.listen(PORT, () => {
-      console.log('SecureChat server running on ' + PORT);
+      console.log('Naad server running on ' + PORT);
     });
     setInterval(() => deliverScheduledMessages().catch(error => {
       console.error('scheduled delivery', error.message);
