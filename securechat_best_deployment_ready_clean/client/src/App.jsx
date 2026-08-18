@@ -5257,7 +5257,7 @@ export default function App() {
               </div>
               {groupTyping[selectedGroup.id] && <div className="groupTyping">{groupTyping[selectedGroup.id]} is typing…</div>}
               <div className="groupStickers">
-                {stickers.slice(0, 8).map(value => (
+                {['😂', '❤️', '👍', '🔥', '🎉', '😍', '🙏', '💯'].map(value => (
                   <button key={value} onClick={() => sendGroupMessage(value, 'sticker')}>{value}</button>
                 ))}
               </div>
