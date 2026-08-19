@@ -863,10 +863,11 @@ app.get('/uploads/:filename', asyncRoute(async (req, res) => {
   });
 }));
 
-function user(u) {
-  const hideProfile = u.profile_visibility === 'nobody';
-  const hideAbout = u.about_visibility === 'nobody';
-  const hidePresence = u.last_seen_visibility === 'nobody';
+function user(u, viewerIsContact = true) {
+  const hidden = value => value === 'nobody' || (value === 'contacts' && !viewerIsContact);
+  const hideProfile = hidden(u.profile_visibility);
+  const hideAbout = hidden(u.about_visibility);
+  const hidePresence = hidden(u.last_seen_visibility);
   return {
     id: String(u.id),
     username: u.username,
@@ -1364,7 +1365,9 @@ app.get('/api/users', auth, asyncRoute(async (req, res) => {
 
   const r = await pool.query(
     `SELECT u.id,u.username,u.phone,u.about,u.avatar_url,u.last_seen,
-      p.last_seen_visibility,p.profile_visibility,p.about_visibility
+      p.last_seen_visibility,p.profile_visibility,p.about_visibility,
+      EXISTS(SELECT 1 FROM conversations c WHERE
+        (c.user_a=$1 AND c.user_b=u.id) OR (c.user_a=u.id AND c.user_b=$1)) is_contact
      FROM users u LEFT JOIN user_privacy p ON p.user_id=u.id
      WHERE u.id<>$1 AND (LOWER(u.username) LIKE LOWER($2) OR u.phone LIKE $2)
        AND NOT EXISTS (
@@ -1374,7 +1377,7 @@ app.get('/api/users', auth, asyncRoute(async (req, res) => {
     [req.user.id, '%' + q + '%']
   );
 
-  res.json(r.rows.map(user));
+  res.json(r.rows.map(row => user(row, row.is_contact)));
 }));
 
 app.get('/api/privacy', auth, asyncRoute(async (req, res) => {
@@ -1397,7 +1400,7 @@ app.get('/api/privacy', auth, asyncRoute(async (req, res) => {
 }));
 
 app.patch('/api/privacy', auth, asyncRoute(async (req, res) => {
-  const allowed = new Set(['everyone', 'nobody']);
+  const allowed = new Set(['everyone', 'contacts', 'nobody']);
   const lastSeen = allowed.has(req.body.lastSeenVisibility) ? req.body.lastSeenVisibility : 'everyone';
   const profile = allowed.has(req.body.profileVisibility) ? req.body.profileVisibility : 'everyone';
   const about = allowed.has(req.body.aboutVisibility) ? req.body.aboutVisibility : 'everyone';

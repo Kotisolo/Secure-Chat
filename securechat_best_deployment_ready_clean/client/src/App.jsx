@@ -5492,13 +5492,17 @@ export default function App() {
                   title: label,
                   options: [
                     { label: 'Everyone', value: 'everyone' },
+                    { label: 'My Contacts', value: 'contacts' },
                     { label: 'Nobody', value: 'nobody' }
                   ],
                   onPick: value => savePrivacy({ ...privacy, [key]: value })
                 })}
               >
                 <span>{label}</span>
-                <em>{privacy[key] === 'nobody' ? 'Nobody' : 'Everyone'} <ChevronDown /></em>
+                <em>
+                  {privacy[key] === 'nobody' ? 'Nobody' : privacy[key] === 'contacts' ? 'My Contacts' : 'Everyone'}
+                  {' '}<ChevronDown />
+                </em>
               </button>
             ))}
             <label className="privacyRow">
