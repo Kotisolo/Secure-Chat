@@ -7106,7 +7106,7 @@ body{color:var(--text);font-family:'Inter',system-ui,-apple-system,'Segoe UI',Ar
 .icon{background:var(--panel2);color:#4b4d5e;border-radius:var(--radius-sm);transition:background-color .15s ease,transform .1s ease}
 .icon:hover{background:var(--panel3)}
 .icon:active{transform:scale(.94)}
-.avatar{background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;font-weight:700;border-radius:50%}
+.avatar{background-image:linear-gradient(135deg,var(--primary),var(--secondary));background-size:cover;background-position:center;background-repeat:no-repeat;color:#fff;font-weight:700;border-radius:50%}
 .avatar.big{font-size:32px}
 .empty{color:var(--muted);font-size:14px;text-align:center;padding:24px 16px}
 .err{background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;font-weight:500}
