@@ -7894,3 +7894,9 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 /* ---------- Saved Messages ---------- */
 .savedMessagesAvatar{display:flex;align-items:center;justify-content:center;background:var(--primary);color:#fff;border-radius:50%;width:44px;height:44px;flex:none;}
 .savedMessagesEntry{width:100%;}
+
+/* ---------- group permissions ---------- */
+.groupPermissions h4{margin:10px 18px 4px;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.04em;}
+.groupPermissions button b{margin-left:auto;font-weight:600;color:var(--primary);font-size:13px;}
+.groupComposeLocked{display:flex;align-items:center;gap:8px;padding:14px;justify-content:center;color:var(--muted);font-size:13px;background:var(--panel2);border-top:1px solid var(--line);}
+.groupComposeLocked svg{width:16px;height:16px;}
