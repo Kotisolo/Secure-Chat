@@ -5,13 +5,14 @@ import {
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
-  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward, MailOpen, Pin, PinOff, Bookmark, Play, Check
+  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward, MailOpen, Pin, PinOff, Bookmark, Play, Check, Sparkles
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, ensureFileToken, API_URL
 } from './api';
 import { connectSocket, disconnectSocket, getSocket } from './socket';
 import { Room, RoomEvent, Track, createLocalAudioTrack, createLocalVideoTrack } from 'livekit-client';
+import { BackgroundProcessor } from '@livekit/track-processors';
 import QRCode from 'qrcode';
 import { BRAND } from './branding';
 import {
@@ -523,7 +524,8 @@ export default function App() {
   const [localVideoPosition, setLocalVideoPosition] = useState(null);
   const [callOptionsOpen, setCallOptionsOpen] = useState(null);
   const [showCallInvite, setShowCallInvite] = useState(false);
-  const [noiseCancellation, setNoiseCancellation] = useState(true);
+  const [backgroundEffect, setBackgroundEffect] = useState(false);
+  const backgroundProcessor = useRef(null);
   const [cameraFacingMode, setCameraFacingMode] = useState('user');
 
   const ringtoneCtx = useRef(null);
@@ -3802,6 +3804,8 @@ export default function App() {
     setShowCallInvite(false);
     setSpeakerMuted(false);
     setSpeakerVolume(NORMAL_CALL_VOLUME);
+    setBackgroundEffect(false);
+    backgroundProcessor.current = null;
   }
 
   // Toggle microphone on/off (button reflects the state)
@@ -3936,6 +3940,11 @@ export default function App() {
           liveKitLocalTracks.current = liveKitLocalTracks.current.filter(track => track !== oldTrack);
         }
         const nextTrack = await createLocalVideoTrack(constraints);
+        if (backgroundEffect) {
+          const processor = BackgroundProcessor({ mode: 'background-blur', blurRadius: 10 });
+          await nextTrack.setProcessor(processor);
+          backgroundProcessor.current = processor;
+        }
         liveKitLocalTracks.current.push(nextTrack);
         await liveKitRoom.current.localParticipant.publishTrack(nextTrack);
         setCameraFacingMode(nextFacing);
@@ -4047,15 +4056,30 @@ export default function App() {
     }
   }
 
-  async function toggleNoiseCancellation() {
-    const next = !noiseCancellation;
-    setNoiseCancellation(next);
-    const tracks = localStream.current?.getAudioTracks?.() || [];
-    await Promise.all(tracks.map(track => track.applyConstraints?.({
-      echoCancellation: next,
-      noiseSuppression: next,
-      autoGainControl: next
-    }).catch(() => {})));
+  async function toggleBackgroundEffect() {
+    if (!liveKitRoom.current) {
+      alert('Background effects need a LiveKit-powered call and are not available on this connection.');
+      return;
+    }
+    const videoTrack = liveKitLocalTracks.current.find(track => track.kind === Track.Kind.Video);
+    if (!videoTrack) {
+      alert('Turn on your camera to use a background effect.');
+      return;
+    }
+    try {
+      if (backgroundEffect) {
+        await videoTrack.stopProcessor();
+        backgroundProcessor.current = null;
+        setBackgroundEffect(false);
+      } else {
+        const processor = BackgroundProcessor({ mode: 'background-blur', blurRadius: 10 });
+        await videoTrack.setProcessor(processor);
+        backgroundProcessor.current = processor;
+        setBackgroundEffect(true);
+      }
+    } catch (error) {
+      alert('Could not change the background effect: ' + error.message);
+    }
   }
 
   function sendMessageDuringCall() {
@@ -5319,8 +5343,9 @@ export default function App() {
           <div className="incomingBtns">
             <button className="accept" onClick={acceptCall}>
               {incoming.videoIntent || incoming.callType === 'video' ? <Video /> : <Phone />}
+              <span>Accept</span>
             </button>
-            <button className="danger" onClick={declineCall}><PhoneOff /></button>
+            <button className="danger" onClick={declineCall}><PhoneOff /><span>Decline</span></button>
           </div>
         </div>
       )}
@@ -5392,12 +5417,20 @@ export default function App() {
                 <small>Send a quick message</small>
                 <em>›</em>
               </button>
-              <button type="button" onClick={toggleNoiseCancellation}>
-                <span><Volume2 /></span>
-                <b>Noise cancellation</b>
-                <small>Reduce background noise</small>
-                <em className={noiseCancellation ? 'toggle on' : 'toggle'} />
-              </button>
+              {callCanUseVideo ? (
+                <button type="button" onClick={toggleBackgroundEffect}>
+                  <span><Sparkles /></span>
+                  <b>Background effect</b>
+                  <small>Blur what's behind you</small>
+                  <em className={backgroundEffect ? 'toggle on' : 'toggle'} />
+                </button>
+              ) : (
+                <button type="button" disabled style={{ opacity: 0.55 }}>
+                  <span><Sparkles /></span>
+                  <b>Background effect</b>
+                  <small>Turn on video to use this</small>
+                </button>
+              )}
               <button type="button" className="callOptionsClose" onClick={() => setCallOptionsOpen(null)}>Close</button>
             </div>
           )}
@@ -5443,7 +5476,7 @@ export default function App() {
               <span>Mute</span>
             </button>
 
-            {callCanUseVideo && (
+            {callCanUseVideo ? (
               <button
                 className={camOn ? '' : 'off'}
                 onClick={toggleCamera}
@@ -5451,6 +5484,11 @@ export default function App() {
               >
                 {camOn ? <Video /> : <VideoOff />}
                 <span>Camera</span>
+              </button>
+            ) : (
+              <button onClick={toggleCamera} title="Switch to video">
+                <Video />
+                <span>Video</span>
               </button>
             )}
 
@@ -5994,25 +6032,33 @@ export default function App() {
               {groupCall.type === 'video' ? <StreamVideo stream={groupCallStream.current} muted /> : <Avatar user={me} big />}
               <b>You</b>
             </div>
-            {Object.entries(groupRemoteStreams).map(([userId, stream]) => (
-              <div className="groupCallTile" key={userId}>
-                {groupCall.type === 'video' ? <StreamVideo stream={stream} /> : (
-                  <><div className="avatar big"><User /></div><StreamAudio stream={stream} /></>
-                )}
-                <b>Participant</b>
-              </div>
-            ))}
+            {Object.entries(groupRemoteStreams).map(([userId, stream]) => {
+              const participant = selectedGroup?.members?.find(member => String(member.id) === String(userId));
+              return (
+                <div className="groupCallTile" key={userId}>
+                  {groupCall.type === 'video' ? <StreamVideo stream={stream} /> : (
+                    <><Avatar user={participant} big /><StreamAudio stream={stream} /></>
+                  )}
+                  <b>{participant?.username || 'Participant'}</b>
+                </div>
+              );
+            })}
           </div>
           <div className="groupCallControls">
-            <button className={groupCall.micOn ? '' : 'off'} onClick={toggleGroupCallMic}>
+            <button className={groupCall.micOn ? '' : 'off'} onClick={toggleGroupCallMic} title={groupCall.micOn ? 'Mute microphone' : 'Unmute microphone'}>
               {groupCall.micOn ? <Mic /> : <MicOff />}
+              <span>Mute</span>
             </button>
             {groupCall.type === 'video' && (
-              <button className={groupCall.camOn ? '' : 'off'} onClick={toggleGroupCallCamera}>
+              <button className={groupCall.camOn ? '' : 'off'} onClick={toggleGroupCallCamera} title={groupCall.camOn ? 'Turn camera off' : 'Turn camera on'}>
                 {groupCall.camOn ? <Video /> : <VideoOff />}
+                <span>Camera</span>
               </button>
             )}
-            <button className="danger" onClick={leaveGroupCall}><PhoneOff /></button>
+            <button className="danger" onClick={leaveGroupCall} title="Leave call">
+              <PhoneOff />
+              <span>Leave</span>
+            </button>
           </div>
         </div>
       )}

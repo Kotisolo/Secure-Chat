@@ -11,6 +11,7 @@
     "preview": "vite preview --host 0.0.0.0"
   },
   "dependencies": {
+    "@livekit/track-processors": "^0.7.2",
     "@vitejs/plugin-react": "^6.0.3",
     "livekit-client": "^2.20.1",
     "lucide-react": "^0.468.0",
