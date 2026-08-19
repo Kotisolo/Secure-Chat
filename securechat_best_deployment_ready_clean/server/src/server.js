@@ -173,7 +173,13 @@ const UPLOAD_EXT_BY_MIME = {
   'application/pdf': '.pdf',
   'text/plain': '.txt',
   'application/msword': '.doc',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx'
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  // E2EE attachments (client/src/e2ee.js encryptAttachment) are opaque AES-GCM
+  // ciphertext uploaded as application/octet-stream - the server can't and
+  // shouldn't know the original file type, only the client can decrypt it.
+  // Served back with Content-Disposition: attachment (see /uploads/:filename,
+  // .bin isn't in INLINE_SAFE_EXTENSIONS) so there's no inline-render risk.
+  'application/octet-stream': '.bin'
 };
 
 function extensionForUpload(mimetype) {
