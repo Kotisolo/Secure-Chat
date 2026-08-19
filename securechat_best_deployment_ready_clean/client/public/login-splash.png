@@ -1,0 +1,8 @@
+if (showLoginSplash) {
+  return (
+    <div className="loginSplash">
+      <img src="/"C:\Users\koteswarao\Downloads\Image-modi.webp"" alt="" />
+      <button onClick={() => setShowLoginSplash(false)}>Continue</button>
+    </div>
+  );
+}
