@@ -44,6 +44,13 @@
   --shadow-sm:0 1px 2px rgba(16,17,26,.04),0 1px 3px rgba(16,17,26,.06);
   --shadow-md:0 4px 12px rgba(16,17,26,.06),0 2px 4px rgba(16,17,26,.04);
   --shadow-lg:0 16px 40px rgba(16,17,26,.10),0 4px 12px rgba(16,17,26,.06);
+  /* One consistent scale, used the same way on mobile and desktop -
+     screens differ in layout, never in these values. */
+  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;
+  --radius-pill:999px;--radius-avatar:16px;--radius-card:16px;--radius-sheet:24px;--radius-control:12px;
+  --icon-sm:18px;--icon-md:20px;--icon-lg:24px;
+  --avatar-sm:40px;--avatar-md:48px;--avatar-lg:96px;
+  --row-min-h:64px;
 }
 *{transition:background-color .15s ease,border-color .15s ease,box-shadow .15s ease,transform .1s ease}
 body{background:var(--bg);color:var(--text)}
@@ -862,73 +869,82 @@ body{background:var(--bg);color:var(--text)}
   font-size:17px!important;
 }
 .head{
-  margin:10px!important;
-  height:74px!important;
-  min-height:74px!important;
-  border-radius:24px!important;
-  border:1px solid #eee9fb!important;
-  background:rgba(255,255,255,.96)!important;
-  box-shadow:0 14px 36px rgba(35,28,66,.08)!important;
+  margin:var(--space-3) var(--space-3) 0!important;
+  width:calc(100% - 24px)!important;
+  height:70px!important;
+  min-height:70px!important;
+  border-radius:var(--radius-card)!important;
+  border:1px solid var(--line)!important;
+  background:var(--panel)!important;
+  box-shadow:var(--shadow-sm)!important;
+  box-sizing:border-box!important;
 }
 .head .title b{
-  color:#171326!important;
-  font-size:18px!important;
-  font-weight:950!important;
+  color:var(--text)!important;
+  font-size:16px!important;
+  font-weight:600!important;
 }
 .head .title small{
-  color:#20b96a!important;
-  font-size:12px!important;
+  color:var(--muted)!important;
+  font-size:13px!important;
 }
+.head .title small.statusOnline{color:var(--online)!important}
+.head .title small.statusTyping{color:var(--primary)!important}
 .head .icon{
-  width:48px!important;
-  height:48px!important;
-  border-radius:18px!important;
-  background:#f7f5fc!important;
-  color:#704cff!important;
-  border:1px solid #eee9fb!important;
+  width:var(--avatar-sm)!important;
+  height:var(--avatar-sm)!important;
+  border-radius:var(--radius-control)!important;
+  background:var(--panel2)!important;
+  color:var(--primary)!important;
+  border:1px solid var(--line)!important;
 }
 .head .icon svg{
-  width:24px!important;
-  height:24px!important;
+  width:var(--icon-md)!important;
+  height:var(--icon-md)!important;
 }
 .msgs{
-  background:#fbfaff!important;
-  background-image:radial-gradient(circle at 1px 1px, rgba(112,76,255,.055) 1px, transparent 0)!important;
-  background-size:22px 22px!important;
+  background:var(--bg)!important;
+  background-image:none!important;
 }
 .bubble{
   font-size:15px!important;
-  line-height:1.35!important;
-  box-shadow:0 12px 30px rgba(35,28,66,.08)!important;
+  line-height:1.4!important;
+  box-shadow:var(--shadow-sm)!important;
 }
 .theirs{
-  background:#fff!important;
-  color:#171326!important;
+  background:var(--panel)!important;
+  color:var(--text)!important;
 }
 .mine{
   color:#fff!important;
-  background:linear-gradient(135deg,#5b5fef,#8b5cf6)!important;
+  background:var(--primary)!important;
 }
 .compose{
-  margin:0 10px 10px!important;
-  height:70px!important;
-  min-height:70px!important;
-  border-radius:24px!important;
-  background:#fff!important;
-  border:1px solid #eee9fb!important;
-  box-shadow:0 -8px 30px rgba(35,28,66,.06)!important;
+  margin:0 var(--space-3) var(--space-3)!important;
+  width:calc(100% - 24px)!important;
+  height:64px!important;
+  min-height:64px!important;
+  border-radius:var(--radius-card)!important;
+  background:var(--panel)!important;
+  border:1px solid var(--line)!important;
+  box-shadow:var(--shadow-sm)!important;
+  box-sizing:border-box!important;
 }
 .compose input{
-  height:48px!important;
-  background:#f4f2fb!important;
-  color:#171326!important;
+  height:44px!important;
+  background:var(--panel2)!important;
+  color:var(--text)!important;
   font-size:15px!important;
 }
 .compose .icon,
 .compose .send{
-  width:48px!important;
-  height:48px!important;
-  border-radius:18px!important;
+  width:var(--avatar-sm)!important;
+  height:var(--avatar-sm)!important;
+  border-radius:var(--radius-control)!important;
+}
+.compose .send{
+  background:var(--primary)!important;
+  color:#fff!important;
 }
 .compose .send{
   border-radius:50%!important;
@@ -5570,11 +5586,13 @@ body{background:var(--bg);color:var(--text)}
   .panel.open .head .title small{
     margin-top:2px!important;
     font-size:12px!important;
-    color:#1fc86b!important;
+    color:var(--muted)!important;
     overflow:hidden!important;
     text-overflow:ellipsis!important;
     white-space:nowrap!important;
   }
+  .panel.open .head .title small.statusOnline{color:var(--online)!important}
+  .panel.open .head .title small.statusTyping{color:var(--primary)!important}
   .panel.open .head .icon:not(.mobile){
     width:42px!important;
     height:42px!important;
@@ -7945,3 +7963,11 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
   -webkit-touch-callout:none;
   touch-action:manipulation;
 }
+
+/* ---------- redesign v2: read receipts, message-actions menu ---------- */
+.receiptSent{color:inherit;opacity:.7}
+.receiptRead{color:#4fc3f7;opacity:1}
+.mine .receiptRead{color:#bfe9ff}
+.messageMenu button{color:var(--text)!important;background:var(--panel2)!important}
+.messageMenu button.danger{background:var(--red)!important;color:#fff!important}
+.messageMenu .reactionPicker button{background:transparent!important}
