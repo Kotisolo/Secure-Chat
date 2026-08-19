@@ -851,7 +851,7 @@ body{background:var(--bg);color:var(--text)}
   font-weight:850!important;
 }
 .chatFilterChips button.active{
-  background:linear-gradient(135deg,#5b5fef,#8b5cf6)!important;
+  background:var(--primary)!important;
   color:#fff!important;
   box-shadow:0 10px 22px rgba(112,76,255,.22)!important;
 }
@@ -1960,8 +1960,8 @@ body{background:var(--bg);color:var(--text)}
 }
 .chatFilterChips button.active{
   color:#fff;
-  background:linear-gradient(135deg,var(--primary),var(--secondary));
-  box-shadow:0 10px 20px rgba(117,73,238,.22);
+  background:var(--primary);
+  box-shadow:none;
 }
 .chatFilterChips span{
   min-width:20px;
@@ -5488,16 +5488,16 @@ body{background:var(--bg);color:var(--text)}
   .chatFilterChips button{
     min-height:50px!important;
     padding:0 18px!important;
-    border-radius:16px!important;
-    background:#f4f2f8!important;
-    color:#5c566b!important;
+    border-radius:var(--radius-pill)!important;
+    background:var(--panel2)!important;
+    color:var(--muted)!important;
     font-size:15px!important;
-    font-weight:850!important;
+    font-weight:600!important;
   }
   .chatFilterChips button.active{
     color:#fff!important;
-    background:linear-gradient(135deg,#5f20ff,#823cff)!important;
-    box-shadow:0 12px 22px rgba(112,76,255,.25)!important;
+    background:var(--primary)!important;
+    box-shadow:none!important;
   }
   .contactStories{
     padding:0 18px 22px!important;
@@ -5905,16 +5905,16 @@ body{background:var(--bg);color:var(--text)}
     min-width:0!important;
     min-height:50px!important;
     padding:0 8px!important;
-    border-radius:20px!important;
-    background:#f2eff8!important;
-    color:#5e5871!important;
+    border-radius:var(--radius-pill)!important;
+    background:var(--panel2)!important;
+    color:var(--muted)!important;
     font-size:15px!important;
     box-shadow:none!important;
   }
   .side.tab-chats .chatFilterChips button.active{
-    background:linear-gradient(135deg,#5b5fef,#8b5cf6)!important;
+    background:var(--primary)!important;
     color:#fff!important;
-    box-shadow:0 14px 24px rgba(112,76,255,.22)!important;
+    box-shadow:none!important;
   }
   .side.tab-chats .chatFilterChips button span{
     display:none!important;
@@ -6899,19 +6899,19 @@ body{background:var(--bg);color:var(--text)}
     height:38px!important;
     min-height:38px!important;
     padding:0 5px!important;
-    border-radius:15px!important;
+    border-radius:var(--radius-pill)!important;
     display:grid!important;
     place-items:center!important;
-    background:#f3f1f8!important;
-    color:#1d1a2a!important;
+    background:var(--panel2)!important;
+    color:var(--muted)!important;
     font-size:12.5px!important;
     line-height:1!important;
-    font-weight:720!important;
+    font-weight:600!important;
     box-shadow:none!important;
   }
   .side.tab-chats .chatFilterChips button.active{
     color:#fff!important;
-    background:linear-gradient(135deg,#5d5af2,#874cf7)!important;
+    background:var(--primary)!important;
     box-shadow:none!important;
   }
   .side.tab-chats .chatFilterChips span{
