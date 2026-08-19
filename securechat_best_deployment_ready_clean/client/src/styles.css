@@ -7928,3 +7928,17 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 
 /* ---------- contact nicknames ---------- */
 .profileRealName{margin:-6px 0 4px;color:var(--muted);font-size:13px;}
+
+/* ---------- message bubble: stop native text-selection stealing long-press ---------- */
+/* Same root cause as .chatMain (see that comment above): message selection is
+   a tap (onClick on the bubble), but on mobile a press held slightly longer
+   than a quick tap gets intercepted by the browser's native text-selection/
+   callout gesture on the bubble's text instead, so the tap never registers
+   and the message-actions menu never opens. Unlike .chatMain, bubbles contain
+   real interactive children (audio players, download/map links) so - unlike
+   that rule - this does NOT disable pointer-events on descendants. */
+.messagePress{
+  -webkit-user-select:none;user-select:none;
+  -webkit-touch-callout:none;
+  touch-action:manipulation;
+}
