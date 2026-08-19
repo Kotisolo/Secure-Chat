@@ -307,10 +307,10 @@ const updateReceipt = (state, conversationId, field, value) => {
   };
 };
 const receipt = message => {
-  if (message.local) return 'sending…';
-  if (message.readAt) return '✓✓';
-  if (message.deliveredAt) return '✓✓';
-  return '✓';
+  if (message.local) return { text: 'sending…', read: false };
+  if (message.readAt) return { text: '✓✓', read: true };
+  if (message.deliveredAt) return { text: '✓✓', read: false };
+  return { text: '✓', read: false };
 };
 const mediaErrorMessage = (error, type) => {
   const deviceLabel = type === 'video' ? 'camera and microphone' : 'microphone';
@@ -4768,13 +4768,17 @@ export default function App() {
 
               <div className="title">
                 <b>{String(active.id) === String(me.id) ? 'Saved Messages' : displayName(active)}</b>
-                <small>
+                <small className={
+                  String(active.id) === String(me.id) ? '' :
+                  typing ? 'statusTyping' :
+                  (E2EE_ENABLED ? encryptionReady : true) && active.online ? 'statusOnline' : ''
+                }>
                   {String(active.id) === String(me.id)
                     ? 'Only visible to you'
                     : typing
                       ? 'typing...'
-                      : E2EE_ENABLED
-                        ? encryptionReady ? 'End-to-end encrypted beta' : 'Preparing encryption...'
+                      : E2EE_ENABLED && !encryptionReady
+                        ? 'Preparing encryption...'
                         : active.online ? 'Online' : 'Private conversation'}
                 </small>
               </div>
@@ -5027,7 +5031,9 @@ export default function App() {
                     {m.starred ? '★ ' : ''}{m.editedAt ? 'edited · ' : ''}
                     {m.scheduledAt && !m.sentAt ? `scheduled ${new Date(m.scheduledAt).toLocaleString()} · ` : ''}
                     {m.expiresAt ? 'disappearing · ' : ''}
-                    {t(m.createdAt)} {String(m.senderId) === String(me.id) ? receipt(m) : ''}
+                    {t(m.createdAt)} {String(m.senderId) === String(me.id) && (
+                      <span className={receipt(m).read ? 'receiptRead' : 'receiptSent'}>{receipt(m).text}</span>
+                    )}
                   </small>
                   {m.reactions?.length > 0 && (
                     <div className="reactionRow">
