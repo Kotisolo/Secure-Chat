@@ -4465,9 +4465,9 @@ export default function App() {
           }}><Plus /> New Chat</button>
           <div className="railMenu">
             <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setChatListFilter('all'); }}><MessageCircle /> Chats <span>{contacts.reduce((total, user) => total + Number(user.chat?.unreadCount || 0), 0) || ''}</span></button>
-            <button onClick={() => { setMobileTab('chats'); openChat(me); }}><Bookmark /> Saved Messages</button>
-            <button onClick={loadStatuses}><History /> Echoes</button>
-            <button onClick={loadCallHistory}><Phone /> Calls</button>
+            <button className={String(active?.id) === String(me?.id) ? 'active' : ''} onClick={() => { setMobileTab('chats'); openChat(me); }}><Bookmark /> Saved Messages</button>
+            <button className={showStatuses ? 'active' : ''} onClick={loadStatuses}><History /> Echoes</button>
+            <button className={showCallHistory ? 'active' : ''} onClick={loadCallHistory}><Phone /> Calls</button>
             <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /> Flicks</button>
           </div>
           <div className="railFooter">
@@ -4742,8 +4742,8 @@ export default function App() {
         </div>}
         <nav className="bottomNav" aria-label="Primary navigation">
           <button className={mobileTab === 'chats' ? 'active' : ''} onClick={() => { setMobileTab('chats'); setActive(null); }}><MessageCircle /><span>Chats</span></button>
-          <button onClick={loadStatuses}><History /><span>Echoes</span></button>
-          <button onClick={loadCallHistory}><Phone /><span>Calls</span></button>
+          <button className={showStatuses ? 'active' : ''} onClick={loadStatuses}><History /><span>Echoes</span></button>
+          <button className={showCallHistory ? 'active' : ''} onClick={loadCallHistory}><Phone /><span>Calls</span></button>
           <button className={mobileTab === 'ai' ? 'active' : ''} onClick={() => setMobileTab('ai')}><Video /><span>Flicks</span></button>
           <button className={mobileTab === 'settings' ? 'active' : ''} onClick={() => { setMobileTab('settings'); setActive(null); }}><Settings /><span>Settings</span></button>
         </nav>
