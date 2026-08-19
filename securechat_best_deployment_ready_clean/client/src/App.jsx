@@ -220,7 +220,7 @@ const formatAudioTime = seconds => {
   const whole = Math.floor(seconds);
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, '0')}`;
 };
-const VoiceMessage = ({ src, mine = false, onClick }) => {
+const VoiceMessage = ({ src, mine = false, onClick, onPointerDown, onPointerUp, onPointerLeave }) => {
   const audioRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [duration, setDuration] = useState(0);
@@ -243,7 +243,13 @@ const VoiceMessage = ({ src, mine = false, onClick }) => {
   };
 
   return (
-    <div className={mine ? 'voiceBubble mineVoice' : 'voiceBubble'} onClick={onClick}>
+    <div
+      className={mine ? 'voiceBubble mineVoice' : 'voiceBubble'}
+      onClick={onClick}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerLeave}
+    >
       <audio
         ref={audioRef}
         src={src}
@@ -481,6 +487,8 @@ export default function App() {
   const [showChannels, setShowChannels] = useState(false);
   const chatPressTimer = useRef(null);
   const chatPressTriggered = useRef(false);
+  const mediaPressTimer = useRef(null);
+  const mediaPressTriggered = useRef(false);
   const selectedChannelRef = useRef(null);
   const groupTypingTimer = useRef(null);
   const groupCallStream = useRef(null);
@@ -2371,6 +2379,36 @@ export default function App() {
     } catch (error) {
       alert('Could not delete message: ' + error.message);
     }
+  }
+
+  // Media bubbles (image/video/audio/file/location) stopPropagation on their
+  // own click so a tap can open the viewer/player/link instead of the
+  // message-actions menu. That means a plain tap on the bubble never reaches
+  // it, so - like the chat list rows above - we detect a genuine long-press
+  // (pointerdown held past a threshold) to open the menu, while a quick
+  // release still runs the tap action (open viewer, play, etc).
+  function longPressHandlers(m, onTap) {
+    return {
+      onPointerDown: () => {
+        mediaPressTriggered.current = false;
+        clearTimeout(mediaPressTimer.current);
+        mediaPressTimer.current = setTimeout(() => {
+          mediaPressTriggered.current = true;
+          setSelectedMessage(m);
+        }, 550);
+      },
+      onPointerUp: e => {
+        e.stopPropagation();
+        clearTimeout(mediaPressTimer.current);
+        if (mediaPressTriggered.current) {
+          mediaPressTriggered.current = false;
+          return;
+        }
+        onTap(e);
+      },
+      onPointerLeave: () => clearTimeout(mediaPressTimer.current),
+      onClick: e => e.stopPropagation()
+    };
   }
 
   async function requestNotifications() {
@@ -4899,20 +4937,18 @@ export default function App() {
                     <img
                       src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))}
                       alt={m.fileName || 'Photo'}
-                      onClick={e => {
-                        e.stopPropagation();
+                      {...longPressHandlers(m, () => {
                         const url = attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl));
                         if (url) setMediaViewer({ url, kind: 'image', fileName: m.fileName });
-                      }}
+                      })}
                     />
                   ) : m.kind === 'video' && m.fileUrl ? (
                     <div
                       className="videoBubblePreview"
-                      onClick={e => {
-                        e.stopPropagation();
+                      {...longPressHandlers(m, () => {
                         const url = attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl));
                         if (url) setMediaViewer({ url, kind: 'video', fileName: m.fileName });
-                      }}
+                      })}
                     >
                       <video src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))} preload="metadata" muted />
                       <span className="videoBubblePlay"><Play /></span>
@@ -4923,7 +4959,7 @@ export default function App() {
                       download={m.fileName}
                       target="_blank"
                       rel="noopener noreferrer"
-                      onClick={e => e.stopPropagation()}
+                      {...longPressHandlers(m, () => {})}
                     >
                       📎 {m.fileName || m.body}
                     </a>
@@ -4931,10 +4967,10 @@ export default function App() {
                     <VoiceMessage
                       src={attachmentUrls[m.id] || (m.fileEncryption ? '' : resolveFileUrl(m.fileUrl))}
                       mine={String(m.senderId) === String(me.id)}
-                      onClick={e => e.stopPropagation()}
+                      {...longPressHandlers(m, () => {})}
                     />
                   ) : locationData ? (
-                    <div className="locationMessage" onClick={e => e.stopPropagation()}>
+                    <div className="locationMessage" {...longPressHandlers(m, () => {})}>
                       <div className="locationCopy">
                         <b><MapPin /> {locationData.liveMinutes ? 'Live Location' : 'Location'}</b>
                         <strong>{String(m.senderId) === String(me.id) ? me.username : displayName(active)}</strong>
