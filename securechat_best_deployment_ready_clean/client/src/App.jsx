@@ -5,7 +5,7 @@ import {
   KeyRound, Copy, Camera, Trash2, Volume2, VolumeX, Reply, Star, Pencil, Square,
   Archive, BellOff, CalendarClock, Languages, History, Bell,
   Shield, Ban, Flag, Users, UserPlus, Plus, Settings, Eye, EyeOff, MapPin, Navigation, BarChart3, MoreVertical,
-  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward, MailOpen, Pin, PinOff, Bookmark, Play
+  MonitorUp, Hand, Info, Mail, Clapperboard, ChevronDown, Forward, MailOpen, Pin, PinOff, Bookmark, Play, Check
 } from 'lucide-react';
 import {
   api, uploadFile, setSession, getStoredUser, getToken, clearSession, resolveFileUrl, ensureFileToken, API_URL
@@ -509,6 +509,7 @@ export default function App() {
   const [speakerMuted, setSpeakerMuted] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [voicePreview, setVoicePreview] = useState(null);
   const [miniCallPosition, setMiniCallPosition] = useState(null);
   const [localVideoPosition, setLocalVideoPosition] = useState(null);
   const [callOptionsOpen, setCallOptionsOpen] = useState(null);
@@ -546,6 +547,8 @@ export default function App() {
   const recordingStream = useRef(null);
   const recordingChunks = useRef([]);
   const recordingTimer = useRef(null);
+  const recordingSecondsRef = useRef(0);
+  const discardRecording = useRef(false);
   const liveLocationWatch = useRef(null);
   const liveLocationState = useRef(null);
 
@@ -2868,39 +2871,31 @@ export default function App() {
       recorder.ondataavailable = event => {
         if (event.data.size) recordingChunks.current.push(event.data);
       };
-      recorder.onstop = async () => {
+      recorder.onstop = () => {
         clearInterval(recordingTimer.current);
         stream.getTracks().forEach(track => track.stop());
+        recordingStream.current = null;
+        setRecording(false);
+        const wasDiscarded = discardRecording.current;
+        discardRecording.current = false;
         const type = recorder.mimeType || 'audio/webm';
         const extension = type.includes('mp4') ? 'm4a' : type.includes('ogg') ? 'ogg' : 'webm';
         const blob = new Blob(recordingChunks.current, { type });
+        const seconds = recordingSecondsRef.current;
         recordingChunks.current = [];
-        recordingStream.current = null;
-        if (!blob.size) return;
-        try {
-          const voiceFile = new File([blob], `voice-${Date.now()}.${extension}`, { type });
-          const conversationId = cid(me.id, active.id);
-          const encrypted = E2EE_ENABLED
-            ? await encryptAttachment(active.id, conversationId, voiceFile)
-            : null;
-          const uploaded = await uploadFile(encrypted?.file || voiceFile);
-          await send({
-            body: 'Voice message',
-            kind: 'audio',
-            fileUrl: uploaded.url,
-            fileName: voiceFile.name,
-            fileMime: voiceFile.type,
-            fileEncryption: encrypted?.fileEncryption,
-            senderDeviceId: encrypted?.senderDeviceId
-          });
-        } catch (error) {
-          alert('Voice message failed: ' + error.message);
-        }
+        if (wasDiscarded || !blob.size) return;
+        setVoicePreview({ url: URL.createObjectURL(blob), blob, mimeType: type, extension, seconds });
       };
       recorder.start();
       setRecording(true);
       setRecordingSeconds(0);
-      recordingTimer.current = setInterval(() => setRecordingSeconds(value => value + 1), 1000);
+      recordingSecondsRef.current = 0;
+      recordingTimer.current = setInterval(() => {
+        setRecordingSeconds(value => {
+          recordingSecondsRef.current = value + 1;
+          return value + 1;
+        });
+      }, 1000);
     } catch (error) {
       alert(mediaErrorMessage(error, 'audio'));
     }
@@ -2909,8 +2904,45 @@ export default function App() {
   function stopVoiceRecording() {
     if (mediaRecorder.current?.state === 'recording') mediaRecorder.current.stop();
     mediaRecorder.current = null;
-    setRecording(false);
     setRecordingSeconds(0);
+  }
+
+  function cancelVoiceRecording() {
+    discardRecording.current = true;
+    if (mediaRecorder.current?.state === 'recording') mediaRecorder.current.stop();
+    mediaRecorder.current = null;
+    setRecordingSeconds(0);
+  }
+
+  function discardVoicePreview() {
+    if (voicePreview) URL.revokeObjectURL(voicePreview.url);
+    setVoicePreview(null);
+  }
+
+  async function sendVoicePreview() {
+    if (!voicePreview || !active || !me) return;
+    const preview = voicePreview;
+    URL.revokeObjectURL(preview.url);
+    setVoicePreview(null);
+    try {
+      const voiceFile = new File([preview.blob], `voice-${Date.now()}.${preview.extension}`, { type: preview.mimeType });
+      const conversationId = cid(me.id, active.id);
+      const encrypted = E2EE_ENABLED
+        ? await encryptAttachment(active.id, conversationId, voiceFile)
+        : null;
+      const uploaded = await uploadFile(encrypted?.file || voiceFile);
+      await send({
+        body: 'Voice message',
+        kind: 'audio',
+        fileUrl: uploaded.url,
+        fileName: voiceFile.name,
+        fileMime: voiceFile.type,
+        fileEncryption: encrypted?.fileEncryption,
+        senderDeviceId: encrypted?.senderDeviceId
+      });
+    } catch (error) {
+      alert('Voice message failed: ' + error.message);
+    }
   }
 
   function beginReply() {
@@ -5077,57 +5109,73 @@ export default function App() {
               </div>
             )}
 
-            <footer className="compose">
-              <button className="icon composePlus" onClick={() => setShowComposerTools(value => !value)} title="More message tools">
-                {showComposerTools ? <X /> : <Plus />}
-              </button>
+            {voicePreview ? (
+              <footer className="compose voicePreviewBar">
+                <button className="icon voicePreviewDiscard" onClick={discardVoicePreview} title="Discard recording"><Trash2 /></button>
+                <audio className="voicePreviewPlayer" controls src={voicePreview.url} />
+                <span className="voicePreviewDuration">
+                  {String(Math.floor(voicePreview.seconds / 60)).padStart(2, '0')}:{String(voicePreview.seconds % 60).padStart(2, '0')}
+                </span>
+                <button className="send" onClick={sendVoicePreview} title="Send voice message"><Send /></button>
+              </footer>
+            ) : (
+              <footer className="compose">
+                <button className="icon composePlus" onClick={() => setShowComposerTools(value => !value)} title="More message tools">
+                  {showComposerTools ? <X /> : <Plus />}
+                </button>
 
-              {recording ? (
-                <div className="recordingStatus">
-                  <span />
-                  Recording {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
-                </div>
-              ) : <input
-                value={text}
-                onChange={e => {
-                  setText(e.target.value);
-                  emitTyping();
-                }}
-                onKeyDown={e => {
-                  if (e.key === 'Enter') editingMessage ? saveEdit() : send();
-                }}
-                placeholder={editingMessage ? 'Edit message' : 'Message'}
-              />}
+                {recording ? (
+                  <div className="recordingStatus">
+                    <button className="recordingCancel" onClick={cancelVoiceRecording} title="Cancel recording"><Trash2 /></button>
+                    <span className="recordingDot" />
+                    Recording {String(Math.floor(recordingSeconds / 60)).padStart(2, '0')}:{String(recordingSeconds % 60).padStart(2, '0')}
+                  </div>
+                ) : <input
+                  value={text}
+                  onChange={e => {
+                    setText(e.target.value);
+                    emitTyping();
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') editingMessage ? saveEdit() : send();
+                  }}
+                  placeholder={editingMessage ? 'Edit message' : 'Message'}
+                />}
 
-              <button
-                className={emoji ? 'icon composeEmoji active' : 'icon composeEmoji'}
-                onClick={() => {
-                  setEmoji(value => !value);
-                  setShowComposerTools(false);
-                }}
-                title="Emoji"
-                type="button"
-              >
-                <Smile />
-              </button>
+                {!recording && (
+                  <button
+                    className={emoji ? 'icon composeEmoji active' : 'icon composeEmoji'}
+                    onClick={() => {
+                      setEmoji(value => !value);
+                      setShowComposerTools(false);
+                    }}
+                    title="Emoji"
+                    type="button"
+                  >
+                    <Smile />
+                  </button>
+                )}
 
-              <label className="icon composeCamera" title="Take photo">
-                <Camera />
-                <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
-              </label>
+                {!recording && (
+                  <label className="icon composeCamera" title="Take photo">
+                    <Camera />
+                    <input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} />
+                  </label>
+                )}
 
-              <button
-                className={recording ? 'send recordingStop' : 'send'}
-                onClick={recording
-                  ? stopVoiceRecording
-                  : text.trim() || editingMessage
-                    ? editingMessage ? saveEdit : () => send()
-                    : startVoiceRecording}
-                title={recording ? 'Stop and send recording' : text.trim() || editingMessage ? 'Send message' : 'Record voice message'}
-              >
-                {recording ? <Square /> : text.trim() || editingMessage ? <Send /> : <Mic />}
-              </button>
-            </footer>
+                <button
+                  className={recording ? 'send recordingStop' : 'send'}
+                  onClick={recording
+                    ? stopVoiceRecording
+                    : text.trim() || editingMessage
+                      ? editingMessage ? saveEdit : () => send()
+                      : startVoiceRecording}
+                  title={recording ? 'Stop recording' : text.trim() || editingMessage ? 'Send message' : 'Record voice message'}
+                >
+                  {recording ? <Check /> : text.trim() || editingMessage ? <Send /> : <Mic />}
+                </button>
+              </footer>
+            )}
 
             {emoji && (
               <div className="emoji">
