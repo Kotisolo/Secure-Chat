@@ -1589,26 +1589,29 @@ export default function App() {
   }
 
   async function sendGroupFile(event, kind) {
-    const file = event.target.files?.[0];
+    const files = Array.from(event.target.files || []);
     event.target.value = '';
-    if (!file || !selectedGroup) return;
-    try {
-      const entries = await Promise.all(selectedGroup.members.map(async member => {
-        const encrypted = await encryptAttachment(member.id, `group:${selectedGroup.id}`, file);
-        const uploaded = await uploadFile(encrypted?.file || file);
-        const content = JSON.stringify({
-          body: kind === 'image' ? 'Photo' : kind === 'video' ? 'Video' : file.name,
-          kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type,
-          fileEncryption: encrypted?.fileEncryption, senderDeviceId: encrypted?.senderDeviceId
+    if (!files.length || !selectedGroup) return;
+
+    for (const file of files) {
+      try {
+        const entries = await Promise.all(selectedGroup.members.map(async member => {
+          const encrypted = await encryptAttachment(member.id, `group:${selectedGroup.id}`, file);
+          const uploaded = await uploadFile(encrypted?.file || file);
+          const content = JSON.stringify({
+            body: kind === 'image' ? 'Photo' : kind === 'video' ? 'Video' : file.name,
+            kind, fileUrl: uploaded.url, fileName: file.name, fileMime: file.type,
+            fileEncryption: encrypted?.fileEncryption, senderDeviceId: encrypted?.senderDeviceId
+          });
+          return [member.id, await encryptGroupMessage(member.id, selectedGroup.id, content)];
+        }));
+        await api(`/api/groups/${selectedGroup.id}/messages`, {
+          method: 'POST',
+          body: JSON.stringify({ kind, payloads: Object.fromEntries(entries) })
         });
-        return [member.id, await encryptGroupMessage(member.id, selectedGroup.id, content)];
-      }));
-      await api(`/api/groups/${selectedGroup.id}/messages`, {
-        method: 'POST',
-        body: JSON.stringify({ kind, payloads: Object.fromEntries(entries) })
-      });
-    } catch (error) {
-      alert('Encrypted group attachment failed: ' + error.message);
+      } catch (error) {
+        alert(`Encrypted group attachment failed for ${file.name}: ` + error.message);
+      }
     }
   }
 
@@ -2081,29 +2084,31 @@ export default function App() {
   }
 
   async function file(e, kind) {
-    const fl = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
 
-    if (!fl || !active) return;
+    if (!files.length || !active) return;
 
-    try {
-      const conversationId = cid(me.id, active.id);
-      const encrypted = E2EE_ENABLED
-        ? await encryptAttachment(active.id, conversationId, fl)
-        : null;
-      const up = await uploadFile(encrypted?.file || fl);
+    for (const fl of files) {
+      try {
+        const conversationId = cid(me.id, active.id);
+        const encrypted = E2EE_ENABLED
+          ? await encryptAttachment(active.id, conversationId, fl)
+          : null;
+        const up = await uploadFile(encrypted?.file || fl);
 
-      send({
-        body: kind === 'image' ? 'Photo' : kind === 'video' ? 'Video' : fl.name,
-        kind: kind || (fl.type.startsWith('image/') ? 'image' : fl.type.startsWith('video/') ? 'video' : 'file'),
-        fileUrl: up.url,
-        fileName: fl.name,
-        fileMime: fl.type,
-        fileEncryption: encrypted?.fileEncryption,
-        senderDeviceId: encrypted?.senderDeviceId
-      });
-    } catch (e) {
-      alert('Upload failed: ' + e.message);
+        await send({
+          body: kind === 'image' ? 'Photo' : kind === 'video' ? 'Video' : fl.name,
+          kind: kind || (fl.type.startsWith('image/') ? 'image' : fl.type.startsWith('video/') ? 'video' : 'file'),
+          fileUrl: up.url,
+          fileName: fl.name,
+          fileMime: fl.type,
+          fileEncryption: encrypted?.fileEncryption,
+          senderDeviceId: encrypted?.senderDeviceId
+        });
+      } catch (error) {
+        alert(`Upload failed for ${fl.name}: ` + error.message);
+      }
     }
   }
 
@@ -5034,7 +5039,7 @@ export default function App() {
             {showComposerTools && (
               <div className="composerTools">
                 <label className="toolCamera"><Camera /><span>Camera</span><input hidden type="file" accept="image/*" capture="environment" onChange={e => file(e, 'image')} /></label>
-                <label className="toolGallery"><Image /><span>Gallery</span><input hidden type="file" accept="image/*" onChange={e => file(e, 'image')} /></label>
+                <label className="toolGallery"><Image /><span>Gallery</span><input hidden type="file" accept="image/*" multiple onChange={e => file(e, 'image')} /></label>
                 <label className="toolVideo"><Video /><span>Video</span><input hidden type="file" accept="video/*" onChange={e => file(e, 'video')} /></label>
                 <label className="toolFile"><Paperclip /><span>File</span><input hidden type="file" onChange={e => file(e)} /></label>
                 <button className="toolLocation" onClick={() => { setShowLocationShare(true); setShowComposerTools(false); }}><MapPin /><span>Location</span></button>
@@ -5778,7 +5783,7 @@ export default function App() {
               )}
               {groupAttachOpen && (
                 <div className="groupAttachRow">
-                  <label title="Photo"><Image /> Photo<input hidden type="file" accept="image/*" onChange={e => { sendGroupFile(e, 'image'); setGroupAttachOpen(false); }} /></label>
+                  <label title="Photo"><Image /> Photo<input hidden type="file" accept="image/*" multiple onChange={e => { sendGroupFile(e, 'image'); setGroupAttachOpen(false); }} /></label>
                   <label title="Video"><Video /> Video<input hidden type="file" accept="video/*" onChange={e => { sendGroupFile(e, 'video'); setGroupAttachOpen(false); }} /></label>
                   <label title="File"><Paperclip /> File<input hidden type="file" onChange={e => { sendGroupFile(e, 'file'); setGroupAttachOpen(false); }} /></label>
                 </div>
