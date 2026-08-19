@@ -7434,6 +7434,21 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 }
 .flicksPanel{display:none;flex:1;min-height:0;flex-direction:column;background:#000}
 .tab-ai .flicksPanel{display:flex}
+/* Flicks is a full video feed, not a sidebar list - on desktop it was
+   otherwise boxed into the ~380px chat-list column width with the rest
+   of the window empty beside it. Make it cover the whole app shell,
+   same as it already does on mobile via width:100vw. */
+@media(min-width:901px){
+  .side.tab-ai{
+    position:fixed!important;
+    inset:0!important;
+    width:100%!important;
+    min-width:0!important;
+    max-width:none!important;
+    height:100%!important;
+    z-index:5!important;
+  }
+}
 .flicksHeader{display:flex;align-items:center;gap:10px;justify-content:space-between;padding:14px 18px;background:var(--panel);border-bottom:1px solid var(--line)}
 .flicksAudienceToggle{display:flex;gap:2px;padding:2px;border-radius:14px;background:var(--panel2)}
 .flicksAudienceToggle button{height:28px;padding:0 10px;border-radius:12px;color:var(--muted);font-weight:600;font-size:11px}
@@ -7448,10 +7463,11 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .flickAuthor b{font-size:14px}
 .flickCaption{margin:0;font-size:13px;color:rgba(255,255,255,.9)}
 .flickActions{position:absolute;right:14px;bottom:24px;display:flex;flex-direction:column;align-items:center;gap:18px}
-.flickLike{display:flex;flex-direction:column;align-items:center;gap:2px;color:#fff;font-size:11px;font-weight:600}
+.flickLike{width:44px;padding:8px 4px;border-radius:18px;background:rgba(255,255,255,.15);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#fff;font-size:11px;font-weight:600}
 .flickLike.liked{color:#fbbf24}
-.flickLike svg{width:28px;height:28px}
+.flickLike svg{width:var(--icon-lg);height:var(--icon-lg)}
 .flickDelete{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.15);color:#fff;display:grid;place-items:center}
+.flickDelete svg{width:var(--icon-lg);height:var(--icon-lg)}
 .flicksEmpty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:rgba(255,255,255,.7);text-align:center;padding:40px}
 .flicksEmpty svg{width:48px;height:48px;color:var(--primary)}
 .flicksEmpty h2{margin:0;color:#fff;font-size:18px}
