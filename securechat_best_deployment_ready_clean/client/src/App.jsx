@@ -5298,9 +5298,6 @@ export default function App() {
               <button onClick={() => setShowCallInvite(value => !value)} title="Add participant">
                 <UserPlus />
               </button>
-              <button onClick={() => setCallOptionsOpen(value => value ? null : 'quick')} title="More call options">
-                <MoreVertical />
-              </button>
             </div>
           </div>
 
