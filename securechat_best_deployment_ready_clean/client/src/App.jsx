@@ -412,6 +412,17 @@ export default function App() {
   const [showScheduler, setShowScheduler] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
   const [translations, setTranslations] = useState({});
+  const [translateChatLanguages, setTranslateChatLanguages] = useState(() => {
+    const map = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('sc_translate_chat_')) {
+        const value = localStorage.getItem(key);
+        if (value && value !== 'enabled') map[key.slice('sc_translate_chat_'.length)] = value;
+      }
+    }
+    return map;
+  });
   const [attachmentUrls, setAttachmentUrls] = useState({});
   const [callHistory, setCallHistory] = useState([]);
   const [showCallHistory, setShowCallHistory] = useState(false);
@@ -2537,14 +2548,49 @@ export default function App() {
     }
   }
 
-  function enableProfileTranslation() {
+  function toggleProfileTranslation() {
     if (!profile || !me) return;
-    const key = `sc_translate_chat_${cid(me.id, profile.id)}`;
-    localStorage.setItem(key, 'enabled');
-    setActive(profile);
-    setMobileTab('chats');
-    setProfile(null);
-    alert(`Translate chat is enabled for ${profile.username}.`);
+    const c = cid(me.id, profile.id);
+    if (translateChatLanguages[c]) {
+      localStorage.removeItem(`sc_translate_chat_${c}`);
+      setTranslateChatLanguages(current => {
+        const next = { ...current };
+        delete next[c];
+        return next;
+      });
+      setActive(profile);
+      setMobileTab('chats');
+      setProfile(null);
+      return;
+    }
+    if (!globalThis.LanguageDetector || !globalThis.Translator) {
+      alert('Private on-device translation is available in supported desktop Chrome versions. It is not available in this browser yet.');
+      return;
+    }
+    setOptionPicker({
+      title: 'Translate chat to',
+      options: [
+        { label: 'English', value: 'en' },
+        { label: 'हिन्दी (Hindi)', value: 'hi' },
+        { label: 'తెలుగు (Telugu)', value: 'te' },
+        { label: 'Español (Spanish)', value: 'es' },
+        { label: 'Français (French)', value: 'fr' }
+      ],
+      onPick: targetLanguage => {
+        // Called synchronously from the click so the on-device model
+        // download (first use only) has the required user-gesture context -
+        // without it Chrome silently refuses to start. Not awaited: the
+        // download can take a while and shouldn't block navigating away.
+        globalThis.LanguageDetector.create().catch(error => {
+          console.error('Translate chat: could not prepare language detector', error.message);
+        });
+        localStorage.setItem(`sc_translate_chat_${c}`, targetLanguage);
+        setTranslateChatLanguages(current => ({ ...current, [c]: targetLanguage }));
+        setActive(profile);
+        setMobileTab('chats');
+        setProfile(null);
+      }
+    });
   }
 
   async function unblockUser(userId) {
@@ -4001,6 +4047,36 @@ export default function App() {
       }
     });
   }, [active, rows, me]);
+
+  useEffect(() => {
+    if (!active || !me) return;
+    const conversationId = cid(me.id, active.id);
+    const targetLanguage = translateChatLanguages[conversationId];
+    if (!targetLanguage || !globalThis.LanguageDetector || !globalThis.Translator) return;
+    const pending = rows.filter(message =>
+      message.kind === 'text' && message.body && !translations[message.id] && String(message.senderId) !== String(me.id)
+    );
+    if (!pending.length) return;
+    (async () => {
+      try {
+        const detector = await globalThis.LanguageDetector.create();
+        for (const message of pending) {
+          try {
+            const detected = await detector.detect(message.body);
+            const sourceLanguage = detected[0]?.detectedLanguage;
+            if (!sourceLanguage || sourceLanguage === targetLanguage) continue;
+            const translator = await globalThis.Translator.create({ sourceLanguage, targetLanguage });
+            const translated = await translator.translate(message.body);
+            setTranslations(current => ({ ...current, [message.id]: translated }));
+          } catch (error) {
+            console.error('Auto-translate failed for message', message.id, error.message);
+          }
+        }
+      } catch (error) {
+        console.error('Translate chat: could not start language detector', error.message);
+      }
+    })();
+  }, [active, rows, me, translateChatLanguages, translations]);
 
   if (screen !== 'app') {
     return (
@@ -6067,7 +6143,12 @@ export default function App() {
 
               <div className="profileRows">
                 <button onClick={() => setProfileMode('full')}><span><User /></span> View Full Profile <b>›</b></button>
-                {!profileIsMe && <button onClick={enableProfileTranslation}><span><Languages /></span> Translate Chat <b>›</b></button>}
+                {!profileIsMe && (
+                  <button onClick={toggleProfileTranslation}>
+                    <span><Languages /></span> Translate Chat
+                    <b>{translateChatLanguages[cid(me.id, profile.id)] ? 'On' : 'Off'}</b>
+                  </button>
+                )}
               </div>
 
               {!profileIsMe && (
