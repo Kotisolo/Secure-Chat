@@ -191,13 +191,14 @@ const tuneMobileVideoSender = async (peer, lowData = isLowDataNetwork()) => {
 };
 
 const initials = n => (n || '?').slice(0, 2).toUpperCase();
+const displayName = u => u?.nickname || u?.username || '';
 const Avatar = ({ user, big = false, className = '', ...props }) => (
   <div
     className={`avatar${big ? ' big' : ''}${className ? ` ${className}` : ''}`}
     style={user?.avatarUrl ? { backgroundImage: `url("${resolveFileUrl(user.avatarUrl)}")` } : undefined}
     {...props}
   >
-    {!user?.avatarUrl && initials(user?.username)}
+    {!user?.avatarUrl && initials(displayName(user))}
   </div>
 );
 const StreamVideo = ({ stream, muted = false }) => {
@@ -1982,7 +1983,7 @@ export default function App() {
     if (q.length < 2 || !me) return { contactMatches: [], groupMatches: [], messageMatches: [] };
 
     const contactMatches = contacts.filter(u =>
-      u.username?.toLowerCase().includes(q) || u.phone?.includes(q)
+      u.username?.toLowerCase().includes(q) || u.phone?.includes(q) || u.nickname?.toLowerCase().includes(q)
     );
     const groupMatches = groups.filter(g => g.name?.toLowerCase().includes(q));
 
@@ -2608,6 +2609,36 @@ export default function App() {
     } catch (error) {
       alert('Could not update star: ' + error.message);
     }
+  }
+
+  function editContactNickname() {
+    if (!profile || !me) return;
+    setTextFormValues({ nickname: profile.nickname || '' });
+    setTextFormPrompt({
+      title: `Nickname for ${profile.username}`,
+      fields: [
+        { key: 'nickname', label: 'Nickname (only visible to you)', placeholder: profile.username, maxLength: 80, required: false }
+      ],
+      submitLabel: 'Save',
+      onSubmit: async values => {
+        const nickname = values.nickname.trim();
+        try {
+          await api(`/api/contacts/${profile.id}/nickname`, {
+            method: 'PATCH',
+            body: JSON.stringify({ nickname })
+          });
+          setProfile(current => (current ? { ...current, nickname: nickname || null } : current));
+          setContacts(current => current.map(contact => (
+            String(contact.id) === String(profile.id) ? { ...contact, nickname: nickname || null } : contact
+          )));
+          setActive(current => (
+            current && String(current.id) === String(profile.id) ? { ...current, nickname: nickname || null } : current
+          ));
+        } catch (error) {
+          alert('Could not save nickname: ' + error.message);
+        }
+      }
+    });
   }
 
   function toggleProfileTranslation() {
@@ -4643,7 +4674,7 @@ export default function App() {
                 >
                 <Avatar user={u} />
                 <div>
-                  <b>{u.chat?.pinned ? '📌 ' : ''}{String(u.id) === String(me.id) ? 'Saved Messages' : u.username}</b>
+                  <b>{u.chat?.pinned ? '📌 ' : ''}{String(u.id) === String(me.id) ? 'Saved Messages' : displayName(u)}</b>
                   <span>{p.body || (String(u.id) === String(me.id) ? 'Only visible to you' : u.phone)}</span>
                 </div>
                 {p.createdAt && <time>{t(p.createdAt)}</time>}
@@ -4693,7 +4724,7 @@ export default function App() {
               <Avatar user={active} />
 
               <div className="title">
-                <b>{String(active.id) === String(me.id) ? 'Saved Messages' : active.username}</b>
+                <b>{String(active.id) === String(me.id) ? 'Saved Messages' : displayName(active)}</b>
                 <small>
                   {String(active.id) === String(me.id)
                     ? 'Only visible to you'
@@ -4855,7 +4886,7 @@ export default function App() {
                 >
                   {repliedMessage && (
                     <div className="replyPreview">
-                      <b>{String(repliedMessage.senderId) === String(me.id) ? 'You' : active.username}</b>
+                      <b>{String(repliedMessage.senderId) === String(me.id) ? 'You' : displayName(active)}</b>
                       <span>{repliedMessage.body}</span>
                     </div>
                   )}
@@ -4901,7 +4932,7 @@ export default function App() {
                     <div className="locationMessage" onClick={e => e.stopPropagation()}>
                       <div className="locationCopy">
                         <b><MapPin /> {locationData.liveMinutes ? 'Live Location' : 'Location'}</b>
-                        <strong>{String(m.senderId) === String(me.id) ? me.username : active.username}</strong>
+                        <strong>{String(m.senderId) === String(me.id) ? me.username : displayName(active)}</strong>
                         <span>{locationData.place || 'Shared location'}</span>
                         {locationData.liveMinutes ? (
                           <small>Moving · Updated {new Date(locationData.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small>
@@ -4920,7 +4951,7 @@ export default function App() {
                           onClick={() => setActiveLocationView({
                             message: m,
                             data: locationData,
-                            senderName: String(m.senderId) === String(me.id) ? me.username : active.username
+                            senderName: String(m.senderId) === String(me.id) ? me.username : displayName(active)
                           })}
                         >
                           {locationData.liveMinutes ? 'View Live Location' : 'Open Preview'}
@@ -4973,7 +5004,7 @@ export default function App() {
             {(replyTo || editingMessage) && (
               <div className="composeContext">
                 <div>
-                  <b>{editingMessage ? 'Editing message' : `Replying to ${String(replyTo?.senderId) === String(me.id) ? 'yourself' : active.username}`}</b>
+                  <b>{editingMessage ? 'Editing message' : `Replying to ${String(replyTo?.senderId) === String(me.id) ? 'yourself' : displayName(active)}`}</b>
                   <span>{editingMessage?.body || replyTo?.body}</span>
                 </div>
                 <button onClick={() => {
@@ -5982,7 +6013,7 @@ export default function App() {
                     maxLength={field.maxLength}
                     rows={3}
                     onChange={e => setTextFormValues(current => ({ ...current, [field.key]: e.target.value }))}
-                    required={index === 0}
+                    required={field.required !== false && index === 0}
                   />
                 ) : (
                   <input
@@ -5993,7 +6024,7 @@ export default function App() {
                     placeholder={field.placeholder}
                     maxLength={field.maxLength}
                     onChange={e => setTextFormValues(current => ({ ...current, [field.key]: e.target.value }))}
-                    required={index === 0}
+                    required={field.required !== false && index === 0}
                   />
                 )}
               </label>
@@ -6226,7 +6257,8 @@ export default function App() {
                 <Avatar user={profile} big />
                 <span className={profile.online ? 'profilePresence online' : 'profilePresence'} />
               </div>
-              <h2>{profile.username}</h2>
+              <h2>{displayName(profile)}</h2>
+              {profile.nickname && <p className="profileRealName">{profile.username}</p>}
               <p>{profile.phone}</p>
               <small><span className={profile.online ? 'dot online' : 'dot'} /> {profileOnlineText} • {profileLastSeenText}</small>
 
@@ -6255,6 +6287,12 @@ export default function App() {
 
               <div className="profileRows">
                 <button onClick={() => setProfileMode('full')}><span><User /></span> View Full Profile <b>›</b></button>
+                {!profileIsMe && (
+                  <button onClick={editContactNickname}>
+                    <span><Pencil /></span> Nickname
+                    <b>{profile.nickname || 'Not set'}</b>
+                  </button>
+                )}
                 {!profileIsMe && (
                   <button onClick={toggleProfileTranslation}>
                     <span><Languages /></span> Translate Chat
@@ -6331,7 +6369,7 @@ export default function App() {
                   {contactMatches.map(contact => (
                     <button key={contact.id} className="globalSearchRow" onClick={() => { setGlobalSearchOpen(false); openChat(contact); }}>
                       <Avatar user={contact} />
-                      <div><b>{contact.username}</b><span>{contact.phone}</span></div>
+                      <div><b>{displayName(contact)}</b><span>{contact.phone}</span></div>
                     </button>
                   ))}
                 </div>
@@ -6353,7 +6391,7 @@ export default function App() {
                   {messageMatches.map(({ contact, message }) => (
                     <button key={message.id} className="globalSearchRow" onClick={() => { setGlobalSearchOpen(false); openChat(contact); }}>
                       <Avatar user={contact} />
-                      <div><b>{contact.username}</b><span>{message.body}</span></div>
+                      <div><b>{displayName(contact)}</b><span>{message.body}</span></div>
                       <time>{new Date(message.createdAt).toLocaleDateString()}</time>
                     </button>
                   ))}

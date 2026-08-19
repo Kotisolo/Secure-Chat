@@ -7925,3 +7925,6 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .voicePreviewDiscard{flex:none;width:40px;height:40px;border-radius:50%;background:var(--panel2,#f4f2f9);color:var(--red,#e5484d);display:grid;place-items:center;}
 .voicePreviewPlayer{flex:1;min-width:0;height:40px;}
 .voicePreviewDuration{flex:none;color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums;}
+
+/* ---------- contact nicknames ---------- */
+.profileRealName{margin:-6px 0 4px;color:var(--muted);font-size:13px;}

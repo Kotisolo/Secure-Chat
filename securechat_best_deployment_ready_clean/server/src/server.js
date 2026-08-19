@@ -2000,6 +2000,7 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
       cp.muted_until,
       COALESCE(cp.disappearing_seconds,0) disappearing_seconds,
       COALESCE(cp.force_unread,FALSE) force_unread,
+      cn.nickname contact_nickname,
       (SELECT COUNT(*)::int FROM messages unread
        WHERE unread.conversation_id=m.conversation_id
          AND unread.recipient_id=$1 AND unread.read_at IS NULL
@@ -2010,6 +2011,8 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
     LEFT JOIN user_privacy sp ON sp.user_id=su.id
     LEFT JOIN user_privacy rp ON rp.user_id=ru.id
     LEFT JOIN chat_preferences cp ON cp.user_id=$1 AND cp.conversation_id=m.conversation_id
+    LEFT JOIN contact_nicknames cn ON cn.user_id=$1
+      AND cn.contact_id=(CASE WHEN m.sender_id=$1 THEN m.recipient_id ELSE m.sender_id END)
     WHERE (m.sender_id=$1 OR m.recipient_id=$1) AND m.deleted_at IS NULL
       AND m.sent_at IS NOT NULL AND (m.expires_at IS NULL OR m.expires_at>NOW())
       AND NOT EXISTS (
@@ -2023,17 +2026,20 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
     r.rows
       .map(x => ({
         conversationId: x.conversation_id,
-        contact: user({
-          id: x.contact_id,
-          username: x.contact_username,
-          phone: x.contact_phone,
-          about: x.contact_about,
-          avatar_url: x.contact_avatar_url,
-          last_seen: x.contact_last_seen,
-          profile_visibility: x.contact_profile_visibility,
-          about_visibility: x.contact_about_visibility,
-          last_seen_visibility: x.contact_last_seen_visibility
-        }),
+        contact: {
+          ...user({
+            id: x.contact_id,
+            username: x.contact_username,
+            phone: x.contact_phone,
+            about: x.contact_about,
+            avatar_url: x.contact_avatar_url,
+            last_seen: x.contact_last_seen,
+            profile_visibility: x.contact_profile_visibility,
+            about_visibility: x.contact_about_visibility,
+            last_seen_visibility: x.contact_last_seen_visibility
+          }),
+          nickname: x.contact_nickname || null
+        },
         lastMessage: msg(x),
         pinned: x.pinned,
         archived: x.archived,
@@ -2045,6 +2051,22 @@ app.get('/api/chats', auth, asyncRoute(async (req, res) => {
       .sort((a, b) => Number(b.pinned) - Number(a.pinned) ||
         new Date(b.lastMessage.createdAt) - new Date(a.lastMessage.createdAt))
   );
+}));
+
+app.patch('/api/contacts/:contactId/nickname', auth, asyncRoute(async (req, res) => {
+  const contactId = req.params.contactId;
+  if (!validUuid(contactId)) return res.status(400).json({ error: 'Invalid contact.' });
+  const nickname = clean(req.body.nickname || '').slice(0, 80);
+  if (nickname) {
+    await pool.query(
+      `INSERT INTO contact_nicknames(user_id,contact_id,nickname) VALUES($1,$2,$3)
+       ON CONFLICT(user_id,contact_id) DO UPDATE SET nickname=$3,updated_at=NOW()`,
+      [req.user.id, contactId, nickname]
+    );
+  } else {
+    await pool.query('DELETE FROM contact_nicknames WHERE user_id=$1 AND contact_id=$2', [req.user.id, contactId]);
+  }
+  res.json({ nickname: nickname || null });
 }));
 
 app.post('/api/calls/livekit-token', auth, asyncRoute(async (req, res) => {
