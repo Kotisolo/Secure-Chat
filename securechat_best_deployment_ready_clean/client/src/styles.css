@@ -660,8 +660,8 @@ body{background:var(--bg);color:var(--text)}
     padding-bottom:110px!important;
   }
   .profileSettingsPage .settingsHero h1{
-    font-size:34px!important;
-    color:#151120!important;
+    font-size:24px!important;
+    color:var(--text)!important;
   }
   .settingsProfileHero{
     margin-top:12px!important;
@@ -6321,8 +6321,11 @@ body{background:var(--bg);color:var(--text)}
   border:1px solid #ffe1e6;
 }
 .settingsLogout i{
-  color:#df2f48;
-  background:#fff;
+  width:36px;
+  height:36px;
+  border-radius:var(--radius-sm);
+  color:var(--red);
+  background:var(--panel);
 }
 .settingsLogout span{
   font-size:15px;
@@ -6373,7 +6376,7 @@ body{background:var(--bg);color:var(--text)}
     color:#704cff!important;
   }
   .settingsHero h1{
-    font-size:34px!important;
+    font-size:24px!important;
   }
   .settingsHero button{
     width:48px!important;
@@ -7482,7 +7485,7 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .settingsHero{display:flex;align-items:center;justify-content:space-between;padding:18px 20px}
 .settingsHero h1{margin:0;font-size:20px;color:var(--text)}
 .settingsHero button{width:36px;height:36px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
-.settingsProfileHero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:0 20px 20px;gap:6px}
+.settingsProfileHero{display:flex;flex-direction:column;align-items:center;text-align:center;padding:22px 20px 20px;gap:6px}
 .profileAvatarWrap{position:relative;margin-bottom:6px}
 .profilePresence{position:absolute;right:2px;bottom:2px;width:14px;height:14px;border-radius:50%;background:var(--muted);border:2px solid var(--panel)}
 .profilePresence.online{background:var(--online)}
