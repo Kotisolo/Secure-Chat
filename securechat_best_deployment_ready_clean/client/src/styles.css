@@ -2897,13 +2897,13 @@ body{background:var(--bg);color:var(--text)}
 .statusItem{
   position:relative;
   padding:13px;
-  border:1px solid #ece9f2;
+  border:1px solid var(--line);
   border-radius:22px;
-  background:#fff;
+  background:var(--panel);
   box-shadow:0 10px 24px rgba(35,28,66,.05);
 }
 .statusItem:hover{
-  background:#fbfaff;
+  background:var(--panel2);
 }
 .statusItem.viewed{
   opacity:.72;
@@ -2927,16 +2927,16 @@ body{background:var(--bg);color:var(--text)}
 }
 .statusItem p{
   margin:6px 0 5px;
-  color:#625d74;
+  color:var(--muted);
 }
 .statusItem small{
-  color:#8f8aa1;
+  color:var(--muted);
 }
 .statusMedia{
   max-width:300px;
   max-height:220px;
   border-radius:18px;
-  border:1px solid #ece9f2;
+  border:1px solid var(--line);
 }
 .statusActions{
   max-width:112px;

@@ -1255,8 +1255,19 @@ export default function App() {
     }
   }
 
-  async function createTextStatus() {
-    const body = prompt('Write an Echo:');
+  function createTextStatus() {
+    setTextFormValues({ body: '' });
+    setTextFormPrompt({
+      title: 'Write an Echo',
+      fields: [
+        { key: 'body', label: 'What do you want to share?', placeholder: 'Write something...', multiline: true, maxLength: 500 }
+      ],
+      submitLabel: 'Share',
+      onSubmit: values => submitTextStatus(values.body.trim())
+    });
+  }
+
+  async function submitTextStatus(body) {
     if (!body) return;
     const id = crypto.randomUUID();
     const audience = statusAudience();
@@ -1284,6 +1295,7 @@ export default function App() {
     const file = event.target.files?.[0];
     event.target.value = '';
     if (!file) return;
+    if (!kind) kind = file.type.startsWith('video/') ? 'video' : 'image';
     const id = crypto.randomUUID();
     const audience = statusAudience();
     try {
@@ -1319,8 +1331,19 @@ export default function App() {
     setStatuses(current => current.filter(status => status.id !== statusId));
   }
 
-  async function replyToStatus(status) {
-    const body = prompt(`Reply privately to ${status.username}:`);
+  function replyToStatus(status) {
+    setTextFormValues({ body: '' });
+    setTextFormPrompt({
+      title: `Reply privately to ${status.username}`,
+      fields: [
+        { key: 'body', label: 'Your reply', placeholder: 'Type a message...', multiline: true, maxLength: 500 }
+      ],
+      submitLabel: 'Send',
+      onSubmit: values => submitStatusReply(status, values.body.trim())
+    });
+  }
+
+  async function submitStatusReply(status, body) {
     if (!body) return;
     const conversationId = cid(me.id, status.userId);
     const encrypted = await encryptMessage(status.userId, conversationId, body);
@@ -6190,9 +6213,9 @@ export default function App() {
             {echoComposerOpen && (
               <div className="echoComposer">
                 <div className="statusMediaButtons">
+                  <label><Camera /> Camera<input hidden type="file" accept="image/*" capture="environment" onChange={e => createMediaStatus(e, 'image')} /></label>
+                  <label><Image /> Gallery<input hidden type="file" accept="image/*,video/*" onChange={e => createMediaStatus(e)} /></label>
                   <button type="button" onClick={createTextStatus}><Pencil /> Text</button>
-                  <label><Image /> Photo<input hidden type="file" accept="image/*" onChange={e => createMediaStatus(e, 'image')} /></label>
-                  <label><Video /> Video<input hidden type="file" accept="video/*" onChange={e => createMediaStatus(e, 'video')} /></label>
                 </div>
                 <details className="statusPrivacy">
                   <summary>Who will see it · {contacts.length - statusExcluded.length} contacts</summary>
