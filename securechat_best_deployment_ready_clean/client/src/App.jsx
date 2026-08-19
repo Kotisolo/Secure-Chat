@@ -408,6 +408,10 @@ export default function App() {
   const [showArchived, setShowArchived] = useState(false);
   const [messageSearch, setMessageSearch] = useState('');
   const [searchingMessages, setSearchingMessages] = useState(false);
+  const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
+  const [globalSearchQuery, setGlobalSearchQuery] = useState('');
+  const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
+  const [globalSearchLoaded, setGlobalSearchLoaded] = useState(false);
   const [chatTheme, setChatTheme] = useState(() => localStorage.getItem('sc_chat_theme') || 'opal');
   const [showScheduler, setShowScheduler] = useState(false);
   const [scheduledAt, setScheduledAt] = useState('');
@@ -1936,6 +1940,61 @@ export default function App() {
       console.error(e);
       alert('Could not load chat: ' + e.message);
     }
+  }
+
+  async function openGlobalSearch() {
+    setGlobalSearchOpen(true);
+    setGlobalSearchQuery('');
+    if (globalSearchLoaded || !me) return;
+    setGlobalSearchLoading(true);
+    try {
+      await Promise.all(contacts.map(async contact => {
+        const c = cid(me.id, contact.id);
+        if (messages[c]?.length) return;
+        try {
+          const history = await api('/api/messages/' + encodeURIComponent(c));
+          const displayHistory = E2EE_ENABLED
+            ? await Promise.all((Array.isArray(history) ? history : []).map(async message => {
+                if (!message.ciphertext) return message;
+                try {
+                  return await decryptMessage(message, c);
+                } catch {
+                  return { ...message, body: '', decryptionFailed: true };
+                }
+              }))
+            : history;
+          setMessages(p => (p[c]?.length ? p : { ...p, [c]: Array.isArray(displayHistory) ? displayHistory : [] }));
+        } catch (error) {
+          console.error('Global search: could not load history for', contact.username, error.message);
+        }
+      }));
+      setGlobalSearchLoaded(true);
+    } finally {
+      setGlobalSearchLoading(false);
+    }
+  }
+
+  function globalSearchResults() {
+    const q = globalSearchQuery.trim().toLowerCase();
+    if (q.length < 2 || !me) return { contactMatches: [], groupMatches: [], messageMatches: [] };
+
+    const contactMatches = contacts.filter(u =>
+      u.username?.toLowerCase().includes(q) || u.phone?.includes(q)
+    );
+    const groupMatches = groups.filter(g => g.name?.toLowerCase().includes(q));
+
+    const messageMatches = [];
+    contacts.forEach(contact => {
+      const c = cid(me.id, contact.id);
+      (messages[c] || []).forEach(message => {
+        if (message.kind === 'text' && message.body && message.body.toLowerCase().includes(q)) {
+          messageMatches.push({ contact, message });
+        }
+      });
+    });
+    messageMatches.sort((a, b) => new Date(b.message.createdAt) - new Date(a.message.createdAt));
+
+    return { contactMatches, groupMatches, messageMatches: messageMatches.slice(0, 50) };
   }
 
   async function send(payload = {}) {
@@ -4375,6 +4434,7 @@ export default function App() {
         <div className="search">
           <Search />
           <input ref={searchInputRef} placeholder="Search name or phone" onChange={e => search(e.target.value)} />
+          <button type="button" className="globalSearchTrigger" onClick={openGlobalSearch} title="Search all chats and messages">All chats</button>
         </div>
         <div className="chatFilterChips">
           <button className={chatListFilter === 'all' ? 'active' : ''} onClick={() => setChatListFilter('all')}>
@@ -6194,6 +6254,67 @@ export default function App() {
           </a>
         </div>
       )}
+
+      {globalSearchOpen && (() => {
+        const { contactMatches, groupMatches, messageMatches } = globalSearchResults();
+        const hasQuery = globalSearchQuery.trim().length >= 2;
+        const hasResults = contactMatches.length || groupMatches.length || messageMatches.length;
+        return (
+          <div className="globalSearchOverlay">
+            <div className="globalSearchHeader">
+              <input
+                autoFocus
+                value={globalSearchQuery}
+                onChange={e => setGlobalSearchQuery(e.target.value)}
+                placeholder={globalSearchLoading ? 'Loading your chats…' : 'Search chats, contacts, and messages'}
+              />
+              <button onClick={() => setGlobalSearchOpen(false)} title="Close"><X /></button>
+            </div>
+            <div className="globalSearchBody">
+              {!hasQuery && (
+                <p className="globalSearchEmpty">
+                  {globalSearchLoading ? 'Loading your chat history to search…' : 'Type at least 2 characters to search everything.'}
+                </p>
+              )}
+              {hasQuery && !hasResults && <p className="globalSearchEmpty">No matches for "{globalSearchQuery.trim()}".</p>}
+              {hasQuery && contactMatches.length > 0 && (
+                <div className="globalSearchSection">
+                  <h4>Contacts</h4>
+                  {contactMatches.map(contact => (
+                    <button key={contact.id} className="globalSearchRow" onClick={() => { setGlobalSearchOpen(false); openChat(contact); }}>
+                      <Avatar user={contact} />
+                      <div><b>{contact.username}</b><span>{contact.phone}</span></div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {hasQuery && groupMatches.length > 0 && (
+                <div className="globalSearchSection">
+                  <h4>Groups</h4>
+                  {groupMatches.map(group => (
+                    <button key={group.id} className="globalSearchRow" onClick={() => { setGlobalSearchOpen(false); openGroup(group); }}>
+                      <span className="avatar"><Users /></span>
+                      <div><b>{group.name}</b><span>{group.members.length} members</span></div>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {hasQuery && messageMatches.length > 0 && (
+                <div className="globalSearchSection">
+                  <h4>Messages</h4>
+                  {messageMatches.map(({ contact, message }) => (
+                    <button key={message.id} className="globalSearchRow" onClick={() => { setGlobalSearchOpen(false); openChat(contact); }}>
+                      <Avatar user={contact} />
+                      <div><b>{contact.username}</b><span>{message.body}</span></div>
+                      <time>{new Date(message.createdAt).toLocaleDateString()}</time>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {callError && (
         <div className="modal">
