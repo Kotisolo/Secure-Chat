@@ -330,7 +330,18 @@ body{background:var(--bg);color:var(--text)}
 .groupCompose .groupRecord.active{background:var(--red)}.groupBubble audio{width:220px;max-width:60vw;height:38px}
 .groupMute{height:38px;padding:0 12px;border-radius:11px;background:var(--panel3);color:white;display:inline-flex;align-items:center;gap:7px}.groupTyping{padding:5px 12px;background:var(--panel3);color:var(--muted);font-size:12px}.groupBubble.mentioned{outline:2px solid var(--cyan)}
 .groupCallLaunch{display:flex;gap:8px;margin:10px 0}.groupCallLaunch button{flex:1;height:40px;border-radius:11px;background:var(--panel3);color:white;display:flex;align-items:center;justify-content:center;gap:7px}
-.groupCallScreen{position:fixed;inset:0;z-index:100;background:#050914;padding:20px;display:flex;flex-direction:column;align-items:center}.groupCallGrid{flex:1;width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;overflow:auto}.groupCallTile{position:relative;min-height:180px;border-radius:18px;overflow:hidden;background:var(--panel);display:grid;place-items:center}.groupCallTile video{width:100%;height:100%;object-fit:cover}.groupCallTile>b{position:absolute;left:10px;bottom:8px;padding:4px 8px;border-radius:8px;background:rgba(0,0,0,.6)}.groupCallControls{display:flex;gap:14px;padding:18px}.groupCallControls button{width:58px;height:58px;border-radius:50%;background:var(--panel2);color:white;display:grid;place-items:center}.groupCallControls .off{opacity:.55}
+.groupCallScreen{position:fixed;inset:0;z-index:100;background:#151321;padding:20px;display:flex;flex-direction:column;align-items:center}
+.groupCallScreen h2{color:#fff;font-size:16px;font-weight:600;margin:0 0 16px}
+.groupCallGrid{flex:1;width:100%;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;overflow:auto}
+.groupCallTile{position:relative;min-height:180px;border-radius:var(--radius-card);overflow:hidden;background:rgba(255,255,255,.06);display:grid;place-items:center}
+.groupCallTile video{width:100%;height:100%;object-fit:cover}
+.groupCallTile .avatar.big{width:var(--avatar-lg);height:var(--avatar-lg);font-size:28px}
+.groupCallTile>b{position:absolute;left:10px;bottom:8px;padding:4px 10px;border-radius:var(--radius-pill);background:rgba(0,0,0,.55);color:#fff;font-size:12px;font-weight:500}
+.groupCallControls{display:flex;gap:16px;padding:20px 0 8px}
+.groupCallControls button{width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:9px}
+.groupCallControls button svg{width:var(--icon-lg);height:var(--icon-lg)}
+.groupCallControls .off{background:rgba(255,255,255,.32)}
+.groupCallControls .danger{background:var(--red)}
 .groupHeader>div{display:flex;gap:6px}.groupHeader>div button:first-child{width:auto;padding:0 10px}
 .groupAdminActions{display:flex;gap:8px;margin:10px 0}.groupAdminActions button{flex:1;height:40px;border-radius:11px;background:var(--panel3);color:white}
 .inviteCard{padding:12px;border-radius:14px;background:var(--panel3)}.inviteCard img{display:block;width:180px;height:180px;margin:0 auto 8px;border-radius:8px}.inviteCard input{width:100%;height:38px;border:0;border-radius:9px;background:var(--panel);color:white;padding:0 9px}.inviteCard button{margin:8px 4px 0;padding:8px 12px;border-radius:9px;background:var(--panel);color:white}
@@ -419,16 +430,6 @@ body{background:var(--bg);color:var(--text)}
   gap:14px;
   padding-right:44px;
   margin-bottom:18px;
-}
-.callsHeroIcon{
-  width:58px;
-  height:58px;
-  border-radius:20px;
-  display:grid;
-  place-items:center;
-  color:#fff;
-  background:linear-gradient(135deg,var(--primary),var(--secondary));
-  box-shadow:0 14px 30px rgba(117,73,238,.25);
 }
 .callsHero h2{margin:0 0 3px;font-size:28px}
 .callsHero p{margin:0;color:var(--muted)}
@@ -7309,7 +7310,7 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 
 /* ---------- shared hero + list-row primitives (calls/status/channels) ---------- */
 .callsHero,.statusHero,.channelHero{display:flex;align-items:center;gap:14px;padding:22px 24px 8px}
-.callsHeroIcon,.statusHeroIcon,.channelHeroIcon{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;display:grid;place-items:center;flex-shrink:0}
+.callsHeroIcon,.statusHeroIcon,.channelHeroIcon{width:48px;height:48px;border-radius:14px;background:linear-gradient(135deg,var(--primary),var(--secondary));color:#fff;display:grid;place-items:center;flex-shrink:0;box-shadow:0 14px 30px rgba(117,73,238,.25)}
 .callsHero h2,.statusHero h2,.channelHero h2{margin:0;font-size:19px;color:var(--text)}
 .callsHero p,.statusHero p,.channelHero p{margin:2px 0 0;color:var(--muted);font-size:13px}
 .historyClose{position:absolute;top:14px;right:14px;width:36px;height:36px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--text);display:grid;place-items:center}
@@ -7320,8 +7321,8 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .callMeta b{color:var(--text);font-size:14px}
 .callMeta small{display:block;color:var(--muted);font-size:12px}
 .callTypeIcon{width:36px;height:36px;border-radius:var(--radius-sm);background:var(--panel2);color:var(--primary);display:grid;place-items:center;flex-shrink:0}
-.callFilters{display:flex;gap:8px;padding:8px 24px}
-.callFilters button{height:32px;padding:0 14px;border-radius:16px;background:var(--panel2);color:var(--muted);font-weight:600;font-size:13px}
+.callFilters{display:flex;gap:8px;padding:8px 24px;overflow-x:auto}
+.callFilters button{flex-shrink:0;height:32px;padding:0 14px;border-radius:var(--radius-pill);background:var(--panel2);color:var(--muted);font-weight:600;font-size:13px}
 .callFilters button.active{background:var(--primary);color:#fff}
 .callLogActions{padding:14px 24px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
 .callLogActions button{height:40px;border-radius:var(--radius-md);background:var(--panel2);color:var(--text);font-weight:600;font-size:13px}
@@ -7376,8 +7377,9 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .incoming{position:fixed;top:20px;right:20px;z-index:70;width:320px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);padding:20px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
 .incoming .who b{display:block;color:var(--text);font-size:16px}
 .incoming .who small{color:var(--muted)}
-.incomingBtns{display:flex;gap:16px;margin-top:6px}
-.incomingBtns button{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;color:#fff}
+.incomingBtns{display:flex;gap:20px;margin-top:6px}
+.incomingBtns button{width:64px;height:64px;border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#fff;font-size:10px}
+.incomingBtns button svg{width:var(--icon-lg);height:var(--icon-lg)}
 .incomingBtns .accept{background:var(--online)}
 .incomingBtns .danger{background:var(--red)}
 
