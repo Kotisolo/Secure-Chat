@@ -8028,11 +8028,44 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
   color:transparent!important;
 }
 
+/* ---------- polish pass 2: settings, echoes, flicks, chats ---------- */
+@keyframes likePop{0%{transform:scale(1)}35%{transform:scale(1.35)}60%{transform:scale(.92)}100%{transform:scale(1)}}
+@keyframes cardFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+.settingsRow{transition:background-color .15s ease,transform .1s ease!important}
+.settingsRow:hover{background:var(--panel2)!important}
+.settingsRow:active{transform:scale(.99)!important}
+
+.send{transition:filter .15s ease,transform .12s ease!important}
+.send:hover{filter:brightness(1.08)}
+.send:active{transform:scale(.9)!important}
+
+.compose{transition:box-shadow .15s ease!important}
+.compose:focus-within{box-shadow:inset 0 0 0 1px var(--primary)}
+
+.head .icon,.head button{transition:background-color .15s ease,transform .1s ease!important}
+.head .icon:active,.head button:active{transform:scale(.92)!important}
+
+.statusMediaButtons label,.statusMediaButtons button{transition:background-color .15s ease,transform .1s ease!important}
+.statusMediaButtons label:hover,.statusMediaButtons button:hover{background:var(--panel3)!important}
+.statusMediaButtons label:active,.statusMediaButtons button:active{transform:scale(.96)!important}
+
+.statusItem .avatar{transition:transform .15s ease!important}
+.statusItem:hover .avatar{transform:scale(1.05)}
+
+.flickLike{transition:transform .12s ease,color .15s ease!important}
+.flickLike.liked svg{animation:likePop .35s ease}
+
+.flickItem{animation:cardFadeIn .25s ease both}
+
 @media (prefers-reduced-motion:reduce){
-  .chat,.bubble,.modal,.profile,.historyCard,.privacyCard,.securityCard,.groupCard,.statusCard,.channelCard,.messageMenu{
+  .chat,.bubble,.modal,.profile,.historyCard,.privacyCard,.securityCard,.groupCard,.statusCard,.channelCard,.messageMenu,
+  .flickItem,.flickLike.liked svg{
     animation:none!important;
   }
-  .chat:hover,.chat:active,.bottomNav button:active,.chatFilterChips button:active,.callFilters button:active,.statusItem:active{
+  .chat:hover,.chat:active,.bottomNav button:active,.chatFilterChips button:active,.callFilters button:active,.statusItem:active,
+  .settingsRow:hover,.settingsRow:active,.send:hover,.send:active,.head .icon:active,.head button:active,
+  .statusMediaButtons label:active,.statusMediaButtons button:active,.statusItem:hover .avatar{
     transform:none!important;
   }
 }
