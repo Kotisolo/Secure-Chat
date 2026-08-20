@@ -4503,7 +4503,7 @@ export default function App() {
   if (showLoginSplash) {
     return (
       <div className="loginSplash" onClick={() => setShowLoginSplash(false)}>
-        <img src="/login-splash.svg" alt="" />
+        <img src="/login-splash.avif" alt="" />
         <button className="primary" onClick={() => setShowLoginSplash(false)}>Continue</button>
       </div>
     );
