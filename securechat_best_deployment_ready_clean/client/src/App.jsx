@@ -359,6 +359,7 @@ export default function App() {
   const storedUser = getStoredUser();
 
   const [screen, setScreen] = useState(storedUser && storedUser.id ? 'app' : 'welcome');
+  const [showLoginSplash, setShowLoginSplash] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [err, setErr] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
@@ -702,6 +703,7 @@ export default function App() {
       setRecoveryCode(d.recoveryCode || '');
       setMe(d.user);
       setScreen('app');
+      setShowLoginSplash(true);
       setTimeout(() => enterApp(), 0);
     } catch (x) {
       setErr(x.message);
@@ -782,6 +784,7 @@ export default function App() {
       setSession(d.token, d.user);
       setMe(d.user);
       setScreen('app');
+      setShowLoginSplash(true);
       setTimeout(() => enterApp(), 0);
     } catch (x) {
       setErr(x.message);
@@ -809,6 +812,7 @@ export default function App() {
       setSession(d.token, d.user);
       setMe(d.user);
       setScreen('app');
+      setShowLoginSplash(true);
       setTimeout(() => enterApp(), 0);
     } catch (x) {
       setErr(x.message);
@@ -4493,6 +4497,14 @@ export default function App() {
             <button type="submit" className="primary">Unlock</button>
           </form>
         </div>
+      </div>
+    );
+  }
+  if (showLoginSplash) {
+    return (
+      <div className="loginSplash" onClick={() => setShowLoginSplash(false)}>
+        <img src="/login-splash.svg" alt="" />
+        <button className="primary" onClick={() => setShowLoginSplash(false)}>Continue</button>
       </div>
     );
   }
