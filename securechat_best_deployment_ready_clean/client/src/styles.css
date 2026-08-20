@@ -7992,3 +7992,47 @@ button.ghostLogin.opalGhost:hover{background:var(--panel3)}
 .messageMenu button{color:var(--text)!important;background:var(--panel2)!important}
 .messageMenu button.danger{background:var(--red)!important;color:#fff!important}
 .messageMenu .reactionPicker button{background:transparent!important}
+
+/* ---------- polish pass: depth, motion, spacing ---------- */
+@keyframes bubbleRiseIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes sheetPopIn{from{opacity:0;transform:scale(.96) translateY(8px)}to{opacity:1;transform:scale(1) translateY(0)}}
+@keyframes modalFadeIn{from{opacity:0}to{opacity:1}}
+@keyframes rowFadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+
+.chat{transition:background-color .15s ease,transform .12s ease,box-shadow .15s ease!important;animation:rowFadeIn .25s ease both}
+.chat:hover{transform:translateY(-1px);box-shadow:var(--shadow-sm)!important}
+.chat:active{transform:scale(.98)!important}
+
+.bubble{animation:bubbleRiseIn .22s ease both}
+
+.modal{animation:modalFadeIn .18s ease both}
+.profile,.historyCard,.privacyCard,.securityCard,.groupCard,.statusCard,.channelCard,.messageMenu{
+  animation:sheetPopIn .2s cubic-bezier(.34,1.4,.64,1) both;
+}
+
+.chatFilterChips button,.callFilters button{transition:background-color .15s ease,color .15s ease,transform .1s ease!important}
+.chatFilterChips button:active,.callFilters button:active{transform:scale(.95)!important}
+
+.bottomNav button{transition:color .15s ease,transform .12s ease!important}
+.bottomNav button:active{transform:scale(.92)!important}
+
+.callsHeroIcon,.statusHeroIcon,.channelHeroIcon{transition:transform .15s ease!important}
+.statusItem,.flickLike,.flickDelete{transition:transform .12s ease,background-color .15s ease!important}
+.statusItem:active{transform:scale(.98)!important}
+
+.callAvatar.hasPhoto{
+  background-size:cover!important;
+  background-position:center!important;
+  background-repeat:no-repeat!important;
+  animation:none!important;
+  color:transparent!important;
+}
+
+@media (prefers-reduced-motion:reduce){
+  .chat,.bubble,.modal,.profile,.historyCard,.privacyCard,.securityCard,.groupCard,.statusCard,.channelCard,.messageMenu{
+    animation:none!important;
+  }
+  .chat:hover,.chat:active,.bottomNav button:active,.chatFilterChips button:active,.callFilters button:active,.statusItem:active{
+    transform:none!important;
+  }
+}

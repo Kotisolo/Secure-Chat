@@ -3417,7 +3417,8 @@ export default function App() {
       title: (type === 'video' ? 'Video' : 'Voice') + ' call with ' + callContact.username,
       status: 'Calling...',
       seconds: 0,
-      roomId: callRoomId
+      roomId: callRoomId,
+      contactAvatarUrl: callContact.avatarUrl || null
     });
 
     try {
@@ -3466,7 +3467,8 @@ export default function App() {
       title: (callType === 'video' ? 'Video' : 'Voice') + ' call with ' + d.callerName,
       status: 'Connecting...',
       seconds: 0,
-      roomId: d.callRoomId || createCallRoomId()
+      roomId: d.callRoomId || createCallRoomId(),
+      contactAvatarUrl: d.callerAvatar || null
     });
 
     try {
@@ -4497,9 +4499,9 @@ export default function App() {
     );
   }
   return (
-  
-    );
-  }
+    <div className="app">
+      <aside className={`${active ? 'side hide' : 'side'} tab-${mobileTab}`}>
+        <div className="desktopNavRail">
           <div className="appTitle">
             <div className="brandMark"><MessageCircle /></div>
             <div><b className="desktopBrand"><em>Naad</em></b><b className="mobileBrand">{mobileTitle}</b><small>{BRAND.tagline}</small></div>
@@ -5358,7 +5360,7 @@ export default function App() {
 
       {incoming && !call.active && (
         <div className="incoming">
-          <Avatar user={{ username: incoming.callerName }} big />
+          <Avatar user={{ username: incoming.callerName, avatarUrl: incoming.callerAvatar }} big />
           <div className="who">
             <b>{incoming.callerName}</b>
             <small>Incoming {incoming.videoIntent || incoming.callType === 'video' ? 'video' : 'voice'} call...</small>
@@ -5411,7 +5413,11 @@ export default function App() {
 
           <div className="callInfo">
             {call.type !== 'video' && (
-              <div className="callAvatar">{initials(callContactName)}</div>
+              <Avatar
+                user={{ username: callContactName, avatarUrl: call.contactAvatarUrl }}
+                className={`callAvatar${call.contactAvatarUrl ? ' hasPhoto' : ''}`}
+                big
+              />
             )}
             <h2>{call.title}</h2>
             <p>{call.status || 'Connected securely...'}</p>
