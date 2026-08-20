@@ -2936,9 +2936,11 @@ io.on('connection', async socket => {
     ).catch(() => ({ rows: [] }));
     const callHistoryId = historyResult.rows[0]?.id || null;
 
+    const callerAvatarResult = await pool.query('SELECT avatar_url FROM users WHERE id=$1', [userId]).catch(() => ({ rows: [] }));
     const incomingPayload = {
       callerId: userId,
       callerName: socket.user.username,
+      callerAvatar: callerAvatarResult.rows[0]?.avatar_url || null,
       offer,
       callType,
       videoIntent: Boolean(videoIntent),
