@@ -4497,15 +4497,7 @@ export default function App() {
     );
   }
   return (
-    <div className="app">
-      <aside className={`${active ? 'side hide' : 'side'} tab-${mobileTab}`}>
-        <div className="desktopNavRail">
-          if (showLoginSplash) {
-    return (
-      <div className="loginSplash" onClick={() => setShowLoginSplash(false)}>
-        <img src="/login-splash.webp" alt="" />
-        <button className="primary" onClick={() => setShowLoginSplash(false)}>Continue</button>
-      </div>
+  
     );
   }
           <div className="appTitle">
@@ -6551,7 +6543,3 @@ export default function App() {
     </div>
   );
 }
-/* ---------- post-login splash screen ---------- */
-.loginSplash{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-5);background:var(--bg);padding:var(--space-5);}
-.loginSplash img{max-width:min(420px,88vw);max-height:70vh;object-fit:contain;border-radius:var(--radius-card);}
-.loginSplash button{width:200px;height:48px;border-radius:var(--radius-control);background:var(--primary);color:#fff;font-weight:600;}
